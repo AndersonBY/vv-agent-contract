@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "clients"))
 
 import contract_snapshot  # noqa: E402
 import contractctl  # noqa: E402
+import record_adoption  # noqa: E402
 
 
 class ContractRepositoryTests(unittest.TestCase):
@@ -102,6 +103,46 @@ class ContractRepositoryTests(unittest.TestCase):
 
             with self.assertRaisesRegex(contract_snapshot.SnapshotError, "fixture digest mismatch"):
                 contract_snapshot.check_lock(implementation, "contract.lock.json")
+
+    def test_verified_adoption_is_structured_and_enforced(self) -> None:
+        revision = "d" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            contract_root = temporary_path / "contract"
+            contract_root.mkdir()
+            shutil.copy2(ROOT / "contract.json", contract_root / "contract.json")
+            shutil.copy2(ROOT / "support-matrix.json", contract_root / "support-matrix.json")
+            matrix = record_adoption.record_adoption(
+                contract_root,
+                revision,
+                "e" * 40,
+                "https://github.com/AndersonBY/vv-agent-contract/actions/runs/123",
+                verified_at="2026-07-13T12:00:00Z",
+            )
+            self.assertEqual(matrix["status"], "verified")
+            self.assertEqual(matrix["implementations"]["python"]["verified_revision"], revision)
+
+            build = contractctl.build_bundle(ROOT, temporary_path / "dist", revision=revision)
+            implementation = temporary_path / "implementation"
+            implementation.mkdir()
+            contract_snapshot.sync_snapshot(
+                SimpleNamespace(
+                    repo_root=implementation,
+                    lock="contract.lock.json",
+                    source=ROOT,
+                    revision=revision,
+                    artifact=build["artifact"],
+                    artifact_url="https://example.invalid/vv-agent-contract-0.1.0.zip",
+                    snapshot_path="fixtures",
+                )
+            )
+            report = contract_snapshot.verify_adoption(
+                implementation,
+                "contract.lock.json",
+                "python",
+                str(contract_root / "support-matrix.json"),
+            )
+            self.assertEqual(report["verified_revision"], revision)
 
 
 if __name__ == "__main__":

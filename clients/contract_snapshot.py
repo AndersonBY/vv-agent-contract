@@ -14,10 +14,10 @@ import sys
 import tempfile
 import urllib.request
 import zipfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$")
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -41,6 +41,16 @@ def load_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise SnapshotError(f"cannot read valid JSON from {path}: {exc}") from exc
+
+
+def load_json_location(location: str) -> Any:
+    if location.startswith(("https://", "http://")):
+        try:
+            with urllib.request.urlopen(location) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise SnapshotError(f"cannot read valid JSON from {location}: {exc}") from exc
+    return load_json(Path(location).expanduser().resolve())
 
 
 def write_json_atomic(path: Path, value: Any) -> None:
@@ -271,7 +281,22 @@ def check_lock(
         if canonical["version"] != lock["contract_version"]:
             raise SnapshotError("locked version does not match canonical contract source")
         if canonical["revision"] != lock["contract_revision"]:
-            raise SnapshotError("locked revision does not match canonical contract source")
+            ancestor = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(canonical["root"]),
+                    "merge-base",
+                    "--is-ancestor",
+                    lock["contract_revision"],
+                    canonical["revision"],
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if ancestor.returncode != 0:
+                raise SnapshotError("canonical checkout does not contain the locked contract revision")
         if canonical["repository"] != lock["source_repository"]:
             raise SnapshotError("locked repository does not match canonical contract source")
         compare_trees(canonical["fixtures"], snapshot)
@@ -292,6 +317,55 @@ def check_lock(
         "contract_revision": lock["contract_revision"],
         "snapshot_path": lock["snapshot_path"],
         **report,
+    }
+
+
+def verify_adoption(
+    repo_root: Path,
+    lock_name: str,
+    implementation: str,
+    matrix_location: str,
+    revision: str | None = None,
+) -> dict[str, Any]:
+    _, lock = load_lock(repo_root, lock_name)
+    matrix = load_json_location(matrix_location)
+    if not isinstance(matrix, dict) or matrix.get("schema_version") != 1:
+        raise SnapshotError("support matrix must be a schema_version=1 object")
+    if matrix.get("contract_version") != lock["contract_version"]:
+        raise SnapshotError("support matrix version does not match contract.lock.json")
+    if matrix.get("status") != "verified":
+        raise SnapshotError(f"contract {lock['contract_version']} is not centrally verified")
+    implementations = matrix.get("implementations")
+    if not isinstance(implementations, dict) or not isinstance(implementations.get(implementation), dict):
+        raise SnapshotError(f"support matrix has no {implementation} implementation record")
+    record = implementations[implementation]
+    verified_revision = record.get("verified_revision")
+    if record.get("status") != "verified" or not isinstance(verified_revision, str):
+        raise SnapshotError(f"{implementation} implementation is not centrally verified")
+    if REVISION_RE.fullmatch(verified_revision) is None:
+        raise SnapshotError(f"{implementation} verified revision is not a full Git commit")
+
+    if revision is not None:
+        if REVISION_RE.fullmatch(revision) is None:
+            raise SnapshotError("release revision must be a full Git commit")
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", verified_revision, revision],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise SnapshotError(
+                f"release revision {revision} does not contain centrally verified {implementation} revision "
+                f"{verified_revision}"
+            )
+
+    return {
+        "contract_version": lock["contract_version"],
+        "implementation": implementation,
+        "verified_revision": verified_revision,
+        "release_revision": revision,
+        "cross_repository_run": matrix.get("cross_repository_run"),
     }
 
 
@@ -346,6 +420,15 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--source", type=Path, help="optional canonical checkout for byte comparison")
     check.add_argument("--artifact", help="optional local path or URL for release artifact verification")
 
+    adoption = subparsers.add_parser("adoption", help="require central verified adoption before release")
+    adoption.add_argument("--implementation", choices=["python", "rust"], required=True)
+    adoption.add_argument(
+        "--matrix",
+        default="https://raw.githubusercontent.com/AndersonBY/vv-agent-contract/main/support-matrix.json",
+        help="support-matrix.json path or URL",
+    )
+    adoption.add_argument("--revision", help="release commit that must contain the verified implementation revision")
+
     sync = subparsers.add_parser("sync", help="replace the vendored snapshot from a canonical checkout")
     sync.add_argument("--source", type=Path, required=True)
     sync.add_argument("--artifact", required=True, help="local path or URL of the deterministic release zip")
@@ -360,6 +443,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "check":
             report = check_lock(args.repo_root.resolve(), args.lock, source=args.source, artifact=args.artifact)
+        elif args.command == "adoption":
+            report = verify_adoption(
+                args.repo_root.resolve(),
+                args.lock,
+                args.implementation,
+                args.matrix,
+                revision=args.revision,
+            )
         else:
             report = sync_snapshot(args)
     except SnapshotError as exc:

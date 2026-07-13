@@ -176,6 +176,18 @@ def validate_contract(root: Path) -> dict[str, Any]:
             raise ContractError(f"support matrix {language} entry must be an object")
         if implementation.get("status") not in ALLOWED_ADOPTION_STATES:
             raise ContractError(f"invalid {language} adoption status: {implementation.get('status')!r}")
+    if matrix["status"] == "verified":
+        for language, implementation in implementations.items():
+            revision = implementation.get("verified_revision")
+            if implementation.get("status") != "verified" or not isinstance(revision, str):
+                raise ContractError(f"verified support matrix requires a verified {language} revision")
+            if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+                raise ContractError(f"verified {language} revision must be a full Git commit")
+        if not isinstance(matrix.get("last_verified_at"), str) or not matrix["last_verified_at"]:
+            raise ContractError("verified support matrix requires last_verified_at")
+        run_url = matrix.get("cross_repository_run")
+        if not isinstance(run_url, str) or not run_url.startswith("https://github.com/"):
+            raise ContractError("verified support matrix requires a GitHub cross_repository_run URL")
 
     required_docs = [
         root / "README.md",

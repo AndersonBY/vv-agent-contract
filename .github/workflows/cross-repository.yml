@@ -18,11 +18,16 @@ on:
         required: true
         default: main
         type: string
+      record_verified:
+        description: Record the successful implementation revisions in support-matrix.json
+        required: true
+        default: false
+        type: boolean
   schedule:
     - cron: "23 3 * * 1"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   conformance:
@@ -70,7 +75,7 @@ jobs:
 
       - name: Validate canonical contract
         run: |
-          python3 contract/scripts/contractctl.py validate --root contract
+          python3 contract/scripts/contractctl.py --root contract validate
           python3 -m unittest discover -s contract/tests
 
       - name: Verify both locked snapshots
@@ -106,3 +111,34 @@ jobs:
             echo "- Rust: \`$(git -C rust rev-parse HEAD)\`"
             echo "- Fixture manifest: \`$(sha256sum contract/fixtures/SHA256SUMS | cut -d' ' -f1)\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update verified support matrix
+        if: inputs.record_verified == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.contract_ref }}" = "main"
+          python_revision="$(git -C python rev-parse HEAD)"
+          rust_revision="$(git -C rust rev-parse HEAD)"
+          run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          python3 contract/scripts/record_adoption.py \
+            --root contract \
+            --python-revision "$python_revision" \
+            --rust-revision "$rust_revision" \
+            --run-url "$run_url"
+          python3 contract/scripts/contractctl.py --root contract validate
+
+      - name: Commit verified support matrix
+        if: inputs.record_verified == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git -C contract diff --quiet -- support-matrix.json; then
+            echo "Support matrix already records these revisions"
+            exit 0
+          fi
+          git -C contract config user.name "github-actions[bot]"
+          git -C contract config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C contract add support-matrix.json
+          git -C contract commit -m "chore: record verified contract adoption"
+          git -C contract push origin HEAD:main
