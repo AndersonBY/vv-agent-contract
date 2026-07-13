@@ -42,6 +42,7 @@ jobs:
         with:
           path: contract
           ref: ${{ inputs.contract_ref || 'main' }}
+          fetch-depth: 0
 
       - name: Checkout Python implementation
         uses: actions/checkout@v6

@@ -19,6 +19,14 @@ import record_adoption  # noqa: E402
 
 
 class ContractRepositoryTests(unittest.TestCase):
+    def test_cross_repository_checkout_keeps_contract_history(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+        contract_checkout = workflow.split("- name: Checkout contract", maxsplit=1)[1].split(
+            "- name: Checkout Python implementation", maxsplit=1
+        )[0]
+
+        self.assertIn("fetch-depth: 0", contract_checkout)
+
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
 
