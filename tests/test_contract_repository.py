@@ -27,6 +27,18 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertIn("fetch-depth: 0", contract_checkout)
 
+    def test_cross_repository_checkout_preserves_sibling_repository_names(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+        python_checkout = workflow.split("- name: Checkout Python implementation", maxsplit=1)[1].split(
+            "- name: Checkout Rust implementation", maxsplit=1
+        )[0]
+        rust_checkout = workflow.split("- name: Checkout Rust implementation", maxsplit=1)[1].split(
+            "- name: Set up Python", maxsplit=1
+        )[0]
+
+        self.assertIn("path: vv-agent\n", python_checkout)
+        self.assertIn("path: vv-agent-rs\n", rust_checkout)
+
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
 

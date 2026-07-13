@@ -48,14 +48,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: AndersonBY/vv-agent
-          path: python
+          path: vv-agent
           ref: ${{ inputs.python_ref || 'main' }}
 
       - name: Checkout Rust implementation
         uses: actions/checkout@v6
         with:
           repository: AndersonBY/vv-agent-rs
-          path: rust
+          path: vv-agent-rs
           ref: ${{ inputs.rust_ref || 'main' }}
 
       - name: Set up Python
@@ -81,12 +81,12 @@ jobs:
 
       - name: Verify both locked snapshots
         run: |
-          python3 python/scripts/contract_snapshot.py --repo-root python check --source contract
-          python3 rust/scripts/contract_snapshot.py --repo-root rust check --source contract
-          diff -qr python/tests/fixtures/parity rust/crates/vv-agent/tests/fixtures/parity
+          python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --source contract
+          python3 vv-agent-rs/scripts/contract_snapshot.py --repo-root vv-agent-rs check --source contract
+          diff -qr vv-agent/tests/fixtures/parity vv-agent-rs/crates/vv-agent/tests/fixtures/parity
 
       - name: Run Python full gate
-        working-directory: python
+        working-directory: vv-agent
         run: |
           uv sync --dev --extra s3
           uv run pytest
@@ -94,7 +94,7 @@ jobs:
           uv run ty check
 
       - name: Run Rust full gate
-        working-directory: rust
+        working-directory: vv-agent-rs
         run: |
           cargo fmt --all -- --check
           cargo test -p vv-agent -- --test-threads=1
@@ -108,8 +108,8 @@ jobs:
             echo "## Cross-repository conformance"
             echo
             echo "- Contract: \`$(git -C contract rev-parse HEAD)\`"
-            echo "- Python: \`$(git -C python rev-parse HEAD)\`"
-            echo "- Rust: \`$(git -C rust rev-parse HEAD)\`"
+            echo "- Python: \`$(git -C vv-agent rev-parse HEAD)\`"
+            echo "- Rust: \`$(git -C vv-agent-rs rev-parse HEAD)\`"
             echo "- Fixture manifest: \`$(sha256sum contract/fixtures/SHA256SUMS | cut -d' ' -f1)\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -119,8 +119,8 @@ jobs:
         run: |
           set -euo pipefail
           test "${{ inputs.contract_ref }}" = "main"
-          python_revision="$(git -C python rev-parse HEAD)"
-          rust_revision="$(git -C rust rev-parse HEAD)"
+          python_revision="$(git -C vv-agent rev-parse HEAD)"
+          rust_revision="$(git -C vv-agent-rs rev-parse HEAD)"
           run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           python3 contract/scripts/record_adoption.py \
             --root contract \
