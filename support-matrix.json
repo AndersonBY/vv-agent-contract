@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contract_version": "0.1.0",
+  "status": "pending-adoption",
+  "implementations": {
+    "python": {
+      "repository": "https://github.com/AndersonBY/vv-agent",
+      "branch": "main",
+      "status": "pending-adoption",
+      "verified_revision": null
+    },
+    "rust": {
+      "repository": "https://github.com/AndersonBY/vv-agent-rs",
+      "branch": "main",
+      "status": "pending-adoption",
+      "verified_revision": null
+    }
+  },
+  "last_verified_at": null,
+  "cross_repository_run": null
+}

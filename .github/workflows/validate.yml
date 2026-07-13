@@ -1,0 +1,36 @@
+name: Validate contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Validate canonical contract
+        run: python3 scripts/contractctl.py validate
+
+      - name: Run contract tooling tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Build deterministic bundle twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/contractctl.py build --output-dir dist-a --revision "$GITHUB_SHA"
+          python3 scripts/contractctl.py build --output-dir dist-b --revision "$GITHUB_SHA"
+          cmp dist-a/vv-agent-contract-*.zip dist-b/vv-agent-contract-*.zip
+          cmp dist-a/vv-agent-contract-*.zip.sha256 dist-b/vv-agent-contract-*.zip.sha256

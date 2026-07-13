@@ -1,0 +1,108 @@
+name: Cross-repository conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      contract_ref:
+        description: Contract Git ref
+        required: true
+        default: main
+        type: string
+      python_ref:
+        description: vv-agent Git ref or commit
+        required: true
+        default: main
+        type: string
+      rust_ref:
+        description: vv-agent-rs Git ref or commit
+        required: true
+        default: main
+        type: string
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    env:
+      UV_NO_SOURCES: "1"
+      VV_AGENT_RUN_LIVE_TESTS: "0"
+      CARGO_BUILD_JOBS: "1"
+    steps:
+      - name: Checkout contract
+        uses: actions/checkout@v6
+        with:
+          path: contract
+          ref: ${{ inputs.contract_ref || 'main' }}
+
+      - name: Checkout Python implementation
+        uses: actions/checkout@v6
+        with:
+          repository: AndersonBY/vv-agent
+          path: python
+          ref: ${{ inputs.python_ref || 'main' }}
+
+      - name: Checkout Rust implementation
+        uses: actions/checkout@v6
+        with:
+          repository: AndersonBY/vv-agent-rs
+          path: rust
+          ref: ${{ inputs.rust_ref || 'main' }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Install native test tools
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Validate canonical contract
+        run: |
+          python3 contract/scripts/contractctl.py validate --root contract
+          python3 -m unittest discover -s contract/tests
+
+      - name: Verify both locked snapshots
+        run: |
+          python3 python/scripts/contract_snapshot.py --repo-root python check --source contract
+          python3 rust/scripts/contract_snapshot.py --repo-root rust check --source contract
+          diff -qr python/tests/fixtures/parity rust/crates/vv-agent/tests/fixtures/parity
+
+      - name: Run Python full gate
+        working-directory: python
+        run: |
+          uv sync --dev --extra s3
+          uv run pytest
+          uv run ruff check .
+          uv run ty check
+
+      - name: Run Rust full gate
+        working-directory: rust
+        run: |
+          cargo fmt --all -- --check
+          cargo test -p vv-agent -- --test-threads=1
+          cargo check --examples
+          cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Record evidence
+        shell: bash
+        run: |
+          {
+            echo "## Cross-repository conformance"
+            echo
+            echo "- Contract: \`$(git -C contract rev-parse HEAD)\`"
+            echo "- Python: \`$(git -C python rev-parse HEAD)\`"
+            echo "- Rust: \`$(git -C rust rev-parse HEAD)\`"
+            echo "- Fixture manifest: \`$(sha256sum contract/fixtures/SHA256SUMS | cut -d' ' -f1)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
