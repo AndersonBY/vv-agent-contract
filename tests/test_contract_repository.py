@@ -39,14 +39,20 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("path: vv-agent\n", python_checkout)
         self.assertIn("path: vv-agent-rs\n", rust_checkout)
 
+    def test_validate_workflow_supports_manual_dispatch(self) -> None:
+        workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:\n", workflow)
+
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
+        matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
         self.assertEqual(report["version"], "0.1.0")
         self.assertEqual(report["domains"], 18)
         self.assertEqual(report["fixture_files"], 34)
         self.assertEqual(report["manifest_entries"], 33)
-        self.assertEqual(report["adoption_status"], "pending-adoption")
+        self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:

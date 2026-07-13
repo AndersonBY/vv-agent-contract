@@ -128,6 +128,7 @@ jobs:
             --rust-revision "$rust_revision" \
             --run-url "$run_url"
           python3 contract/scripts/contractctl.py --root contract validate
+          python3 -m unittest discover -s contract/tests
 
       - name: Commit verified support matrix
         if: inputs.record_verified == true
