@@ -48,7 +48,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.3.1")
+        self.assertEqual(report["version"], "0.3.2")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 36)
         self.assertEqual(report["manifest_entries"], 35)
@@ -172,6 +172,35 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
+        self.assertEqual(len(capabilities), 117)
+
+        surfaces = {surface["id"]: surface for surface in fixture["surfaces"]}
+        surface_member_count = sum(
+            len(surface.get("members", []))
+            + len(surface.get("protocol_operations", []))
+            + len(surface.get("supporting_operations", []))
+            for surface in fixture["surfaces"]
+        )
+        self.assertEqual(surface_member_count, 216)
+        self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
+        self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
+        self.assertTrue(
+            {"completion_reason", "completion_tool_name", "partial_output"}.issubset(
+                {member["id"] for member in surfaces["run_result"]["members"]}
+            )
+        )
+
+    def test_manager_outcomes_preserve_completion_observation(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/manager_tool_envelope_v1.json").read_text(encoding="utf-8"))
+
+        failed = fixture["sync_failed_outcome"]["expected"]
+        self.assertEqual(failed["completion_reason"], "failed")
+        self.assertEqual(failed["partial_output"], "last child draft")
+
+        waiting = fixture["sync_wait_outcome"]["expected"]
+        self.assertEqual(waiting["completion_reason"], "wait_user")
+        self.assertEqual(waiting["completion_tool_name"], "dangerous")
+        self.assertEqual(waiting["partial_output"], "proposed change")
 
     def test_snapshot_sync_and_offline_check(self) -> None:
         revision = "b" * 40
@@ -189,7 +218,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.3.1/vv-agent-contract-0.3.1.zip"
+                    "v0.3.2/vv-agent-contract-0.3.2.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -215,7 +244,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.2.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -253,7 +282,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.2.zip",
                     snapshot_path="fixtures",
                 )
             )

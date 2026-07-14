@@ -822,6 +822,19 @@
           }
         },
         {
+          "id": "no_tool_policy",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "no_tool_policy"
+          },
+          "rust": {
+            "kind": "method",
+            "name": "no_tool_policy"
+          }
+        },
+        {
           "id": "tool_policy",
           "kind": "field",
           "python": {
@@ -1243,6 +1256,19 @@
           "rust": {
             "kind": "field",
             "name": "max_cycles"
+          }
+        },
+        {
+          "id": "no_tool_policy",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "no_tool_policy"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "no_tool_policy"
           }
         },
         {
@@ -1730,6 +1756,45 @@
           "rust": {
             "kind": "method",
             "name": "status"
+          }
+        },
+        {
+          "id": "completion_reason",
+          "kind": "field",
+          "python": {
+            "declaration": "property",
+            "kind": "property",
+            "name": "completion_reason"
+          },
+          "rust": {
+            "kind": "method",
+            "name": "completion_reason"
+          }
+        },
+        {
+          "id": "completion_tool_name",
+          "kind": "field",
+          "python": {
+            "declaration": "property",
+            "kind": "property",
+            "name": "completion_tool_name"
+          },
+          "rust": {
+            "kind": "method",
+            "name": "completion_tool_name"
+          }
+        },
+        {
+          "id": "partial_output",
+          "kind": "field",
+          "python": {
+            "declaration": "property",
+            "kind": "property",
+            "name": "partial_output"
+          },
+          "rust": {
+            "kind": "method",
+            "name": "partial_output"
           }
         },
         {

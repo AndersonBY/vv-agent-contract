@@ -204,8 +204,8 @@ The canonical `fixtures/` evidence closure is generated from and verified
 against public production paths, not accepted as a static snapshot. The two
 implementation repositories carry lock-managed vendored copies:
 
-- `public_api_v1.json` inventories 114 capability paths plus 23 canonical
-  surfaces with 211 fixture-driven members across Agent, Runner, RunConfig,
+- `public_api_v1.json` inventories 117 capability paths plus 23 canonical
+  surfaces with 216 fixture-driven members across Agent, Runner, RunConfig,
   result, RunHandle, interactive sessions, App Server, tools, workspace,
   memory, skills, tracing, the LLM bridge, and runtime backends.
   Language-specific names are recorded as explicit adaptations. The surface
