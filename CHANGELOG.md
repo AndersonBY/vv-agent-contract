@@ -3,6 +3,13 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.3.1 - 2026-07-15
+
+- Restore canonical sorted ordering for the public RunResult projection-key
+  inventory after adding completion observation fields in `0.3.0`.
+- Keep the `0.3.0` behavior and wire fields unchanged; paired implementations
+  adopt this fixture-closure patch.
+
 ## 0.3.0 - 2026-07-15
 
 - Promote the existing runtime no-tool behavior to public Agent and RunConfig
