@@ -29,6 +29,19 @@ Separate repositories cannot merge atomically. During adoption, one default
 branch may briefly point to a newer contract. Release workflows must therefore
 accept only a version recorded as `verified` in the central support matrix.
 
+## 0.2 Token Usage Compatibility
+
+Contract `0.2.0` adds `usage_source` and `cache_usage` without removing or
+changing the existing numeric token fields. A `0.1.x` payload therefore
+decodes as `accounting_missing` for the new observation while retaining its
+legacy values. A `0.2.x` decoder must preserve `null` cache readings and must
+not derive availability from legacy zero values.
+
+Writers continue to emit `cached_tokens` and `cache_creation_tokens` during
+the `0.x` compatibility period. Readers that require a reliable cache hit rate
+must use `cache_usage.status` and the nullable typed readings; the legacy
+projection alone cannot distinguish zero from unavailable accounting.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

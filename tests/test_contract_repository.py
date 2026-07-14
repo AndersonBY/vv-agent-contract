@@ -48,10 +48,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.1.0")
-        self.assertEqual(report["domains"], 18)
-        self.assertEqual(report["fixture_files"], 34)
-        self.assertEqual(report["manifest_entries"], 33)
+        self.assertEqual(report["version"], "0.2.0")
+        self.assertEqual(report["domains"], 19)
+        self.assertEqual(report["fixture_files"], 35)
+        self.assertEqual(report["manifest_entries"], 34)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -78,6 +78,53 @@ class ContractRepositoryTests(unittest.TestCase):
             with self.assertRaisesRegex(contractctl.ContractError, "fixture digest mismatch"):
                 contractctl.parse_manifest(fixtures)
 
+    def test_token_usage_contract_preserves_zero_missing_and_unsupported(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/token_usage_v1.json").read_text(encoding="utf-8"))
+        cases = {case["name"]: case for case in fixture["normalization_cases"]}
+
+        explicit_zero = cases["openai_cached_explicit_zero"]["expected"]["cache_usage"]
+        missing = cases["provider_usage_without_cache_details"]["expected"]["cache_usage"]
+        unsupported = cases["adapter_declares_cache_unsupported"]["expected"]["cache_usage"]
+        invalid = cases["invalid_cache_numbers_are_not_zero"]["expected"]["cache_usage"]
+
+        self.assertEqual(explicit_zero["status"], "provider_reported")
+        self.assertEqual(explicit_zero["read_tokens"], 0)
+        self.assertEqual(missing["status"], "accounting_missing")
+        self.assertIsNone(missing["read_tokens"])
+        self.assertEqual(unsupported["status"], "unsupported")
+        self.assertIsNone(unsupported["read_tokens"])
+        self.assertEqual(invalid, missing)
+
+    def test_token_usage_aggregation_never_exposes_partial_total(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/token_usage_v1.json").read_text(encoding="utf-8"))
+        cases = {case["name"]: case for case in fixture["aggregation_cases"]}
+
+        complete = cases["complete_provider_cache_observations"]["expected"]
+        partial = cases["partial_observation_is_not_a_partial_total"]["expected"]
+
+        self.assertEqual(complete["read_tokens"], 640)
+        self.assertEqual(complete["uncached_input_tokens"], 1360)
+        self.assertEqual(partial["status"], "accounting_missing")
+        self.assertIsNone(partial["read_tokens"])
+        self.assertIsNone(partial["uncached_input_tokens"])
+
+    def test_public_api_inventories_token_usage_types(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
+        capabilities = {
+            item["id"]
+            for domain in fixture["domains"]
+            for item in domain["capabilities"]
+        }
+        self.assertTrue(
+            {
+                "result.usage_source",
+                "result.cache_usage_status",
+                "result.cache_usage",
+                "result.token_usage",
+                "result.task_token_usage",
+            }.issubset(capabilities)
+        )
+
     def test_snapshot_sync_and_offline_check(self) -> None:
         revision = "b" * 40
         with tempfile.TemporaryDirectory() as temporary:
@@ -94,7 +141,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.1.0/vv-agent-contract-0.1.0.zip"
+                    "v0.2.0/vv-agent-contract-0.2.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -102,7 +149,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 34)
+            self.assertEqual(synced["fixture_files"], 35)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -120,7 +167,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.1.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.2.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -158,7 +205,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.1.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.2.0.zip",
                     snapshot_path="fixtures",
                 )
             )

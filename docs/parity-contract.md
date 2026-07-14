@@ -57,6 +57,60 @@ approval events expose only the shared approval fields, sub-run lifecycle
 events expose their nested lifecycle metadata, and canonical child stream
 events discard private receipt and sequence markers after trust validation.
 
+## Token Usage And Cache Accounting
+
+`token_usage_v1.json` defines the shared normalization and aggregation
+contract. The existing numeric fields remain compatibility projections, but
+new code must use the typed observation when deciding whether cache accounting
+is available.
+
+`TokenUsage.usage_source` is one of:
+
+- `provider_reported`: the provider or provider adapter returned token usage,
+  including an explicit all-zero usage object.
+- `estimated`: the SDK estimated token totals because provider usage was not
+  available. Estimated values must never be presented as provider accounting.
+- `accounting_missing`: neither provider accounting nor an estimate exists.
+
+`TokenUsage.cache_usage.status` is one of:
+
+- `provider_reported`: at least one valid cache metric was returned. An
+  explicit `read_tokens: 0` is a real observation and means a zero cache hit,
+  not missing data.
+- `accounting_missing`: no valid cache metric was returned or the observation
+  is incomplete after aggregation.
+- `unsupported`: the provider adapter explicitly declares that cache
+  accounting is unsupported. Absence of fields alone never implies this
+  status.
+
+`read_tokens`, `write_tokens`, and `uncached_input_tokens` are nullable
+non-negative integers. Their `null` value means unknown; it must not be coerced
+to zero. Invalid negative, boolean, fractional, or non-numeric provider values
+are ignored and therefore remain unknown. The observation object is always
+serialized so its status remains visible. The individual optional readings,
+not the status object, carry `null` when accounting is unavailable.
+
+Normalization uses this precedence for cache readings:
+
+1. Provider-neutral fields emitted by a typed adapter.
+2. Native provider usage fields, including OpenAI-compatible token-detail
+   objects and Anthropic cache-read/cache-creation fields.
+3. No observation. Legacy `cached_tokens` and `cache_creation_tokens` remain
+   zero for compatibility, while the typed readings remain `null`.
+
+For OpenAI-compatible usage, uncached input is the non-negative difference
+between total input and cache-read tokens. For Anthropic usage, native
+`input_tokens` is the uncached portion and the cache-read/cache-creation values
+are separate. A provider-neutral adapter may report uncached input directly.
+
+Task aggregation is conservative. A metric is summed only when every included
+cycle reports that metric; otherwise its aggregate is `null`. The aggregate
+status is `provider_reported` only when every cycle has provider-reported cache
+accounting, `unsupported` only when every cycle explicitly reports unsupported,
+and `accounting_missing` for empty or mixed/partial observations. Legacy numeric
+projections continue to sum for compatibility and must not be used to claim a
+cache hit rate when the typed aggregate is unavailable.
+
 ## Contract Surfaces
 
 The following surfaces are cross-language contracts:
@@ -112,7 +166,7 @@ The canonical `fixtures/` evidence closure is generated from and verified
 against public production paths, not accepted as a static snapshot. The two
 implementation repositories carry lock-managed vendored copies:
 
-- `public_api_v1.json` inventories 109 capability paths plus 23 canonical
+- `public_api_v1.json` inventories 114 capability paths plus 23 canonical
   surfaces with 211 fixture-driven members across Agent, Runner, RunConfig,
   result, RunHandle, interactive sessions, App Server, tools, workspace,
   memory, skills, tracing, the LLM bridge, and runtime backends.
