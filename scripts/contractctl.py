@@ -156,8 +156,8 @@ def validate_contract(root: Path) -> dict[str, Any]:
         )
 
     domains = contract.get("domains")
-    if not isinstance(domains, list) or len(domains) != 18 or len(set(domains)) != len(domains):
-        raise ContractError("contract.json must list 18 unique domain ids")
+    if not isinstance(domains, list) or len(domains) != 19 or len(set(domains)) != len(domains):
+        raise ContractError("contract.json must list 19 unique domain ids")
     if not all(isinstance(domain, str) and domain for domain in domains):
         raise ContractError("contract domain ids must be non-empty strings")
 
