@@ -31,7 +31,7 @@ accept only a version recorded as `verified` in the central support matrix.
 
 ## 0.2 Token Usage Compatibility
 
-Contract `0.2.0` adds `usage_source` and `cache_usage` without removing or
+Contract `0.2.x` adds `usage_source` and `cache_usage` without removing or
 changing the existing numeric token fields. A `0.1.x` payload therefore
 decodes as `accounting_missing` for the new observation while retaining its
 legacy values. A `0.2.x` decoder must preserve `null` cache readings and must

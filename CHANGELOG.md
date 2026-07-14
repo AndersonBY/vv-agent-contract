@@ -3,6 +3,13 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.2.1 - 2026-07-15
+
+- Complete the token-usage wire closure by adding the typed cache observation
+  to the canonical successful sub-run event payload.
+- Keep `0.2.0` immutable; implementations adopt this patch release so result,
+  checkpoint, App Server, and sub-run event projections all use one shape.
+
 ## 0.2.0 - 2026-07-15
 
 - Add a provider-neutral cache-usage observation to token accounting while
