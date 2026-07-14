@@ -19,6 +19,11 @@
           "rust": "vv_agent::agent::ToolUseBehavior"
         },
         {
+          "id": "agent.no_tool_policy",
+          "python": "vv_agent.NoToolPolicy",
+          "rust": "vv_agent::NoToolPolicy"
+        },
+        {
           "id": "agent.handoff",
           "python": "vv_agent.Handoff",
           "rust": "vv_agent::Handoff"
@@ -59,6 +64,11 @@
           "id": "run_config.options",
           "python": "vv_agent.RunConfig",
           "rust": "vv_agent::RunConfig"
+        },
+        {
+          "id": "run_config.no_tool_policy",
+          "python": "vv_agent.NoToolPolicy",
+          "rust": "vv_agent::NoToolPolicy"
         },
         {
           "id": "run_config.tool_policy",
@@ -114,6 +124,11 @@
           "id": "result.status",
           "python": "vv_agent.AgentStatus",
           "rust": "vv_agent::AgentStatus"
+        },
+        {
+          "id": "result.completion_reason",
+          "python": "vv_agent.CompletionReason",
+          "rust": "vv_agent::CompletionReason"
         },
         {
           "id": "result.usage_source",

@@ -111,6 +111,44 @@ and `accounting_missing` for empty or mixed/partial observations. Legacy numeric
 projections continue to sum for compatibility and must not be used to claim a
 cache hit rate when the typed aggregate is unavailable.
 
+## Completion Policy And Terminal Observation
+
+`completion_policy_v1.json` defines a task-agnostic control and observation
+contract. `NoToolPolicy` has exactly three values: `continue`, `wait_user`, and
+`finish`. The effective value is resolved in this order:
+
+1. Per-run `RunConfig`.
+2. Configured Runner default `RunConfig`.
+3. Agent definition.
+4. Framework default `continue`.
+
+`continue` preserves the existing continuation hint and advances to the next
+cycle. `wait_user` returns the assistant response as the wait reason. `finish`
+returns the assistant response as the final answer. None of these branches may
+classify the text, inspect task type, infer answer quality, add or remove a
+finish tool, or alter tool policy.
+
+Every terminal `AgentResult` has a typed `completion_reason`. The allowed
+values are `tool_finish`, `no_tool_finish`, `stop_on_first_tool`,
+`stop_at_tool_name`, `wait_user`, `max_cycles`, `cancelled`, `failed`, and the
+reserved future value `budget_exhausted`. `completion_tool_name` records the
+tool that caused a tool-driven finish or wait and is otherwise `null`.
+
+`partial_output` is the last non-empty assistant response from a completed LLM
+cycle when the run does not end successfully. It is `null` for completed runs,
+for failures before any assistant response, and when every prior response is
+empty. Max-cycle compatibility text remains in `final_answer`; the actual last
+assistant response is exposed separately as `partial_output`. An output
+guardrail block changes the reason to `failed` and preserves the pre-guardrail
+assistant result as partial output. Cancellation takes precedence over generic
+failure; explicit tool wait takes precedence over no-tool policy; output
+guardrail failure takes precedence over an earlier successful completion
+reason.
+
+The same fields survive AgentResult serialization, durable terminal results,
+RunResult projection, terminal and sub-run events, and App Server
+`turn/completed`. Older payloads without these additive fields remain readable.
+
 ## Contract Surfaces
 
 The following surfaces are cross-language contracts:
