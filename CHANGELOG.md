@@ -3,6 +3,16 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.3.2 - 2026-07-15
+
+- Complete the public surface inventory for the Agent and RunConfig no-tool
+  controls and the RunResult completion observation fields.
+- Add canonical synchronous sub-task outcome evidence for failed and waiting
+  child runs so completion reason, tool identity, and partial output survive
+  the manager-tool envelope.
+- Keep the `0.3.0` behavior unchanged; this patch closes producer evidence
+  required before paired implementation adoption.
+
 ## 0.3.1 - 2026-07-15
 
 - Restore canonical sorted ordering for the public RunResult projection-key
