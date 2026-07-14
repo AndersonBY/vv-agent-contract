@@ -48,7 +48,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.3.2")
+        self.assertEqual(report["version"], "0.3.3")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 36)
         self.assertEqual(report["manifest_entries"], 35)
@@ -202,6 +202,19 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(waiting["completion_tool_name"], "dangerous")
         self.assertEqual(waiting["partial_output"], "proposed change")
 
+    def test_public_api_properties_include_canonical_signatures(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
+
+        properties = [
+            member["python"]
+            for surface in fixture["surfaces"]
+            for group in ("members", "protocol_operations", "supporting_operations")
+            for member in surface.get(group, [])
+            if member["python"]["kind"] == "property"
+        ]
+        self.assertTrue(properties)
+        self.assertTrue(all("signature" in property_member for property_member in properties))
+
     def test_snapshot_sync_and_offline_check(self) -> None:
         revision = "b" * 40
         with tempfile.TemporaryDirectory() as temporary:
@@ -218,7 +231,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.3.2/vv-agent-contract-0.3.2.zip"
+                    "v0.3.3/vv-agent-contract-0.3.3.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -244,7 +257,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.2.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.3.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -282,7 +295,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.2.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.3.zip",
                     snapshot_path="fixtures",
                 )
             )

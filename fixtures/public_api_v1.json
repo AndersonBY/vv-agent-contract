@@ -1764,7 +1764,17 @@
           "python": {
             "declaration": "property",
             "kind": "property",
-            "name": "completion_reason"
+            "name": "completion_reason",
+            "signature": {
+              "async": false,
+              "parameters": [
+                {
+                  "kind": "positional_or_keyword",
+                  "name": "self",
+                  "required": true
+                }
+              ]
+            }
           },
           "rust": {
             "kind": "method",
@@ -1777,7 +1787,17 @@
           "python": {
             "declaration": "property",
             "kind": "property",
-            "name": "completion_tool_name"
+            "name": "completion_tool_name",
+            "signature": {
+              "async": false,
+              "parameters": [
+                {
+                  "kind": "positional_or_keyword",
+                  "name": "self",
+                  "required": true
+                }
+              ]
+            }
           },
           "rust": {
             "kind": "method",
@@ -1790,7 +1810,17 @@
           "python": {
             "declaration": "property",
             "kind": "property",
-            "name": "partial_output"
+            "name": "partial_output",
+            "signature": {
+              "async": false,
+              "parameters": [
+                {
+                  "kind": "positional_or_keyword",
+                  "name": "self",
+                  "required": true
+                }
+              ]
+            }
           },
           "rust": {
             "kind": "method",
