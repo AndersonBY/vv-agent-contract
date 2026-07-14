@@ -2,6 +2,9 @@
   "version": "result_public_v1",
   "agent_result": {
     "status": "wait_user",
+    "completion_reason": "wait_user",
+    "completion_tool_name": "dangerous",
+    "partial_output": null,
     "messages": [],
     "cycles": [
       {
@@ -146,6 +149,8 @@
   ],
   "projection_keys": [
     "agent_name",
+    "completion_reason",
+    "completion_tool_name",
     "events",
     "final_output",
     "input",
@@ -154,6 +159,7 @@
     "resolved_model",
     "run_id",
     "status",
+    "partial_output",
     "token_usage",
     "trace_id"
   ],

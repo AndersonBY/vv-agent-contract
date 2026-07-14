@@ -48,10 +48,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.2.1")
+        self.assertEqual(report["version"], "0.3.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 35)
-        self.assertEqual(report["manifest_entries"], 34)
+        self.assertEqual(report["fixture_files"], 36)
+        self.assertEqual(report["manifest_entries"], 35)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -125,6 +125,54 @@ class ContractRepositoryTests(unittest.TestCase):
             }.issubset(capabilities)
         )
 
+    def test_completion_policy_is_task_agnostic_and_backward_compatible(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(fixture["policy_values"], ["continue", "wait_user", "finish"])
+        self.assertEqual(fixture["framework_default"], "continue")
+        self.assertEqual(
+            fixture["precedence"],
+            ["run_config", "runner_default_run_config", "agent", "framework_default"],
+        )
+        self.assertTrue(fixture["rules"]["assistant_text_is_not_classified"])
+        self.assertTrue(fixture["rules"]["completion_policy_does_not_change_tool_availability"])
+        self.assertTrue(fixture["rules"]["budget_exhausted_reserved_until_0_4"])
+
+    def test_completion_cases_cover_every_current_terminal_reason(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
+        case_reasons = {case["expected"]["completion_reason"] for case in fixture["cases"]}
+        precedence_reasons = {case["expected_reason"] for case in fixture["terminal_precedence_cases"]}
+
+        self.assertTrue(
+            {
+                "tool_finish",
+                "no_tool_finish",
+                "stop_on_first_tool",
+                "stop_at_tool_name",
+                "wait_user",
+                "max_cycles",
+                "cancelled",
+                "failed",
+            }.issubset(case_reasons | precedence_reasons)
+        )
+        self.assertNotIn("budget_exhausted", case_reasons | precedence_reasons)
+
+    def test_public_api_inventories_completion_controls_and_observation(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
+        capabilities = {
+            item["id"]
+            for domain in fixture["domains"]
+            for item in domain["capabilities"]
+        }
+
+        self.assertTrue(
+            {
+                "agent.no_tool_policy",
+                "run_config.no_tool_policy",
+                "result.completion_reason",
+            }.issubset(capabilities)
+        )
+
     def test_snapshot_sync_and_offline_check(self) -> None:
         revision = "b" * 40
         with tempfile.TemporaryDirectory() as temporary:
@@ -141,7 +189,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.2.1/vv-agent-contract-0.2.1.zip"
+                    "v0.3.0/vv-agent-contract-0.3.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -149,7 +197,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 35)
+            self.assertEqual(synced["fixture_files"], 36)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -167,7 +215,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.2.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -205,7 +253,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.2.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.0.zip",
                     snapshot_path="fixtures",
                 )
             )

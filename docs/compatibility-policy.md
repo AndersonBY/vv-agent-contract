@@ -42,6 +42,22 @@ the `0.x` compatibility period. Readers that require a reliable cache hit rate
 must use `cache_usage.status` and the nullable typed readings; the legacy
 projection alone cannot distinguish zero from unavailable accounting.
 
+## 0.3 Completion Policy Compatibility
+
+Contract `0.3.x` exposes the runtime's existing no-tool policy through public
+Agent and RunConfig APIs. Omitting every policy layer remains equivalent to
+`continue`, including the existing continuation hint and max-cycle behavior.
+The runtime does not inspect assistant text to decide whether a task is done.
+
+`completion_reason`, `partial_output`, and `completion_tool_name` are additive
+result and protocol fields. A `0.3.x` reader accepts older payloads where they
+are absent. New producers populate a typed reason for every terminal result;
+`partial_output` is nullable and never replaces the compatibility
+`final_answer`, `wait_reason`, `error`, or `final_output` fields.
+
+The `budget_exhausted` reason is reserved by the enum for contract `0.4.x` and
+must not be emitted before a configured budget actually terminates a run.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are
