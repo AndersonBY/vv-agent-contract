@@ -242,6 +242,7 @@
       "completion_tool_name": "dangerous",
       "cycles": 1,
       "error": null,
+      "error_code": "sub_task_wait_user",
       "final_answer": null,
       "partial_output": "proposed change",
       "resolved": {},
