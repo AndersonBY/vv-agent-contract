@@ -156,10 +156,10 @@
     "input",
     "metadata",
     "new_items",
+    "partial_output",
     "resolved_model",
     "run_id",
     "status",
-    "partial_output",
     "token_usage",
     "trace_id"
   ],
