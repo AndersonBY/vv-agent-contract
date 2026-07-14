@@ -3,6 +3,13 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.3.4 - 2026-07-15
+
+- Complete the synchronous waiting sub-task tool envelope with the existing
+  `sub_task_wait_user` error code emitted by both language implementations.
+- Keep completion behavior unchanged while making the canonical expected
+  payload directly executable by paired producer tests before adoption.
+
 ## 0.3.3 - 2026-07-15
 
 - Add the canonical Python property signatures for the three RunResult
