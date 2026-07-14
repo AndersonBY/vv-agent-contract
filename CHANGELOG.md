@@ -3,6 +3,14 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.3.3 - 2026-07-15
+
+- Add the canonical Python property signatures for the three RunResult
+  completion-observation members introduced in the public surface inventory.
+- Require every property member in the public API fixture to carry a signature,
+  closing the last implementation-producer verification gap without changing
+  completion behavior or wire fields.
+
 ## 0.3.2 - 2026-07-15
 
 - Complete the public surface inventory for the Agent and RunConfig no-tool
