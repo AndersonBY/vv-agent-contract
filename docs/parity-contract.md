@@ -306,7 +306,7 @@ Statuses are evidence-based:
 | RunHandle and event subscriptions | verified | Live control, replay, cancellation, and terminal tests pass |
 | RunEvent and EventStore | verified | Synthetic fixtures and real producer traces pass |
 | Tool orchestrator | verified | Policy, approval, timeout, exposure, and envelope tests pass |
-| Distributed runtime | in-progress | Contract 0.3.6 lease lifecycle adoption and cross-repository verification are pending; durable cancellation, event outbox, and external side-effect idempotency remain explicit shared design debt |
+| Distributed runtime | verified | Contract 0.3.6 lease lifecycle is adopted by both implementations and passed the locked cross-repository full gate; durable cancellation, event outbox, and external side-effect idempotency remain explicit shared design debt |
 | Memory and compaction | verified | Provider, PTL, lifecycle, local, and artifact tests pass |
 | Guardrails, hooks, results, and tracing | verified | Public lifecycle and failure-path tests pass |
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
