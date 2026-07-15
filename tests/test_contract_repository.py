@@ -48,7 +48,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.3.4")
+        self.assertEqual(report["version"], "0.3.5")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 36)
         self.assertEqual(report["manifest_entries"], 35)
@@ -137,6 +137,53 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["rules"]["assistant_text_is_not_classified"])
         self.assertTrue(fixture["rules"]["completion_policy_does_not_change_tool_availability"])
         self.assertTrue(fixture["rules"]["budget_exhausted_reserved_until_0_4"])
+        self.assertTrue(fixture["rules"]["approval_resume_uses_fresh_run_budget"])
+        self.assertTrue(fixture["rules"]["approved_resume_rejects_input_before_claim"])
+        self.assertTrue(fixture["rules"]["pre_cancelled_approval_resume_skips_side_effects"])
+        self.assertTrue(fixture["rules"]["guardrail_allow_preserves_completion_observation"])
+        self.assertTrue(fixture["rules"]["ordinary_llm_failure_is_typed_terminal"])
+
+    def test_completion_closure_locks_resume_guardrail_and_llm_failure(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
+        resume = fixture["approval_resume"]
+        cases = {case["name"]: case for case in resume["cases"]}
+
+        self.assertEqual(resume["rules"]["run_identity"], "fresh")
+        self.assertEqual(resume["rules"]["trace_id_relation"], "same_as_source")
+        self.assertEqual(resume["rules"]["cycle_budget"], "full_configured_max_cycles")
+        self.assertFalse(resume["rules"]["prior_interrupted_cycles_reduce_resume_budget"])
+        self.assertEqual(resume["rules"]["new_input"], "reject_before_claim")
+        self.assertEqual(
+            resume["rules"]["admission_precedence"],
+            ["reject_new_input", "observe_cancellation", "claim_approval"],
+        )
+        self.assertEqual(
+            resume["rules"]["pre_cancelled_forbidden_actions"],
+            ["claim_approval", "execute_tool", "run_output_guardrail"],
+        )
+        self.assertFalse(
+            cases["approved_resume_rejects_input_before_claim"]["expected"]["approval_claim_consumed"]
+        )
+        self.assertEqual(
+            cases["pre_cancelled_approved_resume_with_input_rejects_before_cancellation"]["expected"][
+                "terminal_count"
+            ],
+            0,
+        )
+        self.assertEqual(
+            cases["pre_cancelled_approved_resume_has_no_side_effects"]["expected"]["terminal_event"],
+            "run_cancelled",
+        )
+        self.assertEqual(
+            fixture["output_guardrail_allow"]["preserved_fields"],
+            ["status", "completion_reason", "completion_tool_name", "partial_output"],
+        )
+        self.assertEqual(
+            fixture["output_guardrail_allow"]["case"]["expected_output"],
+            "Redacted question",
+        )
+        self.assertEqual(fixture["ordinary_llm_failure"]["runner_outcome"], "typed_result")
+        self.assertEqual(fixture["ordinary_llm_failure"]["terminal_count"], 1)
 
     def test_completion_cases_cover_every_current_terminal_reason(self) -> None:
         fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
@@ -202,6 +249,32 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(waiting["completion_tool_name"], "dangerous")
         self.assertEqual(waiting["partial_output"], "proposed change")
         self.assertEqual(waiting["error_code"], "sub_task_wait_user")
+        self.assertIsNone(fixture["sync_wait_outcome"]["internal_error_code"])
+        self.assertEqual(fixture["sync_wait_outcome"]["manager_status_error_code_field"], "omitted")
+        self.assertEqual(fixture["sync_wait_outcome"]["sub_run_event_error_code_field"], "omitted")
+        self.assertEqual(fixture["sync_wait_outcome"]["sync_single_tool_envelope_error_code"], "sub_task_wait_user")
+
+    def test_completion_event_and_app_server_closure_is_explicit(self) -> None:
+        invalid = json.loads((ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8"))
+        rejected = {case["id"] for case in invalid["reject"]}
+        self.assertTrue(
+            {
+                "unknown_completion_reason",
+                "completion_reason_is_not_a_string_or_null",
+                "completion_tool_name_is_not_a_string_or_null",
+                "partial_output_is_not_a_string_or_null",
+            }.issubset(rejected)
+        )
+
+        app_server = json.loads(
+            (ROOT / "fixtures/app_server_observable_v1.json").read_text(encoding="utf-8")
+        )
+        projections = {
+            case["name"]: case for case in app_server["terminal"]["agentStatusProjection"]
+        }
+        self.assertEqual(projections["wait_user_is_interrupted_without_error"]["turnStatus"], "interrupted")
+        self.assertEqual(projections["wait_user_is_interrupted_without_error"]["errorField"], "omitted")
+        self.assertEqual(projections["cancelled_failure_stays_failed"]["turnStatus"], "failed")
 
     def test_public_api_properties_include_canonical_signatures(self) -> None:
         fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
@@ -232,7 +305,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.3.4/vv-agent-contract-0.3.4.zip"
+                    "v0.3.5/vv-agent-contract-0.3.5.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -258,7 +331,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.4.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.5.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -296,7 +369,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.4.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.5.zip",
                     snapshot_path="fixtures",
                 )
             )

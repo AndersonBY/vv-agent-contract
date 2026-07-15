@@ -3,6 +3,21 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.3.5 - 2026-07-15
+
+- Close approval resume ordering: a fresh run in the source trace receives the
+  full configured cycle budget, rejects extra input before cancellation or
+  approval claim, and observes valid pre-cancellation before claims, tool
+  effects, or output guardrails.
+- Preserve runtime-owned completion observation across output-guardrail allow
+  rewrites and require ordinary model-call failures to produce one typed failed
+  terminal.
+- Reject invalid completion fields in RunEvent v1, while retaining unknown
+  top-level-field compatibility.
+- Lock App Server wait/cancel status projection and scope
+  `sub_task_wait_user` to the synchronous parent-tool envelope instead of
+  internal waiting outcomes.
+
 ## 0.3.4 - 2026-07-15
 
 - Complete the synchronous waiting sub-task tool envelope with the existing
