@@ -348,7 +348,7 @@ Statuses are evidence-based:
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
 | Runner/RunConfig and CLI | verified | Public facade, all controls, defaults, and CLI inventory pass |
 | App Server | verified | Host/client/server, 15 protocol operations, replay, and schema bundle pass |
-| Run budgets | in-progress | Contract 0.4.0 is frozen; paired producer adoption and central full gate are pending |
+| Run budgets | in-progress | Contract 0.4.1 closes the 0.4.0 wire-boundary review; paired producer adoption and central full gate are pending |
 
 ### Imported Local Verification Record (2026-07-13)
 

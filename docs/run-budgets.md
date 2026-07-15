@@ -23,9 +23,18 @@ optional and, when present, is a non-empty string. An absent limit is unlimited;
 an absent or empty `RunBudgetLimits` has no runtime effect. The unavailable
 metric policy defaults to `continue_and_mark`; `stop` is opt-in.
 
+Arithmetic that cannot be represented in this wire-safe range makes the
+affected cumulative metric unavailable with reason `integer_overflow`; it is
+never wrapped, truncated, or coerced to zero.
+
 Per-run limits replace, rather than merge with, configured Runner defaults.
 The same precedence applies to the optional host cost meter. Agents do not
 define implicit budgets.
+
+An object that sets only `unavailable_metric_policy` has no configured
+dimension and is therefore unlimited. Wire decoders ignore unknown object
+fields for forward compatibility but reject invalid values for every known
+field. Exact-name maps serialize in lexicographic key order.
 
 ## Usage And Availability
 
@@ -44,6 +53,12 @@ every invocation admitted for execution, regardless of success, tool error,
 timeout, approval interruption, or directive. A rejected batch is not admitted
 and does not increment the counters.
 
+Provider-reported and explicitly estimated total token usage are available for
+`total_tokens`; `accounting_missing` is unavailable. Uncached input is
+available only from the typed cache observation's non-null
+`uncached_input_tokens`, including explicit zero. Legacy numeric cache fields
+do not make that metric available.
+
 Elapsed time is measured with monotonic clocks. Inline and thread runs count
 their active run interval. Distributed runs persist completed active intervals
 and continue from that accumulated value in the next worker; queue time between
@@ -51,9 +66,17 @@ a committed checkpoint and the next worker claim is not fabricated from wall
 clock timestamps. Approval waits are also excluded. End-to-end scheduler
 deadlines remain a separate control.
 
+Elapsed nanoseconds are floored to whole milliseconds. Cumulative elapsed time
+never decreases. Overflow beyond the wire-safe integer range is latched as
+`integer_overflow` rather than saturated or wrapped.
+
 An unavailable dimension is latched for the rest of the run. Later readings do
 not convert an incomplete accounting history into a complete one. Only
 configured dimensions can make a run stop because of unavailability.
+
+Unavailable observations are unique by dimension and serialize in the stable
+dimension precedence order. Once a dimension is latched unavailable, the
+framework does not keep polling or recomputing it during that run.
 
 ## Host Cost Meter
 
@@ -78,6 +101,12 @@ or sibling usage.
 The meter is sampled at every applicable enforcement boundary so a shared
 scope can change between local operations. A deterministic test meter returns
 its final scripted reading again after the script is exhausted.
+
+Distributed workers cannot serialize a process-local meter object. A
+distributed `RuntimeRecipe` uses `host_cost_meter_ref` in its existing
+capability registry; absence or failed resolution is the same typed meter
+unavailability seen by other backends. Limits themselves travel in the
+distributed run envelope.
 
 ## Enforcement Boundaries
 
@@ -143,6 +172,14 @@ events carry the final snapshot when a budget was configured.
 `budget_snapshot` events are emitted only for configured budgets and only when
 accounting state changes at an enforcement boundary. Runs without limits emit
 no budget events and preserve the prior event order.
+
+For a configured budget, `run_started` remains first. A non-terminal
+`run_start` observation emits the initial snapshot, each completed LLM
+accounting update emits a snapshot, and a passing tool preflight emits the
+post-reservation snapshot. Later boundary observations emit a snapshot only
+when a value or unavailable latch changes. An exhausting boundary emits
+`budget_exhausted` instead of a snapshot for that boundary. The ordinary
+terminal follows and carries the same final objects.
 
 App Server projects a budget stop as turn status `failed` and exposes optional
 `budgetUsage` and `budgetExhaustion`. Result, event, App Server, and durable

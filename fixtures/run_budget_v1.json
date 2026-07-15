@@ -39,7 +39,8 @@
       "meter_error",
       "unit_mismatch",
       "currency_mismatch",
-      "non_monotonic"
+      "non_monotonic",
+      "integer_overflow"
     ],
     "unavailable_metric_policies": [
       "continue_and_mark",
@@ -890,6 +891,33 @@
           "currency": "USD",
           "amount_microunits": 100
         }
+      }
+    },
+    {
+      "name": "token_sum_wire_overflow_is_typed_unavailable",
+      "limits": {
+        "max_total_tokens": 9007199254740991,
+        "unavailable_metric_policy": "stop"
+      },
+      "initial_usage": {
+        "cycles": 1,
+        "total_tokens": 9007199254740991,
+        "uncached_input_tokens": 0,
+        "tool_calls": 0,
+        "tool_calls_by_name": {},
+        "elapsed_ms": 0,
+        "host_cost": null,
+        "unavailable_dimensions": []
+      },
+      "llm_usage": {
+        "total_tokens": 1,
+        "uncached_input_tokens": 0
+      },
+      "expected": {
+        "reason": "metric_unavailable",
+        "unavailable_reason": "integer_overflow",
+        "total_tokens": null,
+        "enforcement_boundary": "llm_complete"
       }
     },
     {
