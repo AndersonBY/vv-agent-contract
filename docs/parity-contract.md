@@ -306,7 +306,7 @@ Statuses are evidence-based:
 | RunHandle and event subscriptions | verified | Live control, replay, cancellation, and terminal tests pass |
 | RunEvent and EventStore | verified | Synthetic fixtures and real producer traces pass |
 | Tool orchestrator | verified | Policy, approval, timeout, exposure, and envelope tests pass |
-| Distributed runtime | verified | Shared at-least-once contract passes; durable cancellation, event outbox, and external side-effect idempotency remain explicit shared design debt |
+| Distributed runtime | in-progress | Contract 0.3.6 lease lifecycle adoption and cross-repository verification are pending; durable cancellation, event outbox, and external side-effect idempotency remain explicit shared design debt |
 | Memory and compaction | verified | Provider, PTL, lifecycle, local, and artifact tests pass |
 | Guardrails, hooks, results, and tracing | verified | Public lifecycle and failure-path tests pass |
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
@@ -524,6 +524,16 @@ Checkpoint execution is an at-least-once protocol with these guarantees:
 - A worker claims one expected cycle by revision and lease token. Heartbeats
   renew the same revision while work is active; an expired lease can be
   reclaimed. Commit requires the original token and revision.
+- Initial and renewed lease expiry is capped by the job deadline. After a
+  claim, the worker must successfully renew it before invoking the runtime
+  cycle; an initial renewal failure starts no model or tool side effect.
+  Heartbeat renewal remains active through result projection and checkpoint
+  commit, and operation unwind always stops the heartbeat. The periodic
+  interval is strictly shorter than every accepted positive lease duration.
+  An expired owner cannot renew, while another worker may reclaim the cycle.
+  A successful checkpoint commit is authoritative over a concurrent renewal
+  rejection caused by that commit clearing the claim; a heartbeat failure
+  observed before a successful commit remains a coordination failure.
 - A terminal result is committed before the dispatcher reports completion.
   Once present, a terminal checkpoint cannot be replaced by scheduler
   finalization. Redelivery replays that durable result without rebuilding the
