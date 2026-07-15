@@ -87,6 +87,30 @@ values are capped by the job deadline. This is a patch correction to the
 existing distributed-runtime guarantee; it adds no wire field or scheduler
 control.
 
+## 0.4 Run Budget Compatibility
+
+Contract `0.4.x` adds optional `budget_limits` and `host_cost_meter` controls.
+Omitting them, or supplying an empty limits object, performs no budget
+accounting, emits no budget events, and preserves the existing terminal and
+event order. Per-run limits replace a configured Runner default as one object;
+individual fields are not implicitly merged.
+
+Budget usage and exhaustion are additive nullable result, event, checkpoint,
+and App Server fields. Older payloads without them remain readable. A 0.4
+producer emits `CompletionReason.budget_exhausted` only when a configured limit
+or strict unavailable-metric policy stops the run. The Agent status remains
+`failed`, so older status consumers do not mistake a resource stop for
+business completion.
+
+All wire counters and micro-unit amounts are bounded by the JSON-safe integer
+maximum `9007199254740991`. A host cost unit or currency is never converted.
+Missing token or cost accounting remains null and is never reconstructed from
+legacy zero values.
+
+The additive budget state in checkpoint v1 supports cumulative distributed
+enforcement. It does not promise checkpoint v2, exact resume, event outbox
+delivery, or exactly-once external side effects.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

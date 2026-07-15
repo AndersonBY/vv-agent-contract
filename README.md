@@ -35,3 +35,4 @@ separate operations. A version is not cross-language verified until both
 implementation revisions and the central cross-repository run are recorded.
 
 See `docs/change-workflow.md` for the complete workflow.
+The optional resource budget semantics are defined in `docs/run-budgets.md`.
