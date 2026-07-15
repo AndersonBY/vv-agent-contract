@@ -48,7 +48,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.4.0")
+        self.assertEqual(report["version"], "0.4.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 38)
         self.assertEqual(report["manifest_entries"], 37)
@@ -146,6 +146,12 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["enums"]["unavailable_metric_policies"],
             ["continue_and_mark", "stop"],
         )
+        self.assertIn("integer_overflow", fixture["enums"]["unavailable_reasons"])
+        overflow = next(
+            case for case in fixture["evaluator_cases"] if case["name"] == "token_sum_wire_overflow_is_typed_unavailable"
+        )
+        self.assertEqual(overflow["expected"]["unavailable_reason"], "integer_overflow")
+        self.assertIsNone(overflow["expected"]["total_tokens"])
 
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
         fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
@@ -461,7 +467,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.4.0/vv-agent-contract-0.4.0.zip"
+                    "v0.4.1/vv-agent-contract-0.4.1.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -487,7 +493,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.4.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.4.1.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -525,7 +531,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.4.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.4.1.zip",
                     snapshot_path="fixtures",
                 )
             )

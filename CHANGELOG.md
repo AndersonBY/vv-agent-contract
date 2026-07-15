@@ -3,6 +3,16 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.4.1 - 2026-07-16
+
+- Define JSON-safe cumulative arithmetic overflow as an unavailable metric
+  instead of permitting Python/Rust wire divergence, truncation, or wrapping.
+- Close host-meter sampling, token-source, monotonic rounding, unavailable
+  ordering, and budget snapshot event rules without changing the optional
+  0.4.0 capability set.
+- Clarify that distributed hosts resolve a worker-local host meter through the
+  existing capability registry and that policy-only limits remain unlimited.
+
 ## 0.4.0 - 2026-07-16
 
 - Add optional run budgets for total tokens, uncached input tokens, total and

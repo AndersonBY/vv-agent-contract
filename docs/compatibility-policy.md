@@ -111,6 +111,11 @@ The additive budget state in checkpoint v1 supports cumulative distributed
 enforcement. It does not promise checkpoint v2, exact resume, event outbox
 delivery, or exactly-once external side effects.
 
+Patch-level `0.4.x` closure may add typed unavailability for arithmetic that
+cannot fit the already declared JSON-safe range and may fix sampling/order
+wording without changing the limit fields or default behavior. Implementations
+adopt the latest immutable patch before marking the 0.4 capability verified.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are
