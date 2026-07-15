@@ -3,6 +3,22 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.4.0 - 2026-07-16
+
+- Add optional run budgets for total tokens, uncached input tokens, total and
+  exact-name tool calls, monotonic active wall time, and host-reported cost.
+- Add typed budget usage, unavailable observations, exhaustion causes,
+  enforcement boundaries, and `budget_exhausted` terminal projection across
+  results, events, App Server, and durable distributed state.
+- Require whole-batch tool preflight, one-atomic-operation token/cost
+  overshoot reporting, missing-not-zero accounting, and deterministic terminal
+  precedence without inspecting task content.
+- Add a task-agnostic cumulative host cost meter protocol. The framework does
+  not contain prices, convert units, or implicitly combine parent and child
+  budgets.
+- Add executable public Runner and evaluator cases in `run_budget_v1.json` and
+  canonical event records in `budget_events_v1.jsonl`.
+
 ## 0.3.6 - 2026-07-15
 
 - Require a successful claim renewal before a distributed worker invokes the

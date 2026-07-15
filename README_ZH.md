@@ -21,3 +21,4 @@ python3 scripts/contractctl.py build --output-dir dist
 
 完整流程见 `docs/change-workflow.md`，版本规则见
 `docs/compatibility-policy.md`。
+可选运行资源预算的规范见 `docs/run-budgets.md`。

@@ -48,10 +48,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.3.6")
+        self.assertEqual(report["version"], "0.4.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 36)
-        self.assertEqual(report["manifest_entries"], 35)
+        self.assertEqual(report["fixture_files"], 38)
+        self.assertEqual(report["manifest_entries"], 37)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -125,6 +125,91 @@ class ContractRepositoryTests(unittest.TestCase):
             }.issubset(capabilities)
         )
 
+    def test_run_budget_contract_locks_bounds_dimensions_and_defaults(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(fixture["integer_bounds"], {"minimum": 0, "maximum": (1 << 53) - 1})
+        self.assertEqual(fixture["defaults"]["unavailable_metric_policy"], "continue_and_mark")
+        self.assertTrue(fixture["defaults"]["empty_limits_are_unlimited"])
+        self.assertEqual(
+            fixture["dimension_precedence"],
+            [
+                "wall_time",
+                "total_tokens",
+                "uncached_input_tokens",
+                "host_cost",
+                "tool_calls",
+                "tool_calls_by_name",
+            ],
+        )
+        self.assertEqual(
+            fixture["enums"]["unavailable_metric_policies"],
+            ["continue_and_mark", "stop"],
+        )
+
+    def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
+        cases = {case["name"]: case for case in fixture["runner_cases"]}
+
+        required = {
+            "no_limits_preserve_legacy_terminal",
+            "total_tokens_equal_limit_can_finish",
+            "total_tokens_atomic_overshoot",
+            "token_limit_reached_blocks_next_llm",
+            "uncached_usage_missing_continues_and_marks",
+            "uncached_usage_missing_strict_stops",
+            "uncached_explicit_zero_is_available",
+            "tool_batch_total_preflight_is_all_or_none",
+            "named_tool_preflight_matches_exact_name",
+            "zero_wall_time_stops_before_llm",
+            "host_cost_atomic_overshoot",
+            "host_cost_unit_mismatch_strict_stops",
+            "pre_cancelled_run_precedes_zero_budget",
+        }
+        self.assertEqual(set(cases), required)
+        for case in cases.values():
+            self.assertIn("limits", case)
+            self.assertIn("steps", case)
+            self.assertIn("expected", case)
+            self.assertIn("status", case["expected"])
+            self.assertIn("completion_reason", case["expected"])
+
+        batch = cases["tool_batch_total_preflight_is_all_or_none"]
+        self.assertEqual(len(batch["steps"][0]["tool_calls"]), 2)
+        self.assertEqual(batch["expected"]["tool_execution_count"], 0)
+        self.assertEqual(batch["expected"]["budget_exhaustion"]["attempted_increment"], 2)
+        self.assertEqual(cases["uncached_explicit_zero_is_available"]["expected"]["uncached_input_tokens"], 0)
+
+    def test_budget_events_lock_snapshot_exhaustion_and_terminal_order(self) -> None:
+        records = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/budget_events_v1.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+
+        self.assertEqual(
+            [record["type"] for record in records],
+            ["budget_snapshot", "budget_exhausted", "run_failed", "run_completed"],
+        )
+        exhaustion = records[1]["budget_exhaustion"]
+        self.assertEqual(exhaustion["reason"], "limit_exceeded")
+        self.assertEqual(exhaustion["overshoot"], 2)
+        self.assertEqual(records[2]["completion_reason"], "budget_exhausted")
+        self.assertEqual(records[2]["budget_usage"], records[1]["budget_usage"])
+
+    def test_distributed_contract_carries_limits_meter_reference_and_budget_state(self) -> None:
+        envelope = json.loads(
+            (ROOT / "fixtures/distributed_run_envelope_v1.json").read_text(encoding="utf-8")
+        )["canonical_envelope"]
+        checkpoint = json.loads((ROOT / "fixtures/checkpoint_codec_v1.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(envelope["budget_limits"]["max_total_tokens"], 5000)
+        self.assertEqual(
+            envelope["recipe"]["capabilities"]["host_cost_meter_ref"],
+            {"id": "cost.tenant-run", "version": "1"},
+        )
+        running = next(case for case in checkpoint["valid_cases"] if case["name"] == "running_with_budget_state")
+        self.assertEqual(running["payload"]["budget_usage"]["elapsed_ms"], 50)
+
     def test_completion_policy_is_task_agnostic_and_backward_compatible(self) -> None:
         fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
 
@@ -136,8 +221,9 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(fixture["rules"]["assistant_text_is_not_classified"])
         self.assertTrue(fixture["rules"]["completion_policy_does_not_change_tool_availability"])
-        self.assertTrue(fixture["rules"]["budget_exhausted_reserved_until_0_4"])
-        self.assertTrue(fixture["rules"]["approval_resume_uses_fresh_run_budget"])
+        self.assertTrue(fixture["rules"]["budget_exhausted_is_defined_by_run_budget_v1"])
+        self.assertTrue(fixture["rules"]["approval_resume_uses_fresh_cycle_budget"])
+        self.assertTrue(fixture["rules"]["approval_resume_preserves_resource_budget"])
         self.assertTrue(fixture["rules"]["approved_resume_rejects_input_before_claim"])
         self.assertTrue(fixture["rules"]["pre_cancelled_approval_resume_skips_side_effects"])
         self.assertTrue(fixture["rules"]["guardrail_allow_preserves_completion_observation"])
@@ -253,7 +339,9 @@ class ContractRepositoryTests(unittest.TestCase):
                 "failed",
             }.issubset(case_reasons | precedence_reasons)
         )
-        self.assertNotIn("budget_exhausted", case_reasons | precedence_reasons)
+        budget_fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
+        budget_reasons = {case["expected"]["completion_reason"] for case in budget_fixture["runner_cases"]}
+        self.assertIn("budget_exhausted", budget_reasons)
 
     def test_public_api_inventories_completion_controls_and_observation(self) -> None:
         fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
@@ -270,7 +358,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 117)
+        self.assertEqual(len(capabilities), 128)
 
         surfaces = {surface["id"]: surface for surface in fixture["surfaces"]}
         surface_member_count = sum(
@@ -279,7 +367,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 216)
+        self.assertEqual(surface_member_count, 221)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -287,6 +375,17 @@ class ContractRepositoryTests(unittest.TestCase):
                 {member["id"] for member in surfaces["run_result"]["members"]}
             )
         )
+        self.assertTrue(
+            {"budget_limits", "host_cost_meter"}.issubset(
+                {member["id"] for member in surfaces["run_config"]["members"]}
+            )
+        )
+        self.assertTrue(
+            {"budget_usage", "budget_exhaustion"}.issubset(
+                {member["id"] for member in surfaces["run_result"]["members"]}
+            )
+        )
+        self.assertEqual([member["id"] for member in surfaces["host_cost_meter"]["members"]], ["read"])
 
     def test_manager_outcomes_preserve_completion_observation(self) -> None:
         fixture = json.loads((ROOT / "fixtures/manager_tool_envelope_v1.json").read_text(encoding="utf-8"))
@@ -314,6 +413,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 "completion_reason_is_not_a_string_or_null",
                 "completion_tool_name_is_not_a_string_or_null",
                 "partial_output_is_not_a_string_or_null",
+                "budget_usage_is_not_an_object_or_null",
+                "budget_exhaustion_unknown_dimension",
             }.issubset(rejected)
         )
 
@@ -326,6 +427,10 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(projections["wait_user_is_interrupted_without_error"]["turnStatus"], "interrupted")
         self.assertEqual(projections["wait_user_is_interrupted_without_error"]["errorField"], "omitted")
         self.assertEqual(projections["cancelled_failure_stays_failed"]["turnStatus"], "failed")
+        budget = projections["budget_exhaustion_is_failed_with_typed_observation"]
+        self.assertEqual(budget["turnStatus"], "failed")
+        self.assertEqual(budget["completionReason"], "budget_exhausted")
+        self.assertEqual(budget["budgetUsageField"], "present")
 
     def test_public_api_properties_include_canonical_signatures(self) -> None:
         fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
@@ -356,7 +461,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.3.6/vv-agent-contract-0.3.6.zip"
+                    "v0.4.0/vv-agent-contract-0.4.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -364,7 +469,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 36)
+            self.assertEqual(synced["fixture_files"], 38)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -382,7 +487,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.6.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.4.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -420,7 +525,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.6.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.4.0.zip",
                     snapshot_path="fixtures",
                 )
             )

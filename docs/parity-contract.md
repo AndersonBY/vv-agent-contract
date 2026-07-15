@@ -192,6 +192,41 @@ synchronous `create_sub_task` tool envelope locally maps that wait to
 `sub_task_wait_user` so the parent tool call remains actionable; manager state
 and sub-run events must not fabricate that error code.
 
+## Run Budgets
+
+`run_budget_v1.json`, `budget_events_v1.jsonl`, and
+`docs/run-budgets.md` define the optional run-budget contract. Budgets are
+resource controls only. Implementations must not classify prompts, assistant
+text, tool purpose, task type, milestones, or answer quality when enforcing
+them.
+
+The public controls are `RunBudgetLimits` plus an optional task-agnostic
+`HostCostMeter`. The public observations are `BudgetUsageSnapshot` and
+`BudgetExhaustion`, including typed dimension, boundary, reason, unit,
+overshoot, and unavailable-metric detail. Integers use the inclusive
+`0..9007199254740991` range. Missing observations remain null; explicit zero is
+available accounting.
+
+No configured limits means unlimited and emits no budget events. Configured
+budgets use one evaluator across inline, thread, and distributed execution.
+Distributed checkpoints persist cumulative usage and monotonic active elapsed
+segments without claiming exact resume. Parent and child counters are isolated;
+shared host cost exists only when the host explicitly supplies the same scoped
+meter.
+
+Tool batches are admitted or rejected as a whole. LLM and host-cost readings
+may exceed a limit by one completed atomic operation and report the overshoot.
+Strict missing accounting stops with a typed unavailable exhaustion; the
+default records the unavailable dimension and continues enforcing every other
+available dimension.
+
+Budget termination is `AgentStatus.failed` with completion reason
+`budget_exhausted`, one `budget_exhausted` event, and the ordinary `run_failed`
+terminal. Cancellation and an already-raised execution failure are not hidden
+by budget accounting. Otherwise a budget stop precedes task completion, wait,
+guardrail, and max-cycle projection. Result, durable state, events, and App
+Server preserve the same snapshot and exhaustion objects.
+
 ## Contract Surfaces
 
 The following surfaces are cross-language contracts:
@@ -247,8 +282,9 @@ The canonical `fixtures/` evidence closure is generated from and verified
 against public production paths, not accepted as a static snapshot. The two
 implementation repositories carry lock-managed vendored copies:
 
-- `public_api_v1.json` inventories 117 capability paths plus 23 canonical
-  surfaces with 216 fixture-driven members across Agent, Runner, RunConfig,
+- `public_api_v1.json` inventories the complete capability paths and canonical
+  surfaces, including run-budget controls, observations, and host-meter
+  protocol, with fixture-driven members across Agent, Runner, RunConfig,
   result, RunHandle, interactive sessions, App Server, tools, workspace,
   memory, skills, tracing, the LLM bridge, and runtime backends.
   Language-specific names are recorded as explicit adaptations. The surface
@@ -312,6 +348,7 @@ Statuses are evidence-based:
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
 | Runner/RunConfig and CLI | verified | Public facade, all controls, defaults, and CLI inventory pass |
 | App Server | verified | Host/client/server, 15 protocol operations, replay, and schema bundle pass |
+| Run budgets | in-progress | Contract 0.4.0 is frozen; paired producer adoption and central full gate are pending |
 
 ### Imported Local Verification Record (2026-07-13)
 
