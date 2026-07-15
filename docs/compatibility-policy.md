@@ -79,6 +79,14 @@ error, while cancellation remains `failed`. The existing
 `sub_task_wait_user` code is scoped to the synchronous parent-tool envelope;
 internal waiting sub-agent outcomes retain null error fields.
 
+Distributed workers retain the existing lease/CAS capability while closing
+side-effect ordering gaps. A worker renews its claim once before entering a
+cycle and keeps the heartbeat active through checkpoint commit. Initial or
+periodic renewal failure cannot revive an expired owner, and all lease expiry
+values are capped by the job deadline. This is a patch correction to the
+existing distributed-runtime guarantee; it adds no wire field or scheduler
+control.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

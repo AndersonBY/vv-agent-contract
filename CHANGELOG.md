@@ -3,6 +3,18 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.3.6 - 2026-07-15
+
+- Require a successful claim renewal before a distributed worker invokes the
+  runtime cycle, preventing model or tool side effects when heartbeat
+  infrastructure is already unavailable.
+- Keep heartbeat renewal active through checkpoint commit and stop it on
+  operation unwind, closing the post-cycle lease window without weakening CAS.
+- Cap initial and renewed leases at the job deadline and require the heartbeat
+  interval to remain below every accepted positive lease duration.
+- Require both implementations to replace sub-second wall-clock sleep
+  assertions with executable, state-driven lease lifecycle evidence.
+
 ## 0.3.5 - 2026-07-15
 
 - Close approval resume ordering: a fresh run in the source trace receives the

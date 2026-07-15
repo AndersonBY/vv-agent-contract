@@ -48,7 +48,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.3.5")
+        self.assertEqual(report["version"], "0.3.6")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 36)
         self.assertEqual(report["manifest_entries"], 35)
@@ -142,6 +142,57 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["rules"]["pre_cancelled_approval_resume_skips_side_effects"])
         self.assertTrue(fixture["rules"]["guardrail_allow_preserves_completion_observation"])
         self.assertTrue(fixture["rules"]["ordinary_llm_failure_is_typed_terminal"])
+
+    def test_distributed_lease_lifecycle_closes_side_effect_windows(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/distributed_run_envelope_v1.json").read_text(encoding="utf-8")
+        )
+        lifecycle = fixture["lease_lifecycle"]
+        rules = lifecycle["rules"]
+
+        self.assertTrue(rules["initial_expiry_capped_by_deadline"])
+        self.assertTrue(rules["renewed_expiry_capped_by_deadline"])
+        self.assertTrue(rules["initial_renewal_required_before_cycle"])
+        self.assertFalse(rules["initial_renewal_failure_starts_cycle"])
+        self.assertTrue(rules["heartbeat_active_through_commit"])
+        self.assertTrue(rules["operation_unwind_stops_heartbeat"])
+        self.assertFalse(rules["expired_owner_can_renew"])
+        self.assertTrue(rules["expired_claim_can_be_reclaimed"])
+        self.assertTrue(rules["heartbeat_interval_less_than_positive_lease"])
+        self.assertTrue(rules["successful_commit_precedes_concurrent_renewal_error"])
+
+        expiry_cases = {case["name"]: case for case in lifecycle["expiry_cases"]}
+        self.assertEqual(
+            expiry_cases["deadline_clamps_before_u64_addition"]["expected_expiry_ms"],
+            1050,
+        )
+        self.assertEqual(
+            expiry_cases["unbounded_u64_addition_overflows"]["expected_error"],
+            "checkpoint lease overflow",
+        )
+        self.assertEqual(lifecycle["interval_lease_ms_cases"][0], 1)
+        self.assertEqual(lifecycle["interval_lease_ms_cases"][-1], (1 << 64) - 1)
+
+        worker_cases = {case["name"]: case for case in lifecycle["worker_cases"]}
+        self.assertEqual(
+            worker_cases["initial_renewal_precedes_operation"]["expected"]["event_order"],
+            ["claim", "renew", "operation_start", "commit", "heartbeat_stop"],
+        )
+        self.assertEqual(
+            worker_cases["initial_renewal_failure_has_no_side_effects"]["expected"]["model_calls"],
+            0,
+        )
+        self.assertGreaterEqual(
+            worker_cases["commit_barrier_keeps_heartbeat_active"]["expected"][
+                "periodic_renewals_during_commit_min"
+            ],
+            1,
+        )
+        self.assertTrue(
+            worker_cases["successful_commit_beats_inflight_renewal_rejection"]["expected"][
+                "heartbeat_error_suppressed"
+            ]
+        )
 
     def test_completion_closure_locks_resume_guardrail_and_llm_failure(self) -> None:
         fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
@@ -305,7 +356,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.3.5/vv-agent-contract-0.3.5.zip"
+                    "v0.3.6/vv-agent-contract-0.3.6.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -331,7 +382,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.5.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.6.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -369,7 +420,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.3.5.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.3.6.zip",
                     snapshot_path="fixtures",
                 )
             )
