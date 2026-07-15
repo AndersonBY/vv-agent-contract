@@ -149,6 +149,49 @@ The same fields survive AgentResult serialization, durable terminal results,
 RunResult projection, terminal and sub-run events, and App Server
 `turn/completed`. Older payloads without these additive fields remain readable.
 
+Approval resume starts a fresh run identity inside the source trace. When an
+approved tool returns a `continue` directive, the resumed model loop receives
+the complete configured `max_cycles` budget; cycles from the interrupted run
+do not reduce that new run budget. Supplying new user input while an approved
+tool call is pending is invalid and must be rejected before cancellation is
+projected, before claiming the approval, and before executing the tool. A
+cancellation already visible at resume time with no invalid input is observed
+before the claim: the framework emits one `run_cancelled` terminal for the
+fresh run without executing the tool or output guardrails. This ordering keeps
+retry and side-effect ownership observable instead of silently consuming the
+approval.
+
+Output guardrails may transform the status-appropriate output payload, and the
+transformed output must remain visible to the caller. An allow rewrite cannot
+rewrite the runtime's completion observation: `status`, `completion_reason`,
+`completion_tool_name`, and `partial_output` are preserved. A block still
+replaces a candidate success or wait with a failed terminal. For an approved
+terminal result with typed output, the fresh terminal and durable event are
+committed before typed-output validation is reported to the caller; the
+approval remains consumed after the tool has executed.
+
+An ordinary model call failure after a run has started produces a typed failed
+AgentResult and exactly one `run_failed` terminal event. It is not returned as
+an untyped runner error. Fail-closed persistence errors and typed-output codec
+errors remain explicit caller errors because the framework cannot claim a
+valid public result when those boundaries fail.
+
+RunEvent v1 readers ignore unknown top-level fields, but the three completion
+fields are strict when present. `completion_reason` is either `null` or one of
+the declared enum strings; `completion_tool_name` and `partial_output` are
+string-or-null. Unknown reasons and non-string values are rejected rather than
+silently erased.
+
+App Server maps an Agent `wait_user` terminal to turn status `interrupted` and
+omits the `error` field; it remains an intentional interaction boundary, not a
+failure. A cancelled Agent result keeps turn status `failed`, reason
+`cancelled`, and an error message. Internal sub-agent outcomes follow the same
+rule: a waiting child has `error = null` and `error_code = null`; serialized
+manager status and sub-run events omit the absent error-code field. Only the
+synchronous `create_sub_task` tool envelope locally maps that wait to
+`sub_task_wait_user` so the parent tool call remains actionable; manager state
+and sub-run events must not fabricate that error code.
+
 ## Contract Surfaces
 
 The following surfaces are cross-language contracts:

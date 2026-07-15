@@ -58,6 +58,27 @@ are absent. New producers populate a typed reason for every terminal result;
 The `budget_exhausted` reason is reserved by the enum for contract `0.4.x` and
 must not be emitted before a configured budget actually terminates a run.
 
+Patch-level `0.3.x` closure may tighten decoding of the additive completion
+fields to their already declared string-or-null types and enum values. Unknown
+top-level RunEvent fields remain forward compatible, but invalid values in a
+known completion field are rejected instead of being silently dropped.
+
+Approval resume keeps the existing public capability set while making
+lifecycle ordering explicit: the resumed operation has a fresh run id in the
+source trace and a full configured cycle budget, new input is rejected before
+cancellation projection or the approval claim, and a pre-cancelled resume with
+valid input emits a fresh cancelled terminal without side effects.
+Output guardrail allow rewrites preserve the runtime-owned completion
+observation. These are patch corrections because they close inconsistent
+producer behavior for the `0.3.0` completion surface rather than introducing a
+new control.
+
+App Server continues to use its existing `completed`, `failed`, and
+`interrupted` turn statuses. A waiting Agent maps to `interrupted` without an
+error, while cancellation remains `failed`. The existing
+`sub_task_wait_user` code is scoped to the synchronous parent-tool envelope;
+internal waiting sub-agent outcomes retain null error fields.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "0.3.4",
+  "contract_version": "0.3.5",
   "status": "pending-adoption",
   "implementations": {
     "python": {
