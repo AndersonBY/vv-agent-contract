@@ -97,7 +97,7 @@
     "event_outbox": [
       {
         "event_id": "evt_operation_started_2",
-        "payload_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "payload_digest": "a185dc3892da7f4d17bfec0bcd20987237413f7584abf9c2f6077e441b9a1990",
         "state": "pending",
         "event": {
           "version": "v1",
@@ -497,7 +497,7 @@
         "event_outbox": [
           {
             "event_id": "evt_operation_started_2",
-            "payload_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "payload_digest": "a185dc3892da7f4d17bfec0bcd20987237413f7584abf9c2f6077e441b9a1990",
             "state": "pending",
             "event": {
               "version": "v1",

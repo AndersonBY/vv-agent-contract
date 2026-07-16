@@ -52,7 +52,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.5.4")
+        self.assertEqual(report["version"], "0.5.5")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 47)
         self.assertEqual(report["manifest_entries"], 46)
@@ -1232,7 +1232,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.5.4/vv-agent-contract-0.5.4.zip"
+                    "v0.5.5/vv-agent-contract-0.5.5.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1258,7 +1258,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.4.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.5.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1296,7 +1296,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.4.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.5.zip",
                     snapshot_path="fixtures",
                 )
             )

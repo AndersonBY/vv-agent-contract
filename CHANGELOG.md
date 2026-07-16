@@ -3,6 +3,14 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.5 - 2026-07-16
+
+- Replace the last placeholder outbox payload digest in the canonical
+  checkpoint and its claimed-cycle copy with the actual RFC 8785 event digest.
+- Add repository validation that every canonical and valid checkpoint outbox
+  entry has matching event bytes and payload digest. No wire field or runtime
+  behavior changes.
+
 ## 0.5.4 - 2026-07-16
 
 - Add `CheckpointConfig.credential_slots`, a sorted unique list of RFC 6901

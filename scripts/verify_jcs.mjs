@@ -112,6 +112,18 @@ const checkpoint = readFixture("checkpoint_codec_v2.json");
 for (const vector of checkpoint.extension_limits.canonicalization_vectors) {
   verifyVector(`checkpoint_extension/${vector.name}`, vector.entry, vector);
 }
+const checkpointPayloads = [
+  ["canonical_checkpoint", checkpoint.canonical_checkpoint],
+  ...checkpoint.valid_cases.map((entry) => [`valid_case/${entry.name}`, entry.payload]),
+];
+for (const [label, payload] of checkpointPayloads) {
+  for (const entry of payload.event_outbox) {
+    const actual = vectorValues(entry.event).sha256;
+    if (actual !== entry.payload_digest) {
+      fail(`${label}/${entry.event_id}: outbox payload digest mismatch`);
+    }
+  }
+}
 
 const checkpointStore = readFixture("checkpoint_store_v2.json");
 for (const vector of checkpointStore.event_payload_digest.golden_cases) {
