@@ -3,6 +3,30 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.3 - 2026-07-16
+
+- Correct the checkpoint terminal order so the terminal event is first staged
+  as pending, the active claim and terminal receipt are finalized atomically,
+  delivery is recorded by CAS, and only then is the retained terminal
+  acknowledged. The older runner fixture incorrectly placed delivery before
+  finalization.
+- Define append-once session persistence for checkpoint v2. A session used by
+  an enabled checkpoint run must support a stable commit id plus RFC 8785
+  payload digest, replay an identical commit without appending duplicate
+  messages, and reject an identity/digest conflict before terminal finalize.
+- Close approval-resume adoption semantics without retaining a planned journal
+  in the source waiting terminal: the approved `RunState` carries the source
+  operation seed, a configured Runner supplies a distinct explicit checkpoint
+  key, approval consumption binds idempotently to that key, and the new
+  checkpoint durably seeds the same tool-call id, request digest, and
+  idempotency key before dispatch.
+- Require event ids to be unique inside one checkpoint outbox. Re-enqueueing
+  the same id and payload reuses the existing entry; a different payload is an
+  `event_identity_conflict`.
+- Preserve the 0.5.2 wire fields and disabled-by-default behavior. This patch
+  closes lifecycle contradictions found before the 0.5 capability's first
+  paired adoption.
+
 ## 0.5.2 - 2026-07-16
 
 - Add `finalize_claimed_v2`, an atomic compare-revision-and-claim operation

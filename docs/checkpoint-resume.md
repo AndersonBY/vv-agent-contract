@@ -249,6 +249,13 @@ the returned cursor. Recovery redelivers pending entries with the same id and
 digest. Delivered entries may be compacted after the enclosing cycle or
 terminal acknowledgement becomes durable.
 
+Event ids are unique within one checkpoint outbox. Enqueueing an id that is
+already present with the identical payload digest reuses that entry instead of
+appending a duplicate. Reusing an id with different payload bytes fails with
+`event_identity_conflict`. This rule lets repeated reconciliation attempts
+observe the same stable lifecycle event without making the checkpoint itself
+undeliverable.
+
 The delivery transition uses `record_event_delivery_v2`. It compares the
 checkpoint revision, verifies the pending event id and payload digest, records
 the exact returned cursor in both the outbox entry and `event_cursor`, and
@@ -335,12 +342,39 @@ timeout wrapper does not prove that a worker thread or process stopped creating
 side effects.
 
 Approval, policy, and before-hook short circuits never write `started`.
-Approval-pending work may remain `planned`; approval grant is durable before
-`started`. Approval resume is a distinct run and never reuses the immutable
-source waiting checkpoint key. When checkpoint v2 is enabled for that resume,
-the host supplies a distinct key; the new journal preserves the source tool
-call id, request digest, and idempotency key. Memory compaction and PTL recovery
-calls to an LLM are model operations and use the same journal protocol.
+Approval-pending work may remain `planned`. The ordinary source `wait_user`
+terminal clears its active journal like every non-abort terminal; it does not
+retain a second executable copy of the planned call. Before that terminal is
+finalized, the in-memory `RunState` resume context captures the source tool
+call id, request digest, idempotency key, idempotency declaration, and effective
+request needed to seed an approved resume.
+
+Approval resume is a distinct run and never reuses the immutable source waiting
+checkpoint key. The host supplies a distinct checkpoint configuration through
+the configured Runner used to resume the approved `RunState`. Approval resume
+requires an explicit key and `resume_if_present`. The approval-consumption
+record is bound to that target key: repeating the claim with the same key is
+idempotent, while a different key is rejected. This closes the crash window
+between approval consumption and checkpoint creation without allowing two
+resume runs to execute the approved effect.
+
+The bound approval is claimed before the new checkpoint is atomically created
+or loaded. Creation durably seeds a `planned` tool journal entry with the
+captured source identity before `started`; an existing compatible checkpoint
+continues through the ordinary claim CAS. That seeded entry is the
+checkpoint-v2 durable approval boundary.
+The new operation id is stable within the resume run, while the source tool
+call id, request digest, and idempotency key remain unchanged. A crash after
+the seed is durable therefore resumes the approved planned call without asking
+the model or consuming the approval again. A crash after the bound claim but
+before creation retries the same target key and is allowed to finish creation.
+
+The source checkpoint alone is not a serialization of the process-local
+`RunState` approval capability. A host that needs approval across process
+restart must durably retain and authenticate that existing approval resume
+context; terminal replay does not invent it from tool arguments. Memory
+compaction and PTL recovery calls to an LLM are model operations and use the
+same journal protocol.
 
 Replaying a durable response or tool result must not call the external model or
 tool again. The reconstructed request digest must equal the durable digest;
@@ -397,6 +431,34 @@ approval waits, and reconciliation waits are not fabricated as active run
 time. Time between the last durable observation and a crash cannot be
 reconstructed and is not guessed.
 
+## Session Persistence
+
+Checkpoint v2 cannot make a separate session store transactional with the
+checkpoint store. When a configured run also uses a session, the session must
+therefore implement append-once persistence. The framework computes:
+
+- commit id: `vv-agent:checkpoint-v2:session:` followed by lowercase SHA-256
+  of the checkpoint key UTF-8 bytes;
+- payload: the closed `vv-agent.session-commit.v1` object containing the exact
+  ordered session items;
+- payload digest: lowercase SHA-256 over the RFC 8785 canonical UTF-8 bytes of
+  that payload.
+
+`add_items_once(commit_id, payload_digest, items)` appends and records an
+absent identity, returns the original success without appending for an
+identical replay, and rejects the same id with a different digest as
+`session_commit_identity_conflict`. A checkpoint-enabled run whose session
+does not provide this capability fails with
+`checkpoint_session_idempotency_unsupported` before the first model or tool
+operation. Runs without checkpoint v2 keep the existing `add_items` behavior.
+
+Terminal ordering is output guardrail, append-once session persistence,
+durable `session_persisted` observation, terminal event staged as pending,
+atomic claimed terminal finalization, terminal event delivery, durable
+delivery recording, retained terminal acknowledgement, and only then host or
+scheduler acknowledgement. A crash at any boundary reuses the same session
+commit and outbox identities.
+
 ## Terminal And Observable Projection
 
 `resume_requires_reconciliation` is a typed interruption reason with
@@ -436,11 +498,11 @@ the row and terminal receipt for redelivery. Deletion is an explicit host
 retention operation after the host no longer needs replay.
 
 Terminal finalization follows the executable distributed ordering fixture:
-output guardrail, idempotent session persistence or an explicit host boundary,
+output guardrail, append-once session persistence, durable session observation,
 pending terminal event in the checkpoint outbox, checkpoint terminal finalize,
-event delivery, durable outbox-delivery recording, then scheduler
-acknowledgement. A terminal is never made durable before output guardrail or
-session finalization and later rewritten.
+event delivery, durable outbox-delivery recording, retained terminal
+acknowledgement, then scheduler acknowledgement. A terminal is never made
+durable before output guardrail or session finalization and later rewritten.
 
 ## Safety Boundary
 

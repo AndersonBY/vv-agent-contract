@@ -207,6 +207,8 @@
     "running_with_ambiguous_journal_requires_active_recovery_claim": true,
     "terminal_result_requires_no_active_journal_except_explicit_operator_abort": true,
     "operator_abort_terminal_preserves_ambiguous_journal_and_resume_observation": true,
+    "event_outbox_event_ids_are_unique": true,
+    "duplicate_event_id_error": "event_identity_conflict",
     "invalid_error_code": "checkpoint_status_invalid"
   },
   "status_cases": [

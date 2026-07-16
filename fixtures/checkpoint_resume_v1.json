@@ -497,11 +497,16 @@
           "no_tool_policy": "finish",
           "checkpoint_config": {
             "key": "case-key/approval-resume-1",
-            "resume_policy": "new",
+            "resume_policy": "resume_if_present",
             "store": {
               "kind": "in_memory"
             }
           }
+        },
+        "resume_api": {
+          "runner": "configured",
+          "configured_default": "approval_resume_run_config",
+          "operation": "resume_approved_state"
         },
         "pending_approval": {
           "operation_state": "planned",
@@ -513,11 +518,14 @@
         },
         "approval_decision": "allow",
         "durable_order": [
-          "tool_planned",
-          "approval_granted",
-          "tool_started",
+          "source_tool_planned",
+          "source_waiting_terminal_clears_journal",
+          "approval_claim_bound_to_resume_checkpoint_key",
+          "resume_checkpoint_created_or_loaded",
+          "resume_tool_planned_with_source_identity",
+          "resume_tool_started",
           "tool_invoked",
-          "tool_succeeded"
+          "resume_tool_succeeded"
         ]
       },
       "expected": {
@@ -528,6 +536,10 @@
         "same_tool_call_id": true,
         "same_request_digest": true,
         "same_idempotency_key": true,
+        "source_terminal_journal_count": 0,
+        "configured_runner_default_applied": true,
+        "approval_claim_same_key_is_idempotent": true,
+        "approval_claim_different_key_is_rejected": true,
         "started_before_external_call": true,
         "tool_calls": 1
       }
@@ -628,6 +640,56 @@
       }
     }
   ],
+  "session_persistence": {
+    "schema_version": "vv-agent.session-commit.v1",
+    "checkpoint_v2_with_session_requires_add_items_once": true,
+    "unsupported_error_code": "checkpoint_session_idempotency_unsupported",
+    "identity_conflict_error_code": "session_commit_identity_conflict",
+    "commit_id_prefix": "vv-agent:checkpoint-v2:session:",
+    "golden_case": {
+      "checkpoint_key": "case-key/session",
+      "checkpoint_key_utf8_sha256": "d7dbe15110eb769fa38049962a70387dba75050e3da23ab1ad9e862afb5edd3e",
+      "commit_id": "vv-agent:checkpoint-v2:session:d7dbe15110eb769fa38049962a70387dba75050e3da23ab1ad9e862afb5edd3e",
+      "payload": {
+        "schema_version": "vv-agent.session-commit.v1",
+        "items": [
+          {
+            "role": "assistant",
+            "content": "done"
+          }
+        ]
+      },
+      "canonical_json_base64": "eyJpdGVtcyI6W3siY29udGVudCI6ImRvbmUiLCJyb2xlIjoiYXNzaXN0YW50In1dLCJzY2hlbWFfdmVyc2lvbiI6InZ2LWFnZW50LnNlc3Npb24tY29tbWl0LnYxIn0=",
+      "canonical_json_utf8_bytes": 95,
+      "sha256": "629533c14a9714450dbbc251665b46c530c415757b9434b647c496f6e9dd5b19"
+    },
+    "cases": [
+      {
+        "name": "first_commit_appends_once",
+        "existing": null,
+        "expected": {
+          "outcome": "committed",
+          "items_appended": 1
+        }
+      },
+      {
+        "name": "identical_replay_does_not_append",
+        "existing": "same_commit_id_and_payload_digest",
+        "expected": {
+          "outcome": "replayed",
+          "items_appended": 0
+        }
+      },
+      {
+        "name": "same_identity_different_payload_fails",
+        "existing": "same_commit_id_different_payload_digest",
+        "expected": {
+          "error_code": "session_commit_identity_conflict",
+          "items_appended": 0
+        }
+      }
+    ]
+  },
   "fault_matrix": [
     {
       "id": "F1",

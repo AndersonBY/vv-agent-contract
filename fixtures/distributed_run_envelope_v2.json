@@ -317,10 +317,13 @@
     "effective_claim_mode_uses_envelope_transport_metadata_and_stored_checkpoint": true,
     "terminal_commit_order": [
       "output_guardrail",
-      "idempotent_session_persistence_or_explicit_host_boundary",
+      "session_add_items_once",
+      "session_persisted_observation",
       "terminal_event_outbox_pending",
       "checkpoint_terminal_finalize",
       "terminal_event_delivery",
+      "terminal_event_delivery_recorded",
+      "terminal_acknowledge_retained",
       "scheduler_acknowledgement"
     ],
     "terminal_acknowledgement_does_not_delete": true,

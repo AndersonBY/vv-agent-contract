@@ -66,9 +66,12 @@
     "order": [
       "runtime_candidate_result",
       "output_guardrail",
-      "session_persisted",
-      "terminal_event_outbox_delivered",
+      "session_add_items_once",
+      "session_persisted_observation",
+      "terminal_event_outbox_pending",
       "checkpoint_terminal_finalize",
+      "terminal_event_outbox_delivered",
+      "terminal_event_delivery_recorded",
       "terminal_acknowledge_retained"
     ],
     "terminal_deleted_on_acknowledgement": false,

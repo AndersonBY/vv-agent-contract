@@ -118,6 +118,13 @@ for (const vector of checkpointStore.event_payload_digest.golden_cases) {
   verifyVector(`checkpoint_event/${vector.name}`, vector.event, vector);
 }
 
+const checkpointResume = readFixture("checkpoint_resume_v1.json");
+verifyVector(
+  "checkpoint_session_commit/golden_case",
+  checkpointResume.session_persistence.golden_case.payload,
+  checkpointResume.session_persistence.golden_case,
+);
+
 if (WRITE) {
   writeGeneratedFields("run_definition_v1.json", runDefinition.golden_cases, "definition");
   writeGeneratedFields(
@@ -134,6 +141,11 @@ if (WRITE) {
     "checkpoint_store_v2.json",
     checkpointStore.event_payload_digest.golden_cases,
     "event",
+  );
+  writeGeneratedFields(
+    "checkpoint_resume_v1.json",
+    [checkpointResume.session_persistence.golden_case],
+    "payload",
   );
   console.log("RFC 8785 generated fields updated");
   process.exit(0);

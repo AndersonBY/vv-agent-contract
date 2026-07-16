@@ -152,6 +152,13 @@ They close lifecycle paths required by 0.5.1 but not executable through its
 store protocol. Implementations adopting checkpoint v2 must target 0.5.2 or a
 later compatible patch; 0.5.1 remains immutable and unverified.
 
+Contract 0.5.3 corrects the previously contradictory terminal-order fixture,
+requires append-once session persistence when checkpoint v2 and a session are
+combined, and closes the already-declared approval-resume producer path. It
+also makes checkpoint outbox event identities unique. These are patch-level
+closures because no 0.5 version has reached verified adoption and the 0.5.0
+surface already required durable session, approval, and outbox behavior.
+
 `reconciliation_required` is a resumable interruption, not a business failure
 or completion. It has no `completion_reason`. Public result fields are
 additive and null when checkpoint v2 is disabled; checkpoint v1 bytes remain

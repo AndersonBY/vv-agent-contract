@@ -107,6 +107,9 @@
     "suspend_clears_claim_without_advancing_cycle": true,
     "claimed_finalize_clears_claim_atomically": true,
     "event_delivery_preserves_claim_and_terminal": true,
+    "outbox_event_ids_unique": true,
+    "identical_event_enqueue_reuses_existing_entry": true,
+    "conflicting_event_enqueue_error": "event_identity_conflict",
     "run_definition_and_digest_immutable_after_create": true,
     "operator_abort_finalize_preserves_ambiguous_journal": true
   },

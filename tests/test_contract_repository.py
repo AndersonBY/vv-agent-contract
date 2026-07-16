@@ -52,7 +52,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.5.2")
+        self.assertEqual(report["version"], "0.5.3")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 47)
         self.assertEqual(report["manifest_entries"], 46)
@@ -905,16 +905,87 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             approval["run"]["durable_order"],
             [
-                "tool_planned",
-                "approval_granted",
-                "tool_started",
+                "source_tool_planned",
+                "source_waiting_terminal_clears_journal",
+                "approval_claim_bound_to_resume_checkpoint_key",
+                "resume_checkpoint_created_or_loaded",
+                "resume_tool_planned_with_source_identity",
+                "resume_tool_started",
                 "tool_invoked",
-                "tool_succeeded",
+                "resume_tool_succeeded",
             ],
         )
         self.assertTrue(approval["expected"]["same_idempotency_key"])
         self.assertTrue(approval["expected"]["distinct_checkpoint_key"])
+        self.assertEqual(approval["expected"]["source_terminal_journal_count"], 0)
+        self.assertEqual(approval["run"]["resume_api"]["runner"], "configured")
+        self.assertEqual(
+            approval["run"]["approval_resume_run_config"]["checkpoint_config"]["resume_policy"],
+            "resume_if_present",
+        )
+        self.assertTrue(approval["expected"]["approval_claim_same_key_is_idempotent"])
+        self.assertTrue(approval["expected"]["approval_claim_different_key_is_rejected"])
+
+        session = fixture["session_persistence"]
+        vector = session["golden_case"]
+        checkpoint_digest = hashlib.sha256(vector["checkpoint_key"].encode("utf-8")).hexdigest()
+        self.assertEqual(checkpoint_digest, vector["checkpoint_key_utf8_sha256"])
+        self.assertEqual(
+            vector["commit_id"],
+            f"{session['commit_id_prefix']}{checkpoint_digest}",
+        )
+        canonical = base64.b64decode(vector["canonical_json_base64"], validate=True)
+        self.assertEqual(len(canonical), vector["canonical_json_utf8_bytes"])
+        self.assertEqual(hashlib.sha256(canonical).hexdigest(), vector["sha256"])
+        self.assertEqual(json.loads(canonical), vector["payload"])
+        session_cases = {case["name"]: case for case in session["cases"]}
+        self.assertEqual(
+            session_cases["identical_replay_does_not_append"]["expected"]["items_appended"],
+            0,
+        )
+        self.assertEqual(
+            session_cases["same_identity_different_payload_fails"]["expected"]["error_code"],
+            "session_commit_identity_conflict",
+        )
         self.assertFalse(fixture["fault_test_requirements"]["sleep_only_fault_timing"])
+
+    def test_checkpoint_terminal_order_finalizes_before_event_delivery(self) -> None:
+        runner = json.loads((ROOT / "fixtures/runner_terminal_v1.json").read_text(encoding="utf-8"))
+        distributed = json.loads(
+            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+        )
+        runner_order = runner["checkpoint_v2_terminal_order"]["order"]
+        distributed_order = distributed["worker_rules"]["terminal_commit_order"]
+
+        self.assertLess(
+            runner_order.index("terminal_event_outbox_pending"),
+            runner_order.index("checkpoint_terminal_finalize"),
+        )
+        self.assertLess(
+            runner_order.index("checkpoint_terminal_finalize"),
+            runner_order.index("terminal_event_outbox_delivered"),
+        )
+        self.assertLess(
+            runner_order.index("terminal_event_outbox_delivered"),
+            runner_order.index("terminal_event_delivery_recorded"),
+        )
+        self.assertEqual(distributed_order[-1], "scheduler_acknowledgement")
+        self.assertLess(
+            distributed_order.index("checkpoint_terminal_finalize"),
+            distributed_order.index("terminal_event_delivery"),
+        )
+
+    def test_checkpoint_outbox_event_identity_is_unique(self) -> None:
+        codec = json.loads((ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8"))
+        store = json.loads((ROOT / "fixtures/checkpoint_store_v2.json").read_text(encoding="utf-8"))
+
+        self.assertTrue(codec["status_rules"]["event_outbox_event_ids_are_unique"])
+        self.assertEqual(
+            codec["status_rules"]["duplicate_event_id_error"],
+            "event_identity_conflict",
+        )
+        self.assertTrue(store["revision_rules"]["outbox_event_ids_unique"])
+        self.assertTrue(store["revision_rules"]["identical_event_enqueue_reuses_existing_entry"])
 
     def test_resume_events_and_app_server_projection_remain_interruptions(self) -> None:
         records = [
@@ -1140,7 +1211,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.5.2/vv-agent-contract-0.5.2.zip"
+                    "v0.5.3/vv-agent-contract-0.5.3.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1166,7 +1237,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.2.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.3.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1204,7 +1275,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.2.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.3.zip",
                     snapshot_path="fixtures",
                 )
             )
