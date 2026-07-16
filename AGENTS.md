@@ -31,6 +31,7 @@ mandatory routing map; durable detail belongs in `docs/`.
 
 ```bash
 python3 scripts/contractctl.py validate
+node scripts/verify_jcs.mjs
 python3 -m unittest discover -s tests
 python3 scripts/contractctl.py build --output-dir dist
 ```

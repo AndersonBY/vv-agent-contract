@@ -17,8 +17,10 @@ Update the normative document, canonical fixture/schema, compatibility note,
 and changelog together. Run:
 
 ```bash
+node scripts/verify_jcs.mjs --write  # only after intentional JCS input changes
 python3 scripts/contractctl.py manifest
 python3 scripts/contractctl.py validate
+node scripts/verify_jcs.mjs
 python3 -m unittest discover -s tests
 python3 scripts/contractctl.py build --output-dir dist
 ```
