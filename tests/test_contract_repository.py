@@ -48,10 +48,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.4.1")
+        self.assertEqual(report["version"], "0.5.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 38)
-        self.assertEqual(report["manifest_entries"], 37)
+        self.assertEqual(report["fixture_files"], 46)
+        self.assertEqual(report["manifest_entries"], 45)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -364,7 +364,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 128)
+        self.assertEqual(len(capabilities), 139)
 
         surfaces = {surface["id"]: surface for surface in fixture["surfaces"]}
         surface_member_count = sum(
@@ -373,7 +373,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 221)
+        self.assertEqual(surface_member_count, 228)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -451,6 +451,147 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(properties)
         self.assertTrue(all("signature" in property_member for property_member in properties))
 
+    def test_checkpoint_config_uses_real_keys_and_explicit_stores(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_config_v1.json").read_text(encoding="utf-8"))
+        invalid = {case["name"]: case["config"] for case in fixture["invalid_cases"]}
+        valid = {case["name"]: case["config"] for case in fixture["valid_cases"]}
+
+        self.assertEqual(len(invalid["key_too_large"]["key"].encode("utf-8")), 513)
+        self.assertNotIn("key_utf8_bytes", invalid["key_too_large"])
+        self.assertEqual(valid["generated_new_key"]["store"], {"kind": "in_memory"})
+        self.assertEqual(
+            valid["require_existing_distributed"]["store_ref"],
+            {"id": "checkpoint.tenant", "version": "1"},
+        )
+        self.assertTrue(fixture["store_selection"]["exactly_one_required_when_enabled"])
+
+    def test_checkpoint_v2_discriminator_extensions_and_migration_are_explicit(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8"))
+        canonical = fixture["canonical_checkpoint"]
+        migrations = {case["name"]: case for case in fixture["migration_cases"]}
+
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v2")
+        self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
+        self.assertEqual(len(canonical["run_definition_digest"]), 64)
+        self.assertTrue(fixture["discriminator"]["v1_when_field_absent"])
+        self.assertEqual(
+            fixture["discriminator"]["unknown_present_value_error"],
+            "checkpoint_schema_unsupported",
+        )
+        self.assertFalse(migrations["running_v1_requires_reconciliation"]["expected"]["allowed"])
+        self.assertEqual(
+            migrations["running_v1_requires_reconciliation"]["expected"]["status"],
+            "reconciliation_required",
+        )
+        self.assertEqual(fixture["unknown_field_policy"]["extension_required"], "block_resume")
+
+    def test_operation_journal_never_silently_retries_unknown_effects(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/operation_journal_v1.json").read_text(encoding="utf-8"))
+        recovery = {case["name"]: case for case in fixture["recovery_cases"]}
+
+        self.assertEqual(
+            fixture["enums"]["states"],
+            ["planned", "started", "succeeded", "failed", "ambiguous"],
+        )
+        self.assertEqual(
+            recovery["started_unknown_tool_is_not_retried"]["expected"]["status"],
+            "reconciliation_required",
+        )
+        self.assertEqual(
+            recovery["started_unknown_tool_is_not_retried"]["expected"]["tool_calls"],
+            0,
+        )
+        self.assertTrue(
+            recovery["started_supported_tool_retries_same_key"]["expected"]["same_idempotency_key"]
+        )
+        self.assertFalse(fixture["tool_context"]["model_visible_argument"])
+
+    def test_checkpoint_store_progress_and_terminal_retention_are_locked(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_store_v2.json").read_text(encoding="utf-8"))
+        cases = {case["name"]: case for case in fixture["store_cases"]}
+
+        self.assertTrue(fixture["revision_rules"]["progress_preserves_claim"])
+        self.assertFalse(fixture["revision_rules"]["heartbeat_requires_revision"])
+        self.assertEqual(cases["progress_keeps_claim"]["expected"]["claim_token"], "owner-b")
+        self.assertEqual(
+            cases["heartbeat_after_progress_updates_lease_only"]["expected"]["journal_state"],
+            "started",
+        )
+        self.assertTrue(cases["terminal_ack_is_retained"]["expected"]["row_present"])
+        self.assertTrue(fixture["redis_rules"]["whole_json_heartbeat_forbidden"])
+
+    def test_checkpoint_resume_fixture_covers_all_fault_boundaries(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_resume_v1.json").read_text(encoding="utf-8"))
+        cases = {case["name"]: case for case in fixture["runner_cases"]}
+        matrix = fixture["fault_matrix"]
+
+        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 9)])
+        self.assertEqual(
+            cases["started_model_requires_reconciliation"]["expected"]["completion_reason"],
+            None,
+        )
+        self.assertEqual(
+            cases["ambiguous_non_idempotent_tool_stops"]["expected"]["silent_retries"],
+            0,
+        )
+        self.assertEqual(
+            cases["ambiguous_idempotent_tool_retries_same_key"]["expected"]["effects_total"],
+            1,
+        )
+        self.assertEqual(
+            cases["budget_elapsed_continues_from_snapshot"]["expected"]["downtime_ms_counted"],
+            0,
+        )
+        self.assertFalse(fixture["fault_test_requirements"]["sleep_only_fault_timing"])
+
+    def test_resume_events_and_app_server_projection_remain_interruptions(self) -> None:
+        records = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/resume_events_v1.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        app = json.loads((ROOT / "fixtures/app_server_observable_v1.json").read_text(encoding="utf-8"))
+        projections = {case["name"]: case for case in app["terminal"]["agentStatusProjection"]}
+
+        self.assertEqual(
+            [record["type"] for record in records],
+            [
+                "checkpoint_created",
+                "checkpoint_resumed",
+                "operation_replayed",
+                "operation_ambiguous",
+                "model_retry_duplicate_risk",
+                "reconciliation_resolved",
+                "reconciliation_required",
+            ],
+        )
+        reconciliation = projections["reconciliation_required_is_interrupted_without_error"]
+        self.assertEqual(reconciliation["turnStatus"], "interrupted")
+        self.assertIsNone(reconciliation["completionReason"])
+        self.assertEqual(reconciliation["errorField"], "omitted")
+        self.assertEqual(app["durableResume"]["method"], "turn/resume")
+        self.assertFalse(app["durableResume"]["newInputAllowed"])
+
+    def test_distributed_v2_preserves_v1_and_resolves_checkpoint_capabilities(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+        )
+        envelope = fixture["canonical_envelope"]
+        capabilities = envelope["recipe"]["capabilities"]
+
+        self.assertTrue(fixture["compatibility"]["v1_bytes_must_remain_unchanged"])
+        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v2")
+        self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
+        self.assertEqual(fixture["worker_rules"]["apalis_blocking_runtime"], "tokio_spawn_blocking")
+        self.assertTrue(fixture["worker_rules"]["heartbeat_cannot_overwrite_journal"])
+
+    def test_checkpoint_sqlite_v2_is_isolated_from_v1(self) -> None:
+        sql = (ROOT / "fixtures/checkpoint_sqlite_canonical_v2.sql").read_text(encoding="utf-8")
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS checkpoints_v2", sql)
+        self.assertNotIn("CREATE TABLE IF NOT EXISTS checkpoints (", sql)
+        self.assertIn("terminal_acknowledged", sql)
+        self.assertIn("model_call_journal", sql)
+
     def test_snapshot_sync_and_offline_check(self) -> None:
         revision = "b" * 40
         with tempfile.TemporaryDirectory() as temporary:
@@ -467,7 +608,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.4.1/vv-agent-contract-0.4.1.zip"
+                    "v0.5.0/vv-agent-contract-0.5.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -475,7 +616,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 38)
+            self.assertEqual(synced["fixture_files"], 46)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -493,7 +634,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.4.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -531,7 +672,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.4.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.0.zip",
                     snapshot_path="fixtures",
                 )
             )

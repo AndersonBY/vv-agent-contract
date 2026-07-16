@@ -192,9 +192,10 @@ contract 0.3 gives it a fresh run id and a fresh `max_cycles` allowance. Time
 spent waiting for approval is excluded. A new independent Runner invocation
 starts a fresh budget.
 
-The current checkpoint codec may persist additive budget usage so distributed
-cycles use one evaluator state. This does not claim checkpoint v2, exact resume,
-or exactly-once external effects; those remain contract 0.5 work.
+Checkpoint v1 may persist additive budget usage so distributed cycles use one
+evaluator state without claiming durable operation resume. Opt-in checkpoint
+v2 resumes the last durable cumulative snapshot as defined by contract 0.5,
+while still making no arbitrary exactly-once external-effect guarantee.
 
 ## Canonical Evidence
 
