@@ -1,6 +1,7 @@
 {
   "contract": "checkpoint_resume_v1",
   "version": 1,
+  "run_definition_schema": "vv-agent.run-definition.v1",
   "public_entrypoints": {
     "run": "Runner.run with RunConfig.checkpoint_config",
     "start": "Runner.start with RunConfig.checkpoint_config",
@@ -469,6 +470,66 @@
         "status": "completed",
         "tool_calls": 0,
         "reconciled_receipts": 1
+      }
+    },
+    {
+      "name": "approval_resume_reenters_tool_journal",
+      "run": {
+        "agent": {
+          "name": "checkpoint-agent",
+          "instructions": "Use available tools and return the model response.",
+          "model": "scripted"
+        },
+        "input": "process item 42",
+        "source_run_config": {
+          "max_cycles": 3,
+          "no_tool_policy": "finish",
+          "checkpoint_config": {
+            "key": "case-key/source-wait",
+            "resume_policy": "resume_if_present",
+            "store": {
+              "kind": "in_memory"
+            }
+          }
+        },
+        "approval_resume_run_config": {
+          "max_cycles": 3,
+          "no_tool_policy": "finish",
+          "checkpoint_config": {
+            "key": "case-key/approval-resume-1",
+            "resume_policy": "new",
+            "store": {
+              "kind": "in_memory"
+            }
+          }
+        },
+        "pending_approval": {
+          "operation_state": "planned",
+          "source_operation_id": "op_tool_cycle_1_call_1",
+          "tool_call_id": "call_1",
+          "tool_name": "write_record",
+          "request_digest": "cc94008fb3960d6728cc88e405d5b35d273890f9d9d0de8a01cdc964e44d46cf",
+          "idempotency_key": "idem-case-key-call-1"
+        },
+        "approval_decision": "allow",
+        "durable_order": [
+          "tool_planned",
+          "approval_granted",
+          "tool_started",
+          "tool_invoked",
+          "tool_succeeded"
+        ]
+      },
+      "expected": {
+        "status": "completed",
+        "source_checkpoint_key": "case-key/source-wait",
+        "resume_checkpoint_key": "case-key/approval-resume-1",
+        "distinct_checkpoint_key": true,
+        "same_tool_call_id": true,
+        "same_request_digest": true,
+        "same_idempotency_key": true,
+        "started_before_external_call": true,
+        "tool_calls": 1
       }
     },
     {

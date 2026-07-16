@@ -229,7 +229,7 @@ Server preserve the same snapshot and exhaustion objects.
 
 ## Durable Resume With Explicit Ambiguity
 
-`checkpoint_codec_v2.json`, `operation_journal_v1.json`,
+`checkpoint_codec_v2.json`, `run_definition_v1.json`, `operation_journal_v1.json`,
 `checkpoint_store_v2.json`, `checkpoint_resume_v1.json`, and
 `docs/checkpoint-resume.md` define the opt-in checkpoint v2 capability.
 Checkpoint v2 is a task-neutral durability mechanism. It does not inspect a
@@ -244,6 +244,24 @@ a canonical `run_definition_digest`, so a different input, prompt, model,
 model settings, tool schema/policy, budget, workspace/session capability, or
 extension codec cannot silently continue an old run.
 
+Both implementations produce `run_definition_digest` from the exact
+`vv-agent.run-definition.v1` object using RFC 8785 JCS UTF-8 bytes and
+lowercase SHA-256. Ordinary sorted-key JSON is not equivalent evidence. The
+golden vectors include Unicode, floating-point model settings, credential
+redaction, tool order, policy capability references, budgets, and extension
+versions.
+The complete credential-redacted object is embedded in checkpoint v2 and is
+immutable after create, so both implementations restore the same original
+prompt, initial messages/state, metadata, and context reference before
+comparing current capability versions.
+
+Operation request digests use the same RFC 8785 and lowercase SHA-256 rule over
+the closed `vv-agent.operation-request.v1` projection. Retry attempts preserve
+logical operation identity and the digest only when the effective request is
+unchanged. Post-start timeout, cancellation, connection loss, and
+non-cooperative blocking timeout remain ambiguous unless an adapter proves a
+definitive external outcome.
+
 Every model and tool operation durably moves through `planned`, `started`,
 and a receipt state. A committed success or failure is replayed without calling
 the external operation again. `started` without a receipt becomes
@@ -256,6 +274,8 @@ completion reason and leaves the checkpoint resumable. A host reconciliation
 provider may defer, retry, supply a verified success receipt, record a typed
 failure, or explicitly abort. Model retries that may duplicate a request or
 cost require the explicit duplicate-risk policy and emit an observation.
+The provider is optional: its absence produces the durable `defer` outcome and
+the same `reconciliation_required` observation in both languages.
 
 V2 stores have an active-claim progress CAS distinct from cycle commit.
 Progress updates journals while retaining the claim; heartbeat updates only
@@ -389,12 +409,12 @@ Statuses are evidence-based:
 | RunEvent and EventStore | verified | Synthetic fixtures and real producer traces pass |
 | Tool orchestrator | verified | Policy, approval, timeout, exposure, and envelope tests pass |
 | Distributed runtime v1 | verified | Contract 0.3.6 lease lifecycle is adopted by both implementations and passed the locked cross-repository full gate |
-| Durable checkpoint/resume v2 | pending-adoption | Contract 0.5.0 defines operation journals, event outbox, explicit ambiguity, retained terminal replay, and cross-language SQLite evidence; paired implementation adoption is pending |
+| Durable checkpoint/resume v2 | pending-adoption | Contract 0.5.1 adds RFC 8785 run-definition and executable size/event closure to the 0.5.0 journals, outbox, ambiguity, retained replay, and cross-language SQLite contract; paired implementation adoption is pending |
 | Memory and compaction | verified | Provider, PTL, lifecycle, local, and artifact tests pass |
 | Guardrails, hooks, results, and tracing | verified | Public lifecycle and failure-path tests pass |
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
 | Runner/RunConfig and CLI | verified | Public facade, all controls, defaults, and CLI inventory pass |
-| App Server | in-progress | Existing operations remain verified; the 16th `turn/resume` operation introduced by 0.5.0 is pending paired adoption |
+| App Server | in-progress | Existing operations remain verified; the 16th `turn/resume` operation introduced by 0.5.0 and closed by 0.5.1 is pending paired adoption |
 | Run budgets | verified | Contract 0.4.1 is adopted by both implementations and passed the central cross-repository full gate |
 
 ### Imported Local Verification Record (2026-07-13)

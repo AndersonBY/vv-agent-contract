@@ -24,6 +24,15 @@ older binary can continue to read and write v1 without seeing or overwriting v2
 state. V2 readers continue to decode v1 payloads for explicit migration, but an
 enabled v2 run does not silently adopt an unrelated v1 record.
 
+Contract 0.5.1 writers add `run_definition_schema` with the fixed value
+`vv-agent.run-definition.v1`. A checkpoint v2 record produced by the
+never-verified 0.5.0 contract lacks that discriminator and cannot prove which
+unspecified digest algorithm produced its hash. Missing or unknown values therefore fail with
+`checkpoint_definition_schema_unsupported` before claim or external operations;
+an explicit host migration must rebuild and attest the definition, validate the
+journals, and atomically replace the schema, digest, and revision without a live
+claim. Implementations never guess a 0.5.0 digest algorithm.
+
 An explicit v1-to-v2 migration is allowed only for a durable v1 terminal. A
 non-terminal v1 record cannot prove that no unjournaled external operation ran
 after its last cycle commit, even when its lease has expired, and therefore
@@ -46,7 +55,21 @@ the v2 checkpoint key and run identity. An active v1 claim cannot be migrated.
 - `required_extension_namespaces`: unique, lexicographically serialized
   namespaces;
 - `max_extension_state_bytes`: an integer in `0..9007199254740991`, defaulting
-  to 262144 bytes.
+  to 262144 bytes;
+- `capability_refs`: explicit stable `{id, version}` references keyed by
+  canonical behavior slot names such as `reconciliation_provider` or
+  `runtime_hook:0`.
+
+Local checkpoint runs never infer a reference from a Python object id, Rust
+address, type name, or callable name. Every configured process-local capability
+that can affect behavior needs a matching `capability_refs` entry; distributed
+runs obtain the same references from their capability registry. Missing refs
+fail with `checkpoint_definition_unstable` before checkpoint creation or any
+external operation.
+
+Invalid public configuration fails with the stable error code recorded beside
+each invalid case in `checkpoint_config_v1.json`. Language-native exception or
+error types may differ, but callers must be able to observe that code.
 
 The default resume policy is `new`. Both ambiguous-operation policies default
 to `require_reconciliation`. Per-run checkpoint configuration replaces a
@@ -59,8 +82,26 @@ Existing terminal state is replayed without model or tool execution. A live,
 unexpired claim remains owned by its worker and cannot be stolen by a new
 resume attempt.
 
-The framework computes and persists a `run_definition_digest` using lowercase
-SHA-256 over canonical JSON. The definition covers root input, compiled prompt,
+`resume_attempt` is one on creation. It increases by exactly one only when a
+recovery claim succeeds. A failed claim, live-claim rejection, definition
+mismatch, and terminal replay leave it unchanged. `resume_if_present` creates
+an absent record at one or increments an existing record only after its
+recovery claim succeeds.
+
+The store claim operation distinguishes `continue` from `recovery`. Initial
+and ordinary next-cycle claims use `continue` and preserve the counter. Public
+durable resume, expired-claim reclaim, and worker redelivery use `recovery`;
+the successful claim atomically increments both revision and `resume_attempt`.
+The store value is authoritative. A distributed envelope carries an
+observation of that value plus explicit `claim_mode`, not permission to set the
+counter directly. Celery and Apalis adapters promote a normal envelope to
+`recovery` from transport retry/redelivery metadata; an expired stored claim or
+`reconciliation_required` status also forces recovery. Two concurrent recovery
+claims have one CAS winner and increment the counter exactly once.
+
+The framework persists the complete credential-redacted `run_definition` and
+computes `run_definition_digest` using lowercase SHA-256 over its canonical
+JSON. The definition covers root input, compiled prompt,
 model and model settings, model-visible tool schemas, tool idempotency
 declarations and policy, budgets, workspace/session capability references, and
 extension codec versions. It excludes credential values, store location,
@@ -68,11 +109,82 @@ claims, leases, and event cursor. An existing key with a different digest fails
 before model or tool execution. Resume never accepts new user input implicitly;
 conversational and approval resume remain separate public capabilities.
 
+The embedded definition is immutable after create. Resume freezes its original
+prompt, initial messages, initial shared state, metadata, and context reference
+instead of re-reading a session or context provider that may already have
+changed because of the interrupted run. Current tool/model schemas and stable
+capability ids/versions are resolved and compared to that definition before new
+external work. A digest without its definition is insufficient for 0.5.1.
+
+### Run Definition Digest
+
+`run_definition_v1.json` defines the exact digest input and two golden vectors.
+The framework serializes the complete `vv-agent.run-definition.v1` object with
+the RFC 8785 JSON Canonicalization Scheme, hashes the resulting UTF-8 bytes with
+SHA-256, and stores lowercase hexadecimal. Implementations must use an RFC 8785
+implementation rather than approximating it with ordinary sorted-key JSON.
+Non-finite numbers, integers outside the I-JSON safe range, an unstable local
+dynamic tool predicate, or any value that cannot enter the canonical object
+fails before the first model or tool operation.
+
+RFC 8785 object keys use UTF-16 code-unit ordering. Strings are not trimmed or
+Unicode-normalized, and array order is preserved unless a field-specific rule
+below declares set normalization. Golden numbers lock `1.0` as `1`, `-0.0` as
+`0`, `1e-6` as `0.000001`, `1e-7` as `1e-7`, and `1e20` as
+`100000000000000000000`.
+
+The canonical definition contains:
+
+- effective Agent name/type, root input, compiled prompt, caller/session-supplied
+  initial messages, initial shared state, public behavior-affecting run metadata,
+  and a stable context reference when a process-local context is present;
+- resolved backend, model id, and effective model settings;
+- runtime controls that change cycle, completion, memory, multimodal, or tool
+  stopping behavior;
+- model-visible tool schemas in their exact request order and each tool's
+  declared idempotency, timeout, and static or referenced approval policy;
+- normalized tool/checkpoint policy, budget limits, output schema, stable
+  workspace/session and other behavior capability references, and extension
+  namespace/version/required declarations.
+
+Tool schemas and initial messages preserve order. Tool-policy name sets are
+sorted and deduplicated by UTF-16 code units, and extensions are sorted by
+namespace with the same ordering. Workspace,
+session, and predicate references use the ordinary `{id, version}` capability
+shape. A process-local dynamic predicate without a stable reference cannot be
+used with checkpoint v2.
+
+The run-definition top level is closed: unknown fields are rejected instead of
+being ignored by one implementation. Every process-local capability that can
+change model input, tool behavior, approval, guardrails, hooks, memory,
+context, cost enforcement, reconciliation, or behavior-affecting run metadata
+must have a stable `{id, version}` reference. Pure observers and event sinks may
+remain outside the digest because they do not control the run. A missing stable
+reference fails with `checkpoint_definition_unstable` before external work.
+
+Credential values do not enter the definition. Providers or hosts declare a
+sorted, unique list of RFC 6901 JSON Pointer `credential_slots`; only values at
+those exact paths are replaced with `<credential-redacted>`. Header names are
+ASCII-lowercased, but non-credential values such as feature flags remain in the
+definition. Credential rotation therefore preserves the digest while a
+semantic header or body change does not. An unclassified sensitive provider
+value fails closed before external operations instead of being guessed from a
+key name.
+Credential pointers are sorted by UTF-16 code units, accept only RFC 6901
+`~0`/`~1` escapes, and must resolve exactly. Header names that collide after
+ASCII lowercasing fail with `checkpoint_definition_header_collision`; they are
+never merged or resolved by last-write-wins.
+The selected store, checkpoint/run/trace/task identities, claims, leases, and
+event cursor remain excluded.
+
 ## Checkpoint V2 Wire
 
 `checkpoint_codec_v2.json` defines the canonical object. Required fields are:
 
 - `schema_version`, exactly `vv-agent.checkpoint.v2`;
+- `run_definition_schema`, exactly `vv-agent.run-definition.v1`;
+- the complete credential-redacted `run_definition`, whose RFC 8785 digest must
+  equal `run_definition_digest`;
 - `checkpoint_key`, `task_id`, `root_run_id`, `trace_id`, and
   `run_definition_digest`;
 - `resume_attempt`, starting at one and increasing for each claimed recovery;
@@ -85,6 +197,10 @@ conversational and approval resume remain separate public capabilities.
 The existing additive `revision`, claim, lease, and `terminal_result` fields
 retain their checkpoint v1 meanings. A claim tuple remains all-or-none, and a
 terminal record cannot have an active claim.
+`reconciliation_required` requires at least one ambiguous journal entry and no
+claim. A running checkpoint may retain an ambiguous entry only while a recovery
+claim is actively resolving it. Terminal records have no active journals except
+an explicit operator-abort terminal, which retains its ambiguous evidence.
 
 An absent `schema_version` is decoded strictly as checkpoint v1. A present,
 unknown discriminator returns `checkpoint_schema_unsupported`; it never falls
@@ -99,11 +215,21 @@ state into the ordinary checkpoint fields and clears the committed journals.
 This bounds checkpoint growth without discarding information needed to resume
 an interrupted operation.
 
+Journal progress preserves the active claim. A resumable interruption uses the
+separate atomic `suspend_v2` operation: it writes
+`reconciliation_required`, preserves ambiguous journals and the current cycle,
+increments revision, and clears the claim tuple. A later recovery claim accepts
+that status, atomically increments `resume_attempt`, and sets the working status
+back to `running`. Cycle commit is never used merely to release an interrupted
+claim because it would discard the evidence needed for reconciliation.
+
 ## Event Cursor
 
 `event_cursor` contains a versioned `store_ref`, opaque JSON `value`, and
 nullable `last_event_id`. Replay starts exclusively after that value.
 Checkpoint lifecycle events carry a stable event id and payload digest.
+The payload digest is lowercase SHA-256 over RFC 8785 canonical UTF-8 bytes of
+the complete event object.
 `IdempotentRunEventStore.append_once(event_id, payload_digest, event)` returns
 the original cursor for an identical duplicate and rejects the same event id
 with a different digest. Re-emission after recovery therefore uses the same
@@ -128,9 +254,12 @@ task-neutral snapshot and restore operations. Namespace strings use lowercase
 ASCII letters, digits, `.`, `_`, and `-`, begin with an alphanumeric character,
 contain at least one `.`, and contain at most 128 bytes. The
 `ai.vectorvein.vv-agent.*` prefix is reserved for framework-owned state. Each
-entry is `{version, required, state}`. Snapshots must be JSON values. A compact
-entry is limited to 65536 UTF-8 bytes and all entries together are counted
-against `max_extension_state_bytes`, whose default is 262144 bytes.
+entry is `{version, required, state}`. Snapshots must be JSON values. The RFC
+8785 canonical UTF-8 bytes of the complete entry, excluding its namespace map
+key, are limited to 65536 bytes. The sum of those complete entry byte lengths
+is counted against `max_extension_state_bytes`, whose default is 262144 bytes.
+`checkpoint_codec_v2.json` gives generated exact-limit and one-byte-over cases
+so string quoting and entry metadata cannot be omitted from the calculation.
 
 Required extensions and the complete initial extension snapshot are validated
 before the first model or tool operation. Snapshot or restore errors leave the
@@ -138,9 +267,9 @@ existing checkpoint untouched and fail closed. Missing required extensions
 fail before side effects. Unknown, non-required namespaces are preserved but
 not interpreted.
 
-Distributed workers resolve extension and reconciliation providers through
-the existing versioned capability registry. A process-local object is never
-serialized into the distributed envelope.
+Distributed workers resolve required extensions and any configured
+reconciliation provider through the existing versioned capability registry. A
+process-local object is never serialized into the distributed envelope.
 
 ## Operation Journal
 
@@ -153,6 +282,10 @@ SHA-256 `request_digest`. States are:
 3. `succeeded`: a complete effective response or result is durable;
 4. `failed`: a complete typed error receipt is durable;
 5. `ambiguous`: recovery observed `started` without a durable receipt.
+
+Invalid journal entries fail with the stable error code recorded beside each
+invalid case in `operation_journal_v1.json`; a parser message alone is not the
+cross-language contract.
 
 The runtime durably writes `planned`, then `started`, before invoking an
 external operation. It writes `succeeded` or `failed` before downstream cycle
@@ -168,9 +301,37 @@ or `unknown`). The idempotency key is exposed through `ToolContext`; it is not
 inserted into model-visible tool arguments. Function tools and tool specs expose
 the declaration as `idempotency`; the default is `unknown`.
 
+`request_digest` is lowercase SHA-256 over the RFC 8785 UTF-8 bytes of a closed
+`vv-agent.operation-request.v1` projection. A model projection contains the
+complete effective credential-redacted provider request. A tool projection
+contains tool call id, exact tool name, arguments, and framework idempotency
+key. Operation id, cycle, and attempt are journal coordinates and do not enter
+the request digest. Retrying the same logical request increments `attempt`
+while preserving operation id, request digest, and idempotency key; a changed
+effective request creates a new journal entry.
+
+`failed` is allowed only for a definitive outcome. A local failure before
+dispatch may move `planned` to `failed`, and an explicit provider/tool
+rejection may move `started` to `failed`. A timeout, cancellation, connection
+loss, or non-cooperative blocking-tool timeout after `started` is ambiguous
+unless the adapter can prove a definitive external outcome. Returning from a
+timeout wrapper does not prove that a worker thread or process stopped creating
+side effects.
+
+Approval, policy, and before-hook short circuits never write `started`.
+Approval-pending work may remain `planned`; approval grant is durable before
+`started`. Approval resume is a distinct run and never reuses the immutable
+source waiting checkpoint key. When checkpoint v2 is enabled for that resume,
+the host supplies a distinct key; the new journal preserves the source tool
+call id, request digest, and idempotency key. Memory compaction and PTL recovery
+calls to an LLM are model operations and use the same journal protocol.
+
 Replaying a durable response or tool result must not call the external model or
 tool again. The reconstructed request digest must equal the durable digest;
-mismatch requires reconciliation rather than silently using stale data.
+mismatch is checkpoint/journal integrity failure, not evidence that the
+external outcome is ambiguous. It returns
+`checkpoint_journal_integrity_mismatch` before claim without mutating the
+journal or replaying stale data. Explicit host repair/migration is required.
 
 ## Ambiguity And Reconciliation
 
@@ -182,13 +343,19 @@ reconciliation provider for one of these decisions:
 - `retry`: return it to `planned` using the same operation and idempotency keys;
 - `replay_success`: supply the externally verified response or tool result;
 - `record_failure`: supply a durable typed error;
-- `abort`: end the run as an ordinary explicit failure.
+- `abort`: explicitly accept that the external outcome is unknown and end the
+  run as a typed operator failure while preserving the ambiguous journal and
+  `ResumeObservation` in the retained terminal checkpoint.
 
 Without a conclusive decision, the invocation returns the typed status
 `reconciliation_required` and interruption reason
 `resume_requires_reconciliation`. It has no completion reason and is not a
 terminal checkpoint. The checkpoint remains resumable and retains the
 ambiguous entry; it is not converted into a business completion or failure.
+Only the explicit `abort` decision makes that checkpoint terminal, and it does
+not rewrite the operation as a definitive `failed` receipt. `finalize_v2`
+retains the ambiguous journal and observation for this terminal instead of
+clearing the unknown external outcome.
 
 Tool retry is automatic only under `retry_idempotent_only` and explicit
 `supported` idempotency. The same idempotency key is reused. The framework does
@@ -199,6 +366,11 @@ Model retry under `retry_with_duplicate_risk` is explicit and emits a duplicate
 request/cost risk observation. Provider-declared idempotency may eliminate the
 duplicate effect, but absence of that declaration never becomes an implicit
 guarantee.
+
+The reconciliation provider is optional. Without one, the runtime applies
+`defer`, returns `reconciliation_required`, and leaves the durable ambiguity
+untouched. A distributed envelope resolves a reconciliation capability only
+when a reference is present.
 
 ## Budget And Time Resume
 
@@ -223,13 +395,35 @@ Run events expose checkpoint creation/resume, durable operation replay,
 ambiguity, and reconciliation-required observations. App Server exposes a
 dedicated `turn/resume` operation, maps reconciliation-required to turn status
 `interrupted` without `completionReason` or `error`, and exposes optional
-`checkpoint` and `interruption` summaries. It never exposes operation arguments,
-responses, extension state, or idempotency keys. Omitting checkpoint v2
-preserves the pre-0.5 result, event, and App Server shape.
+`checkpoint` and `interruption` summaries. Their exact camelCase field sets and
+safe examples are defined in `app_server_observable_v1.json`. It never exposes
+the run definition or digest, operation arguments, responses, extension state,
+or idempotency keys. Public
+`AgentResult` serialization uses the additive null fields defined by
+`result_public_v1.json`; checkpoint v1 bytes strip them, and App Server omits
+absent summaries. Omitting checkpoint v2 otherwise preserves pre-0.5 behavior.
+
+App Server `checkpoint.status` is the persisted `AgentStatus`; it is distinct
+from App Server `TurnStatus`. For example, durable
+`reconciliation_required` projects to turn status `interrupted`, while a live
+checkpoint `running` claim projects to turn status `running`.
+`app_server_observable_v1.json` contains complete JSON-RPC request, immediate
+response, and notification sequences. A newly claimed resume responds
+`running` before `turn/started`; reconciliation later ends with
+`turn/completed:interrupted` and omits completion/error fields. A live claim
+returns its existing owner without a new run or notifications. A retained
+terminal is replayed in the response without new external calls or duplicate
+terminal notifications.
 
 A v2 terminal acknowledgement marks the checkpoint acknowledged but retains
 the row and terminal receipt for redelivery. Deletion is an explicit host
 retention operation after the host no longer needs replay.
+
+Terminal finalization follows the executable distributed ordering fixture:
+output guardrail, idempotent session persistence or an explicit host boundary,
+pending terminal event in the checkpoint outbox, checkpoint terminal finalize,
+event delivery, then scheduler acknowledgement. A terminal is never made
+durable before output guardrail or session finalization and later rewritten.
 
 ## Safety Boundary
 
@@ -251,6 +445,14 @@ receipts, model responses, and extension state. Authentication, authorization,
 tenant isolation, encryption at rest, retention, and redaction are host
 responsibilities. App Server projections intentionally expose only summaries.
 
+Checkpoint configuration belongs to one root run definition. Agent-as-tool and
+background children do not implicitly inherit the parent's checkpoint key; a
+host may provide a distinct child key explicitly. Contract 0.5.1 fails closed
+with `checkpoint_handoff_unsupported` when checkpoint v2 is combined with a
+handoff, because the complete handoff graph and active-agent state are not yet
+part of the v2 wire. This restriction is explicit rather than silently
+resuming under the wrong agent definition.
+
 ## Canonical Evidence
 
 - `checkpoint_codec_v2.json` defines the codec, migration, namespace, size,
@@ -259,12 +461,16 @@ responsibilities. App Server projections intentionally expose only summaries.
   reconciliation decisions, replay, and retry boundaries.
 - `checkpoint_config_v1.json` defines public defaults, precedence, key
   generation, collision, missing-key, and run-definition mismatch behavior.
+- `run_definition_v1.json` defines the RFC 8785 digest input, credential
+  redaction, canonical bytes, and SHA-256 golden vectors.
 - `checkpoint_store_v2.json` defines v2 create/load, claim-internal progress,
   lease, CAS, terminal, outbox, append-once, and namespace behavior.
 - `checkpoint_resume_v1.json` contains executable public Runner and distributed
   recovery cases; boolean fixture claims are insufficient producer evidence.
-- `resume_events_v1.jsonl` defines canonical event order and observation
-  payloads.
-- `distributed_run_envelope_v2.json` defines the worker wire and required
-  extension/reconciliation capability references. The v1 envelope fixture
+- `resume_events_v1.jsonl` is a catalog of canonical scenario excerpts, not one
+  continuous run. Records sharing a run id and trace id define required local
+  order; different identity pairs are independent fixture groups. Grouping
+  metadata is not inserted into the formal RunEvent payload.
+- `distributed_run_envelope_v2.json` defines the worker wire, required
+  extension references, and optional reconciliation capability reference. The v1 envelope fixture
   remains byte-identical as a dual-read golden input.

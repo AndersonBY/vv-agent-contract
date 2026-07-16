@@ -6,6 +6,33 @@
     "decoder": "discriminator_dispatch",
     "enabled_v2_never_writes_v1_namespace": true
   },
+  "run_definition_schema_rules": {
+    "writer_value": "vv-agent.run-definition.v1",
+    "complete_definition_source": "embedded_run_definition_in_checkpoint_v2",
+    "envelope_digest_must_match_checkpoint_digest": true,
+    "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
+    "failure_boundary": "before_capability_resolution_or_claim"
+  },
+  "resume_attempt_rules": {
+    "checkpoint_store_is_authoritative": true,
+    "envelope_value_is_an_observation_not_an_increment_command": true,
+    "continue_claim_preserves_value": true,
+    "successful_recovery_claim_atomically_increments_store_and_next_envelope": true,
+    "mismatch_error": "checkpoint_resume_attempt_mismatch"
+  },
+  "claim_mode_rules": {
+    "wire_values": [
+      "continue",
+      "recovery"
+    ],
+    "initial_and_next_cycle_dispatch": "continue",
+    "public_resume_and_explicit_redelivery": "recovery",
+    "transport_redelivery_metadata_promotes_continue_to_recovery": true,
+    "celery_source": "request.delivery_info.redelivered_or_retry_count",
+    "apalis_source": "task_attempt_or_redelivery_metadata",
+    "expired_claim_or_reconciliation_status_is_always_recovery": true,
+    "missing_or_unknown_error": "checkpoint_claim_mode_invalid"
+  },
   "canonical_envelope": {
     "schema_version": "vv-agent.distributed-run.v2",
     "job_id": "run-123:cycle:2",
@@ -167,7 +194,9 @@
     "lease_duration_ms": 120000,
     "root_run_id": "run-123",
     "trace_id": "trace-run-123",
+    "run_definition_schema": "vv-agent.run-definition.v1",
     "run_definition_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "claim_mode": "recovery",
     "resume_attempt": 2,
     "checkpoint_config": {
       "key": "tenant-7/run-123",
@@ -188,6 +217,22 @@
       ],
       "value": "vv-agent.distributed-run.v3",
       "error": "unsupported distributed schema_version"
+    },
+    {
+      "name": "missing_run_definition_schema",
+      "path": [
+        "run_definition_schema"
+      ],
+      "value": null,
+      "error": "checkpoint_definition_schema_unsupported"
+    },
+    {
+      "name": "unsupported_run_definition_schema",
+      "path": [
+        "run_definition_schema"
+      ],
+      "value": "vv-agent.run-definition.v2",
+      "error": "checkpoint_definition_schema_unsupported"
     },
     {
       "name": "missing_checkpoint_config",
@@ -218,16 +263,6 @@
       "error": "required checkpoint extension com.example.audit is unavailable"
     },
     {
-      "name": "missing_reconciliation_provider",
-      "path": [
-        "recipe",
-        "capabilities",
-        "reconciliation_provider_ref"
-      ],
-      "value": null,
-      "error": "reconciliation provider required by distributed v2 envelope"
-    },
-    {
       "name": "definition_digest_mismatch",
       "path": [
         "run_definition_digest"
@@ -235,6 +270,31 @@
       "value": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "stored_value": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "error": "checkpoint_definition_mismatch"
+    },
+    {
+      "name": "resume_attempt_mismatch",
+      "path": [
+        "resume_attempt"
+      ],
+      "value": 3,
+      "stored_value": 2,
+      "error": "checkpoint_resume_attempt_mismatch"
+    },
+    {
+      "name": "missing_claim_mode",
+      "path": [
+        "claim_mode"
+      ],
+      "value": null,
+      "error": "checkpoint_claim_mode_invalid"
+    },
+    {
+      "name": "unknown_claim_mode",
+      "path": [
+        "claim_mode"
+      ],
+      "value": "retry",
+      "error": "checkpoint_claim_mode_invalid"
     },
     {
       "name": "unsafe_extension_limit",
@@ -252,7 +312,17 @@
     "operation_progress_cas_preserves_claim": true,
     "heartbeat_updates_lease_only": true,
     "heartbeat_cannot_overwrite_journal": true,
-    "terminal_persists_through_output_guardrail_session_and_final_event": true,
+    "reconciliation_provider_is_optional": true,
+    "missing_reconciliation_provider_defaults_to_defer": true,
+    "effective_claim_mode_uses_envelope_transport_metadata_and_stored_checkpoint": true,
+    "terminal_commit_order": [
+      "output_guardrail",
+      "idempotent_session_persistence_or_explicit_host_boundary",
+      "terminal_event_outbox_pending",
+      "checkpoint_terminal_finalize",
+      "terminal_event_delivery",
+      "scheduler_acknowledgement"
+    ],
     "terminal_acknowledgement_does_not_delete": true,
     "apalis_blocking_runtime": "tokio_spawn_blocking"
   },
@@ -261,6 +331,7 @@
       "name": "live_claim",
       "expected": {
         "status": "in_progress",
+        "resume_attempt_unchanged": true,
         "model_calls": 0,
         "tool_calls": 0
       }
@@ -269,6 +340,7 @@
       "name": "expired_started_unknown_tool",
       "expected": {
         "status": "reconciliation_required",
+        "missing_reconciliation_provider_decision": "defer",
         "model_calls": 0,
         "tool_calls": 0
       }
@@ -283,7 +355,8 @@
     {
       "name": "committed_cycle",
       "expected": {
-        "dispatch_cycle": 3
+        "dispatch_cycle": 3,
+        "next_envelope_claim_mode": "continue"
       }
     },
     {

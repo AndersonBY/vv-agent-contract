@@ -29,6 +29,15 @@ Separate repositories cannot merge atomically. During adoption, one default
 branch may briefly point to a newer contract. Release workflows must therefore
 accept only a version recorded as `verified` in the central support matrix.
 
+Before a newly introduced minor capability reaches its first `verified`
+adoption, a patch may close a safety or producer-evidence defect in that
+still-unsupported capability. This exception is limited to the same pending
+minor line: the earlier artifact stays immutable, implementations must not ship
+it as supported, the patch must document migration for experimental records,
+and the latest patch must pass paired adoption. Once any version in the minor
+line is `verified`, ordinary semantic-versioning compatibility applies without
+this exception.
+
 ## 0.2 Token Usage Compatibility
 
 Contract `0.2.x` adds `usage_source` and `cache_usage` without removing or
@@ -129,10 +138,18 @@ record cannot be migrated automatically because it cannot prove that no
 external operation ran after the last cycle commit. V1 terminal migration is
 explicit and replay-only.
 
+Checkpoint v2 has a separate `run_definition_schema` discriminator. Contract
+0.5.1 fixes it to `vv-agent.run-definition.v1`, embeds the credential-redacted
+definition, and uses RFC 8785 JCS. A 0.5.0 v2 record without that field and
+embedded definition, or a record with an unknown value, requires
+explicit host migration and fails closed before claim or external operations.
+Contract 0.5.0 never reached `verified`; 0.5.1 is the first eligible adoption
+target for the 0.5 capability.
+
 `reconciliation_required` is a resumable interruption, not a business failure
-or completion. It has no `completion_reason`. New result, event, and App
-Server checkpoint fields are additive and omitted when checkpoint v2 is
-disabled.
+or completion. It has no `completion_reason`. Public result fields are
+additive and null when checkpoint v2 is disabled; checkpoint v1 bytes remain
+unchanged, and absent App Server checkpoint summaries are omitted.
 
 Stable idempotency keys allow a cooperating tool or provider to deduplicate an
 effect. The framework does not infer idempotency from names or arguments and

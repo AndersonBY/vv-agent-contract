@@ -3,6 +3,40 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.1 - 2026-07-16
+
+- Define the complete run-definition object and lock RFC 8785 canonical bytes
+  plus SHA-256 golden vectors across Unicode, floating-point settings, tools,
+  policies, budgets, capability references, and extensions.
+- Embed that credential-redacted definition beside its digest in checkpoint v2
+  so resume freezes original prompt/session/context inputs instead of trying to
+  reconstruct them from mutable host state.
+- Define credential redaction before digesting and reject unstable local tool
+  predicates or non-I-JSON values before external operations.
+- Add the `vv-agent.run-definition.v1` discriminator to checkpoint and
+  distributed v2 records so never-verified 0.5.0 unspecified digests cannot be
+  silently resumed under the canonical algorithm.
+- Close extension-size boundaries by counting the canonical UTF-8 bytes of the
+  complete `{version, required, state}` entry and providing executable exact
+  and one-byte-over generators.
+- Lock operation request digests to RFC 8785, distinguish continuation claims
+  from atomic recovery claims, and classify post-start timeout/cancellation as
+  ambiguous unless an adapter proves a definitive external outcome.
+- Add an atomic resumable-interruption suspend operation that preserves
+  ambiguous journals while releasing the active claim.
+- Keep reconciliation providers optional, prevent checkpoint-key inheritance
+  into child runs, and fail closed for handoffs until active-agent state and the
+  complete handoff graph are contractual.
+- Add explicit local behavior capability references, distributed claim-mode
+  evidence, and complete `turn/resume` JSON-RPC lifecycle fixtures.
+- Lock resume-attempt increments, typed invalid-config/journal error codes, and
+  split resume event excerpts into coherent independent scenarios.
+- Fix the documented legacy Redis namespace to the existing
+  `vv_agent:checkpoint:` bytes and lock the safe App Server checkpoint and
+  interruption summary fields.
+- Preserve the 0.5.0 safety goals while closing unsafe or underspecified wire
+  behavior before the 0.5 capability's first paired adoption.
+
 ## 0.5.0 - 2026-07-16
 
 - Add opt-in checkpoint v2 with stable checkpoint keys, run-definition

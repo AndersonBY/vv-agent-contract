@@ -3,6 +3,8 @@ PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS checkpoints_v2 (
     checkpoint_key TEXT PRIMARY KEY,
     schema_version TEXT NOT NULL CHECK (schema_version = 'vv-agent.checkpoint.v2'),
+    run_definition_schema TEXT NOT NULL CHECK (run_definition_schema = 'vv-agent.run-definition.v1'),
+    run_definition TEXT NOT NULL,
     task_id TEXT NOT NULL,
     root_run_id TEXT NOT NULL,
     trace_id TEXT NOT NULL,
@@ -37,4 +39,3 @@ CREATE TABLE IF NOT EXISTS checkpoints_v2 (
 
 CREATE INDEX IF NOT EXISTS checkpoints_v2_status_idx
     ON checkpoints_v2(status);
-
