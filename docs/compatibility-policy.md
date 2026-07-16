@@ -146,6 +146,12 @@ explicit host migration and fails closed before claim or external operations.
 Contract 0.5.0 never reached `verified`; 0.5.1 is the first eligible adoption
 target for the 0.5 capability.
 
+Contract 0.5.2 adds two store operations without changing checkpoint wire
+fields: claimed terminal finalization and durable outbox-delivery recording.
+They close lifecycle paths required by 0.5.1 but not executable through its
+store protocol. Implementations adopting checkpoint v2 must target 0.5.2 or a
+later compatible patch; 0.5.1 remains immutable and unverified.
+
 `reconciliation_required` is a resumable interruption, not a business failure
 or completion. It has no `completion_reason`. Public result fields are
 additive and null when checkpoint v2 is disabled; checkpoint v1 bytes remain

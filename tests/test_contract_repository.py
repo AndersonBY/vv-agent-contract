@@ -52,7 +52,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.5.1")
+        self.assertEqual(report["version"], "0.5.2")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 47)
         self.assertEqual(report["manifest_entries"], 46)
@@ -855,6 +855,16 @@ class ContractRepositoryTests(unittest.TestCase):
         operator_abort = cases["operator_abort_terminal_retains_unknown_outcome"]["expected"]
         self.assertEqual(operator_abort["tool_journal_state"], "ambiguous")
         self.assertTrue(operator_abort["resume_observation_present"])
+        claimed_failure = cases["definitive_failure_finalizes_active_claim"]["expected"]
+        self.assertIsNone(claimed_failure["claim_token"])
+        self.assertEqual(claimed_failure["model_journal_count"], 0)
+        claimed_abort = cases["claimed_operator_abort_retains_unknown_outcome"]["expected"]
+        self.assertEqual(claimed_abort["tool_journal_state"], "ambiguous")
+        running_delivery = cases["running_outbox_delivery_preserves_claim"]["expected"]
+        self.assertEqual(running_delivery["claim_token"], "owner-events")
+        terminal_delivery = cases["terminal_outbox_delivery_preserves_receipt"]["expected"]
+        self.assertTrue(terminal_delivery["terminal_result_present"])
+        self.assertEqual(terminal_delivery["outbox_state"], "delivered")
         for vector in fixture["redis_key_vectors"]:
             digest = hashlib.sha256(vector["checkpoint_key"].encode("utf-8")).hexdigest()
             self.assertEqual(digest, vector["checkpoint_key_utf8_sha256"])
@@ -1130,7 +1140,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.5.1/vv-agent-contract-0.5.1.zip"
+                    "v0.5.2/vv-agent-contract-0.5.2.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1156,7 +1166,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.2.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1194,7 +1204,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.2.zip",
                     snapshot_path="fixtures",
                 )
             )

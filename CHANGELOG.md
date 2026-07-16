@@ -3,6 +3,23 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.2 - 2026-07-16
+
+- Add `finalize_claimed_v2`, an atomic compare-revision-and-claim operation
+  that writes a terminal result while clearing the active claim. This closes
+  the executable path for definitive model/tool failures and other terminals
+  reached before an active cycle can be committed.
+- Add `record_event_delivery_v2`, an atomic CAS operation that verifies a
+  pending outbox event identity, records its returned cursor, advances the
+  checkpoint event cursor, and works for both running and retained terminal
+  records.
+- Require claimed terminal finalization to preserve explicit operator-abort
+  ambiguity but clear ordinary active journals, and require event-delivery
+  recording to preserve a live claim and immutable terminal receipt.
+- Preserve all 0.5.1 wire fields and activation defaults. This patch closes
+  store lifecycle operations that the 0.5.1 prose required but its executable
+  store surface could not perform.
+
 ## 0.5.1 - 2026-07-16
 
 - Define the complete run-definition object and lock RFC 8785 canonical bytes

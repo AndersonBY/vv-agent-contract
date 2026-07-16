@@ -57,8 +57,16 @@
       "atomic": "compare_revision_and_claim_token_then_commit_cycle_clear_journals_and_claim"
     },
     {
+      "name": "finalize_claimed_v2",
+      "atomic": "compare_revision_and_claim_token_then_write_terminal_clear_claim_and_clear_ordinary_journals"
+    },
+    {
       "name": "finalize_v2",
       "atomic": "compare_revision_and_no_claim_then_write_terminal_preserving_explicit_operator_abort_ambiguity"
+    },
+    {
+      "name": "record_event_delivery_v2",
+      "atomic": "compare_revision_claim_and_pending_event_identity_then_record_cursor_preserving_claim_or_terminal"
     },
     {
       "name": "acknowledge_terminal_v2",
@@ -75,7 +83,9 @@
     "progress_increment": 1,
     "suspend_increment": 1,
     "cycle_commit_increment": 1,
+    "claimed_finalize_increment": 1,
     "finalize_increment": 1,
+    "event_delivery_increment": 1,
     "renew_increment": 0,
     "acknowledge_increment": 1,
     "heartbeat_requires_revision": false,
@@ -95,6 +105,8 @@
     "successful_claim_sets_status_running": true,
     "suspend_preserves_active_journals": true,
     "suspend_clears_claim_without_advancing_cycle": true,
+    "claimed_finalize_clears_claim_atomically": true,
+    "event_delivery_preserves_claim_and_terminal": true,
     "run_definition_and_digest_immutable_after_create": true,
     "operator_abort_finalize_preserves_ambiguous_journal": true
   },
@@ -500,6 +512,62 @@
       }
     },
     {
+      "name": "definitive_failure_finalizes_active_claim",
+      "initial": {
+        "revision": 5,
+        "cycle_index": 1,
+        "status": "running",
+        "claim_token": "owner-failure",
+        "claimed_cycle": 2,
+        "model_journal_state": "failed",
+        "terminal_result": null
+      },
+      "operation": {
+        "kind": "finalize_claimed_v2",
+        "expected_revision": 5,
+        "claim_token": "owner-failure",
+        "status": "failed"
+      },
+      "expected": {
+        "updated": true,
+        "revision": 6,
+        "status": "failed",
+        "claim_token": null,
+        "claimed_cycle": null,
+        "lease_expires_at_ms": null,
+        "model_journal_count": 0,
+        "terminal_result_present": true
+      }
+    },
+    {
+      "name": "claimed_operator_abort_retains_unknown_outcome",
+      "initial": {
+        "revision": 6,
+        "cycle_index": 1,
+        "status": "running",
+        "claim_token": "owner-reconcile",
+        "claimed_cycle": 2,
+        "tool_journal_state": "ambiguous",
+        "terminal_result": null
+      },
+      "operation": {
+        "kind": "finalize_claimed_v2",
+        "expected_revision": 6,
+        "claim_token": "owner-reconcile",
+        "status": "failed",
+        "terminal_error_code": "operator_abort_with_unknown_outcome"
+      },
+      "expected": {
+        "updated": true,
+        "revision": 7,
+        "status": "failed",
+        "claim_token": null,
+        "tool_journal_state": "ambiguous",
+        "resume_observation_present": true,
+        "terminal_result_present": true
+      }
+    },
+    {
       "name": "terminal_is_immutable",
       "initial": {
         "revision": 6,
@@ -559,6 +627,81 @@
         "terminal_result_present": true,
         "terminal_acknowledged": true,
         "row_present": true
+      }
+    },
+    {
+      "name": "running_outbox_delivery_preserves_claim",
+      "initial": {
+        "revision": 6,
+        "status": "running",
+        "claim_token": "owner-events",
+        "claimed_cycle": 2,
+        "event_id": "evt-1",
+        "payload_digest": "98648e700ff272cf9c8cb0133ed09f7bd9af09bcd95a03da8a955dcdeb270f1c",
+        "outbox_state": "pending"
+      },
+      "operation": {
+        "kind": "record_event_delivery_v2",
+        "expected_revision": 6,
+        "claim_token": "owner-events",
+        "event_id": "evt-1",
+        "payload_digest": "98648e700ff272cf9c8cb0133ed09f7bd9af09bcd95a03da8a955dcdeb270f1c",
+        "cursor": {
+          "schema_version": "vv-agent.event-cursor.v1",
+          "store_ref": {
+            "id": "events.tenant",
+            "version": "1"
+          },
+          "value": {
+            "sequence": 1
+          },
+          "last_event_id": "evt-1"
+        }
+      },
+      "expected": {
+        "updated": true,
+        "revision": 7,
+        "claim_token": "owner-events",
+        "outbox_state": "delivered",
+        "event_cursor_last_event_id": "evt-1"
+      }
+    },
+    {
+      "name": "terminal_outbox_delivery_preserves_receipt",
+      "initial": {
+        "revision": 7,
+        "status": "completed",
+        "claim_token": null,
+        "terminal_result_present": true,
+        "event_id": "evt-terminal",
+        "payload_digest": "98648e700ff272cf9c8cb0133ed09f7bd9af09bcd95a03da8a955dcdeb270f1c",
+        "outbox_state": "pending"
+      },
+      "operation": {
+        "kind": "record_event_delivery_v2",
+        "expected_revision": 7,
+        "claim_token": null,
+        "event_id": "evt-terminal",
+        "payload_digest": "98648e700ff272cf9c8cb0133ed09f7bd9af09bcd95a03da8a955dcdeb270f1c",
+        "cursor": {
+          "schema_version": "vv-agent.event-cursor.v1",
+          "store_ref": {
+            "id": "events.tenant",
+            "version": "1"
+          },
+          "value": {
+            "sequence": 2
+          },
+          "last_event_id": "evt-terminal"
+        }
+      },
+      "expected": {
+        "updated": true,
+        "revision": 8,
+        "status": "completed",
+        "terminal_result_present": true,
+        "outbox_state": "delivered",
+        "event_cursor_last_event_id": "evt-terminal"
       }
     },
     {
@@ -677,6 +820,8 @@
     "representation": "hash_or_payload_plus_control_fields",
     "progress_atomicity": "lua_compare_revision_and_claim_then_replace_payload",
     "suspend_atomicity": "lua_compare_revision_and_claim_then_replace_payload_and_delete_lease",
+    "claimed_finalize_atomicity": "lua_compare_revision_and_claim_then_replace_terminal_payload_and_delete_lease",
+    "event_delivery_atomicity": "lua_compare_revision_claim_and_pending_event_identity_then_record_cursor",
     "heartbeat_atomicity": "lua_compare_claim_and_live_lease_then_update_lease_field_only",
     "whole_json_heartbeat_forbidden": true
   },

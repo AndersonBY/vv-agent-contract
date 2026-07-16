@@ -223,6 +223,14 @@ that status, atomically increments `resume_attempt`, and sets the working status
 back to `running`. Cycle commit is never used merely to release an interrupted
 claim because it would discard the evidence needed for reconciliation.
 
+A terminal reached while the current cycle still has a live claim uses
+`finalize_claimed_v2`. The store compares both revision and claim token, writes
+the terminal receipt, and clears the claim atomically. Ordinary terminals clear
+the active journals because the terminal receipt is authoritative. An explicit
+operator-abort terminal preserves its ambiguous journal and
+`ResumeObservation`. A runtime must not clear a claim locally and then call the
+unclaimed `finalize_v2`; that loses ownership proof between the two writes.
+
 ## Event Cursor
 
 `event_cursor` contains a versioned `store_ref`, opaque JSON `value`, and
@@ -240,6 +248,14 @@ as `pending`, then delivered with `append_once`, then marked `delivered` with
 the returned cursor. Recovery redelivers pending entries with the same id and
 digest. Delivered entries may be compacted after the enclosing cycle or
 terminal acknowledgement becomes durable.
+
+The delivery transition uses `record_event_delivery_v2`. It compares the
+checkpoint revision, verifies the pending event id and payload digest, records
+the exact returned cursor in both the outbox entry and `event_cursor`, and
+increments revision. A running checkpoint keeps its claim and requires the
+matching claim token; an unclaimed or terminal checkpoint requires a null claim
+token. The operation never rewrites the terminal receipt. This separate CAS is
+required because terminal event delivery occurs after terminal finalization.
 
 The cursor and outbox do not turn an arbitrary callback into a transactional
 consumer. Checkpoint v2 provides accepted-once delivery only through an
@@ -422,8 +438,9 @@ retention operation after the host no longer needs replay.
 Terminal finalization follows the executable distributed ordering fixture:
 output guardrail, idempotent session persistence or an explicit host boundary,
 pending terminal event in the checkpoint outbox, checkpoint terminal finalize,
-event delivery, then scheduler acknowledgement. A terminal is never made
-durable before output guardrail or session finalization and later rewritten.
+event delivery, durable outbox-delivery recording, then scheduler
+acknowledgement. A terminal is never made durable before output guardrail or
+session finalization and later rewritten.
 
 ## Safety Boundary
 
