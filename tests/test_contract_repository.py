@@ -52,7 +52,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.5.3")
+        self.assertEqual(report["version"], "0.5.4")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 47)
         self.assertEqual(report["manifest_entries"], 46)
@@ -368,8 +368,9 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 140)
+        self.assertEqual(len(capabilities), 141)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
+        self.assertIn("checkpoint_config.credential_slots", capabilities)
 
         surfaces = {surface["id"]: surface for surface in fixture["surfaces"]}
         surface_member_count = sum(
@@ -471,9 +472,25 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["store_selection"]["exactly_one_required_when_enabled"])
         self.assertTrue(all(case.get("error_code") for case in fixture["invalid_cases"]))
         self.assertEqual(fixture["defaults"]["capability_refs"], {})
+        self.assertEqual(fixture["defaults"]["credential_slots"], [])
         self.assertEqual(
             valid["named_new_key"]["capability_refs"]["reconciliation_provider"],
             {"id": "reconcile.local", "version": "1"},
+        )
+        self.assertEqual(
+            valid["named_new_key"]["credential_slots"],
+            [
+                "/model/settings/extra_body/api_key",
+                "/model/settings/extra_headers/authorization",
+            ],
+        )
+        self.assertEqual(
+            {
+                case["error_code"]
+                for case in fixture["invalid_cases"]
+                if case["name"].startswith("credential_slot")
+            },
+            {"checkpoint_credential_slots_invalid"},
         )
         attempts = fixture["resume_attempt_rules"]
         self.assertEqual(attempts["successful_recovery_claim"], "previous_plus_one")
@@ -1087,6 +1104,10 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(fixture["resume_attempt_rules"]["checkpoint_store_is_authoritative"])
         self.assertEqual(envelope["claim_mode"], "recovery")
+        self.assertEqual(
+            envelope["checkpoint_config"]["credential_slots"],
+            ["/model/settings/extra_headers/authorization"],
+        )
         self.assertTrue(
             fixture["claim_mode_rules"]["transport_redelivery_metadata_promotes_continue_to_recovery"]
         )
@@ -1211,7 +1232,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.5.3/vv-agent-contract-0.5.3.zip"
+                    "v0.5.4/vv-agent-contract-0.5.4.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1237,7 +1258,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.3.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.4.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1275,7 +1296,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.3.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.4.zip",
                     snapshot_path="fixtures",
                 )
             )

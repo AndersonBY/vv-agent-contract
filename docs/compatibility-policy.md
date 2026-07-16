@@ -159,6 +159,11 @@ also makes checkpoint outbox event identities unique. These are patch-level
 closures because no 0.5 version has reached verified adoption and the 0.5.0
 surface already required durable session, approval, and outbox behavior.
 
+Contract 0.5.4 exposes the missing `credential_slots` producer input already
+required by the 0.5.1 run-definition rules. Its empty default changes no
+existing request. The pending 0.5 capability must adopt 0.5.4 or later rather
+than inferring credential locations from key names.
+
 `reconciliation_required` is a resumable interruption, not a business failure
 or completion. It has no `completion_reason`. Public result fields are
 additive and null when checkpoint v2 is disabled; checkpoint v1 bytes remain

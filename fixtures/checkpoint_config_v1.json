@@ -8,6 +8,7 @@
     "ambiguous_tool_policy": "require_reconciliation",
     "required_extension_namespaces": [],
     "max_extension_state_bytes": 262144,
+    "credential_slots": [],
     "capability_refs": {}
   },
   "limits": {
@@ -64,6 +65,10 @@
           "com.example.state"
         ],
         "max_extension_state_bytes": 131072,
+        "credential_slots": [
+          "/model/settings/extra_body/api_key",
+          "/model/settings/extra_headers/authorization"
+        ],
         "capability_refs": {
           "reconciliation_provider": {
             "id": "reconcile.local",
@@ -242,6 +247,36 @@
         "max_extension_state_bytes": 9007199254740992
       },
       "error_code": "checkpoint_extension_limit_invalid"
+    },
+    {
+      "name": "credential_slots_not_sorted_unique",
+      "config": {
+        "key": "x",
+        "resume_policy": "new",
+        "store": {
+          "kind": "in_memory"
+        },
+        "credential_slots": [
+          "/model/settings/extra_headers/authorization",
+          "/model/settings/extra_body/api_key",
+          "/model/settings/extra_body/api_key"
+        ]
+      },
+      "error_code": "checkpoint_credential_slots_invalid"
+    },
+    {
+      "name": "credential_slot_invalid_pointer",
+      "config": {
+        "key": "x",
+        "resume_policy": "new",
+        "store": {
+          "kind": "in_memory"
+        },
+        "credential_slots": [
+          "/model/settings/extra_body/a~2b"
+        ]
+      },
+      "error_code": "checkpoint_credential_slots_invalid"
     },
     {
       "name": "invalid_capability_reference",

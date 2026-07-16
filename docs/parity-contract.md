@@ -409,12 +409,12 @@ Statuses are evidence-based:
 | RunEvent and EventStore | verified | Synthetic fixtures and real producer traces pass |
 | Tool orchestrator | verified | Policy, approval, timeout, exposure, and envelope tests pass |
 | Distributed runtime v1 | verified | Contract 0.3.6 lease lifecycle is adopted by both implementations and passed the locked cross-repository full gate |
-| Durable checkpoint/resume v2 | pending-adoption | Contract 0.5.3 closes terminal outbox ordering, append-once session persistence, approval-resume journal seeding, and unique outbox identities on top of the 0.5.2 claimed-finalize and delivery-CAS store surface; paired implementation adoption is pending |
+| Durable checkpoint/resume v2 | pending-adoption | Contract 0.5.4 adds the missing explicit credential-slot producer input after 0.5.3 closed terminal outbox ordering, append-once session persistence, approval-resume journal seeding, and unique outbox identities; paired implementation adoption is pending |
 | Memory and compaction | verified | Provider, PTL, lifecycle, local, and artifact tests pass |
 | Guardrails, hooks, results, and tracing | verified | Public lifecycle and failure-path tests pass |
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
 | Runner/RunConfig and CLI | verified | Public facade, all controls, defaults, and CLI inventory pass |
-| App Server | in-progress | Existing operations remain verified; the 16th `turn/resume` operation introduced by 0.5.0 and closed through the 0.5.3 durable lifecycle is pending paired adoption |
+| App Server | in-progress | Existing operations remain verified; the 16th `turn/resume` operation introduced by 0.5.0 and closed through the 0.5.4 durable lifecycle is pending paired adoption |
 | Run budgets | verified | Contract 0.4.1 is adopted by both implementations and passed the central cross-repository full gate |
 
 ### Imported Local Verification Record (2026-07-13)

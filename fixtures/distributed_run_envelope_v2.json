@@ -206,7 +206,10 @@
       "required_extension_namespaces": [
         "com.example.audit"
       ],
-      "max_extension_state_bytes": 262144
+      "max_extension_state_bytes": 262144,
+      "credential_slots": [
+        "/model/settings/extra_headers/authorization"
+      ]
     }
   },
   "invalid_cases": [

@@ -3,6 +3,20 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.4 - 2026-07-16
+
+- Add `CheckpointConfig.credential_slots`, a sorted unique list of RFC 6901
+  JSON Pointers into the unredacted run definition. This is the executable host
+  declaration required before credential values can be replaced and the run
+  definition can be canonicalized.
+- Keep the default empty and preserve disabled checkpoint behavior. Providers
+  may contribute their declared slots, but implementations must merge and
+  validate the complete effective list instead of guessing secrets from key
+  names.
+- Preserve all 0.5.3 checkpoint and journal wire fields. This patch closes the
+  last missing public producer input found before the 0.5 capability's first
+  paired adoption.
+
 ## 0.5.3 - 2026-07-16
 
 - Correct the checkpoint terminal order so the terminal event is first staged

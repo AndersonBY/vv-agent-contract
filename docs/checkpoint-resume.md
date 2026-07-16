@@ -56,6 +56,8 @@ the v2 checkpoint key and run identity. An active v1 claim cannot be migrated.
   namespaces;
 - `max_extension_state_bytes`: an integer in `0..9007199254740991`, defaulting
   to 262144 bytes;
+- `credential_slots`: sorted unique RFC 6901 JSON Pointers into the unredacted
+  run definition, defaulting to an empty list;
 - `capability_refs`: explicit stable `{id, version}` references keyed by
   canonical behavior slot names such as `reconciliation_provider` or
   `runtime_hook:0`.
@@ -163,8 +165,10 @@ remain outside the digest because they do not control the run. A missing stable
 reference fails with `checkpoint_definition_unstable` before external work.
 
 Credential values do not enter the definition. Providers or hosts declare a
-sorted, unique list of RFC 6901 JSON Pointer `credential_slots`; only values at
-those exact paths are replaced with `<credential-redacted>`. Header names are
+sorted, unique list of RFC 6901 JSON Pointer `credential_slots`; host entries
+come from `CheckpointConfig.credential_slots` and provider-declared entries are
+merged before validation. Only values at those exact paths are replaced with
+`<credential-redacted>`. Header names are
 ASCII-lowercased, but non-credential values such as feature flags remain in the
 definition. Credential rotation therefore preserves the digest while a
 semantic header or body change does not. An unclassified sensitive provider

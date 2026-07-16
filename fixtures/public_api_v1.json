@@ -121,6 +121,11 @@
           "rust": "vv_agent::CheckpointConfig::capability_refs"
         },
         {
+          "id": "checkpoint_config.credential_slots",
+          "python": "vv_agent.CheckpointConfig.credential_slots",
+          "rust": "vv_agent::CheckpointConfig::credential_slots"
+        },
+        {
           "id": "run_config.checkpoint_extension",
           "python": "vv_agent.CheckpointExtension",
           "rust": "vv_agent::CheckpointExtension"
