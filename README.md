@@ -36,3 +36,5 @@ implementation revisions and the central cross-repository run are recorded.
 
 See `docs/change-workflow.md` for the complete workflow.
 The optional resource budget semantics are defined in `docs/run-budgets.md`.
+The opt-in durable-resume and explicit-ambiguity semantics are defined in
+`docs/checkpoint-resume.md`.

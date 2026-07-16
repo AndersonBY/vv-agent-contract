@@ -116,6 +116,35 @@ cannot fit the already declared JSON-safe range and may fix sampling/order
 wording without changing the limit fields or default behavior. Implementations
 adopt the latest immutable patch before marking the 0.4 capability verified.
 
+## 0.5 Durable Resume Compatibility
+
+Contract `0.5.x` adds checkpoint v2 only when a `CheckpointConfig` is
+supplied. Omitting it preserves checkpoint v1, Runner, event, terminal, and
+App Server behavior. V2 uses an independent SQLite table and Redis key
+namespace; an older binary therefore cannot overwrite an enabled v2 run.
+
+An absent checkpoint schema discriminator continues to mean v1. A present
+unknown discriminator is rejected and never retried as v1. A v1 non-terminal
+record cannot be migrated automatically because it cannot prove that no
+external operation ran after the last cycle commit. V1 terminal migration is
+explicit and replay-only.
+
+`reconciliation_required` is a resumable interruption, not a business failure
+or completion. It has no `completion_reason`. New result, event, and App
+Server checkpoint fields are additive and omitted when checkpoint v2 is
+disabled.
+
+Stable idempotency keys allow a cooperating tool or provider to deduplicate an
+effect. The framework does not infer idempotency from names or arguments and
+does not claim arbitrary exactly-once semantics. A committed receipt is
+replayed; a started operation without a receipt becomes ambiguous and follows
+the explicit retry or reconciliation policy.
+
+Checkpoint lifecycle events are accepted once only through an
+`IdempotentRunEventStore`. Existing callbacks and ordinary event stores remain
+at-least-once. Terminal acknowledgement marks the v2 record acknowledged but
+does not delete it; retention cleanup is an explicit host operation.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

@@ -3,6 +3,25 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.0 - 2026-07-16
+
+- Add opt-in checkpoint v2 with stable checkpoint keys, run-definition
+  digests, explicit resume policies, independent SQLite/Redis namespaces, and
+  retained terminal replay.
+- Add model and tool operation journals with durable intent/receipt ordering,
+  stable tool idempotency keys, replay of committed receipts, and explicit
+  ambiguity when an external effect cannot be proven.
+- Add host checkpoint extensions, reconciliation decisions, cumulative budget
+  resume, event cursors, checkpoint outboxes, and idempotent event-store
+  delivery without claiming transactional callbacks or arbitrary exactly-once
+  external APIs.
+- Add `turn/resume` App Server projection and typed
+  `reconciliation_required` interruption behavior. Checkpoint v2 remains
+  disabled when no `CheckpointConfig` is supplied.
+- Preserve checkpoint v1 and distributed envelope v1 bytes and readers. The
+  0.5.0 capability is published as `pending-adoption` until both real
+  implementations and central cross-repository CI pass.
+
 ## 0.4.1 - 2026-07-16
 
 - Define JSON-safe cumulative arithmetic overflow as an unavailable metric

@@ -197,6 +197,7 @@ def validate_contract(root: Path) -> dict[str, Any]:
         root / "docs" / "change-workflow.md",
         root / "docs" / "compatibility-policy.md",
         root / "docs" / "run-budgets.md",
+        root / "docs" / "checkpoint-resume.md",
     ]
     missing_docs = [str(path.relative_to(root)) for path in required_docs if not path.is_file()]
     if missing_docs:

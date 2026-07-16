@@ -100,7 +100,9 @@
       "error",
       "tokenUsage",
       "budgetUsage",
-      "budgetExhaustion"
+      "budgetExhaustion",
+      "checkpoint",
+      "interruption"
     ],
     "completionReasonValues": [
       "tool_finish",
@@ -136,6 +138,15 @@
         "errorField": "present",
         "budgetUsageField": "present",
         "budgetExhaustionField": "present"
+      },
+      {
+        "name": "reconciliation_required_is_interrupted_without_error",
+        "agentStatus": "reconciliation_required",
+        "turnStatus": "interrupted",
+        "completionReason": null,
+        "errorField": "omitted",
+        "checkpointField": "present",
+        "interruptionField": "present"
       }
     ]
   },
@@ -174,6 +185,8 @@
       "ThreadReadResponse.json",
       "ThreadResumeResponse.json",
       "ThreadStartResponse.json",
+      "TurnResumeParams.json",
+      "TurnResumeResponse.json",
       "TurnStartResponse.json"
     ],
     "typescript": [
@@ -192,8 +205,33 @@
       "ThreadReadResponse.ts",
       "ThreadResumeResponse.ts",
       "ThreadStartResponse.ts",
+      "TurnResumeParams.ts",
+      "TurnResumeResponse.ts",
       "TurnStartResponse.ts"
     ],
     "typescriptSelfContained": true
+  },
+  "durableResume": {
+    "method": "turn/resume",
+    "requestFields": [
+      "threadId",
+      "turnId",
+      "checkpointKey"
+    ],
+    "response": "TurnResumeResponse",
+    "newInputAllowed": false,
+    "approvalResumeIsSeparate": true,
+    "reconciliationRequiredTurnStatus": "interrupted",
+    "sensitiveFieldsNeverProjected": [
+      "operationArguments",
+      "operationResponse",
+      "extensionState",
+      "idempotencyKey"
+    ],
+    "ordering": [
+      "response",
+      "thread/status/changed",
+      "turn/started"
+    ]
   }
 }
