@@ -43,6 +43,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("path: vv-agent\n", python_checkout)
         self.assertIn("path: vv-agent-rs\n", rust_checkout)
 
+    def test_cross_repository_gate_runs_bidirectional_sqlite_v2_probe(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+
+        self.assertIn("Verify cross-language SQLite checkpoint v2", workflow)
+        self.assertEqual(workflow.count("VV_AGENT_CROSS_RUNTIME_V2_MODE="), 4)
+        for mode in ("write_python", "read_python", "write_rust", "read_rust"):
+            self.assertIn(f"VV_AGENT_CROSS_RUNTIME_V2_MODE={mode}", workflow)
+
     def test_validate_workflow_supports_manual_dispatch(self) -> None:
         workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
 
