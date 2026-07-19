@@ -168,6 +168,12 @@ Contract 0.5.5 corrects a placeholder payload digest in the canonical
 checkpoint fixture. Implementations must adopt it so strict outbox-integrity
 validation can run against canonical bytes.
 
+Contract 0.5.6 closes an existing reasoning-history inconsistency. A non-empty
+private reasoning field already exists in the shared Message and session wire
+shape; the patch makes both runtimes retain it consistently and requires a
+provider-valid OpenAI-compatible projection when visible content is empty. It
+adds no task policy, retry policy, public control, or wire field.
+
 `reconciliation_required` is a resumable interruption, not a business failure
 or completion. It has no `completion_reason`. Public result fields are
 additive and null when checkpoint v2 is disabled; checkpoint v1 bytes remain

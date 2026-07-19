@@ -3,6 +3,18 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.5.6 - 2026-07-19
+
+- Define a non-empty `reasoning_content` value as valid runtime and resumable
+  assistant history even when visible content and tool calls are empty.
+- Require OpenAI-compatible adapters to project a reasoning-only assistant
+  with an explicit empty `content` string instead of omitting both content and
+  tool calls. Private reasoning is never promoted to visible assistant text.
+- Keep completely empty assistant turns removable and preserve the existing
+  task-agnostic no-tool policy, token accounting, and reasoning stream
+  telemetry. This patch closes a Python/Rust history and provider-wire
+  inconsistency found by the P1H live coding canary.
+
 ## 0.5.5 - 2026-07-16
 
 - Replace the last placeholder outbox payload digest in the canonical

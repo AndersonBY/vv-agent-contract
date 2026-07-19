@@ -60,10 +60,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.5.5")
+        self.assertEqual(report["version"], "0.5.6")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 47)
-        self.assertEqual(report["manifest_entries"], 46)
+        self.assertEqual(report["fixture_files"], 48)
+        self.assertEqual(report["manifest_entries"], 47)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -79,6 +79,41 @@ class ContractRepositoryTests(unittest.TestCase):
             metadata = json.loads(Path(first_report["release_metadata"]).read_text(encoding="utf-8"))
             self.assertEqual(metadata["contract_revision"], "a" * 40)
             self.assertEqual(metadata["artifact_sha256"], first_report["artifact_sha256"])
+
+    def test_reasoning_history_fixture_locks_valid_assistant_projection(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures" / "assistant_reasoning_history_v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(fixture["version"], 1)
+        self.assertTrue(fixture["rules"]["non_empty_reasoning_is_resumable_history"])
+        self.assertTrue(fixture["rules"]["fully_empty_assistant_turn_is_removed"])
+        self.assertTrue(
+            fixture["rules"][
+                "openai_compatible_reasoning_only_content_is_explicit_empty_string"
+            ]
+        )
+        cases = {case["name"]: case for case in fixture["cases"]}
+        reasoning_only = cases["reasoning_only_assistant_is_preserved"]
+        self.assertTrue(reasoning_only["expected"]["retain_in_resumable_history"])
+        self.assertEqual(
+            reasoning_only["expected"]["openai_compatible_projection"],
+            {
+                "role": "assistant",
+                "content": "",
+                "reasoning_content": "private reasoning chain",
+            },
+        )
+        self.assertFalse(
+            cases["fully_empty_assistant_is_removed"]["expected"]
+            ["retain_in_resumable_history"]
+        )
+        self.assertEqual(
+            fixture["runtime_case"]["expected"]
+            ["next_model_request_visible_content"],
+            "",
+        )
 
     def test_manifest_detects_fixture_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1240,7 +1275,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.5.5/vv-agent-contract-0.5.5.zip"
+                    "v0.5.6/vv-agent-contract-0.5.6.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1248,7 +1283,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 47)
+            self.assertEqual(synced["fixture_files"], 48)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -1266,7 +1301,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.5.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.6.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1304,7 +1339,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.5.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.5.6.zip",
                     snapshot_path="fixtures",
                 )
             )

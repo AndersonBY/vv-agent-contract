@@ -35,6 +35,16 @@ the calls. A mismatch ends the completed prefix; the mismatched and remaining
 calls/results are dropped. Empty ids, orphan results, and duplicate ids are not
 valid turns and are removed before resume.
 
+An assistant turn with non-empty private `reasoning_content` is valid runtime
+and resumable history even when its visible content and tool calls are empty.
+Compaction, session replay, checkpoint resume, and the next model request keep
+that reasoning field without copying it into visible content. A completely
+empty assistant turn with no visible content, no reasoning, and no tool calls
+is removed. For an OpenAI-compatible request, a reasoning-only assistant uses
+an explicit empty `content` string so the provider receives a structurally
+valid assistant message rather than a message with neither content nor tool
+calls. `assistant_reasoning_history_v1.json` locks these cases.
+
 Configured child metadata has framework-owned identity keys. Sub-agent config
 and request metadata cannot replace `is_sub_task`, parent/task/session/agent
 identity, session-memory policy, browser scope, workspace identity, run/trace
@@ -127,6 +137,12 @@ cycle. `wait_user` returns the assistant response as the wait reason. `finish`
 returns the assistant response as the final answer. None of these branches may
 classify the text, inspect task type, infer answer quality, add or remove a
 finish tool, or alter tool policy.
+
+A reasoning-only response still counts as a completed model cycle. Under
+`continue`, its reasoning turn remains in the next request, token and budget
+usage remain accounted, reasoning stream telemetry remains observable, and
+the normal continuation hint is appended. This is message-shape handling, not
+a task-specific retry or stop decision.
 
 Every terminal `AgentResult` has a typed `completion_reason`. The allowed
 values are `tool_finish`, `no_tool_finish`, `stop_on_first_tool`,
@@ -409,12 +425,12 @@ Statuses are evidence-based:
 | RunEvent and EventStore | verified | Synthetic fixtures and real producer traces pass |
 | Tool orchestrator | verified | Policy, approval, timeout, exposure, and envelope tests pass |
 | Distributed runtime v1 | verified | Contract 0.3.6 lease lifecycle is adopted by both implementations and passed the locked cross-repository full gate |
-| Durable checkpoint/resume v2 | pending-adoption | Contract 0.5.5 fixes the final canonical outbox digest after 0.5.4 added the missing explicit credential-slot producer input and 0.5.3 closed terminal/session/approval/outbox lifecycle gaps; paired implementation adoption is pending |
+| Durable checkpoint/resume v2 | verified | Contract 0.5.5 completed the canonical durable checkpoint fixture and paired implementation adoption |
 | Memory and compaction | verified | Provider, PTL, lifecycle, local, and artifact tests pass |
 | Guardrails, hooks, results, and tracing | verified | Public lifecycle and failure-path tests pass |
 | Interactive sessions | verified | Session lifecycle, queues, controls, persistence, and typed output pass |
 | Runner/RunConfig and CLI | verified | Public facade, all controls, defaults, and CLI inventory pass |
-| App Server | in-progress | Existing operations remain verified; the 16th `turn/resume` operation introduced by 0.5.0 and closed through the 0.5.5 durable lifecycle is pending paired adoption |
+| App Server | verified | Existing operations and the 16th `turn/resume` operation are covered by the verified 0.5.5 durable lifecycle |
 | Run budgets | verified | Contract 0.4.1 is adopted by both implementations and passed the central cross-repository full gate |
 
 ### Imported Local Verification Record (2026-07-13)
