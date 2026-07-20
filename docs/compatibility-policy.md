@@ -273,6 +273,14 @@ App Server intentionally emits no item notification for planning. Existing
 started/completed items receive only additive fields. An application that does
 not consume the new fields observes the same item lifecycle as before.
 
+Contract `0.8.0` did not reach verified adoption. Contract `0.8.1` closes a
+producer-entry inconsistency in that pending capability by adding the four
+already-declared metadata-denial fields directly to public `SubAgentConfig`.
+Their empty/false defaults preserve existing configured-child behavior, while
+non-default values make the already-required child-only tightening executable
+without interpreting generic metadata. Implementations must adopt `0.8.1` or a
+later compatible patch; `0.8.0` remains immutable and unsupported.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

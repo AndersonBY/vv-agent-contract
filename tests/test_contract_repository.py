@@ -61,7 +61,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.8.0")
+        self.assertEqual(report["version"], "0.8.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 52)
         self.assertEqual(report["manifest_entries"], 51)
@@ -465,9 +465,13 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertTrue(reader_case["expected"]["stored_digest_unchanged"])
 
     def test_metadata_denials_propagate_to_children_and_distributed_workers(self) -> None:
-        child = json.loads(
+        child_fixture = json.loads(
             (ROOT / "fixtures/configured_sub_agent_v1.json").read_text(encoding="utf-8")
-        )["tool_policy_projection"]
+        )
+        child = child_fixture["tool_policy_projection"]
+        public_child = json.loads(
+            (ROOT / "fixtures/public_configured_sub_agent_v1.json").read_text(encoding="utf-8")
+        )
         handoff = json.loads(
             (ROOT / "fixtures/handoff_contract_v1.json").read_text(encoding="utf-8")
         )["tool_policy_projection"]
@@ -482,6 +486,40 @@ class ContractRepositoryTests(unittest.TestCase):
             "denied_cost_dimensions",
         ):
             self.assertIn(field, child["inherited"])
+        self.assertEqual(
+            {
+                field: child_fixture["validation"]["wire_defaults"][field]
+                for field in (
+                    "denied_side_effects",
+                    "denied_capability_tags",
+                    "deny_terminal_tools",
+                    "denied_cost_dimensions",
+                )
+            },
+            {
+                "denied_side_effects": [],
+                "denied_capability_tags": [],
+                "deny_terminal_tools": False,
+                "denied_cost_dimensions": [],
+            },
+        )
+        researcher = public_child["normalization"]["raw_entries"][0]["config"]
+        self.assertEqual(
+            child["metadata_denial_merge_case"]["child"],
+            {
+                field: researcher[field]
+                for field in (
+                    "denied_side_effects",
+                    "denied_capability_tags",
+                    "deny_terminal_tools",
+                    "denied_cost_dimensions",
+                )
+            },
+        )
+        self.assertEqual(
+            public_child["normalization"]["retained_researcher_config"],
+            researcher,
+        )
         self.assertEqual(
             child["metadata_denial_merge_case"]["enforced_at"],
             ["schema_planner", "executor"],
@@ -736,7 +774,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 150)
+        self.assertEqual(len(capabilities), 151)
+        self.assertIn("agent.sub_agent_config", capabilities)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
         self.assertIn("checkpoint_config.credential_slots", capabilities)
 
@@ -747,7 +786,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 243)
+        self.assertEqual(surface_member_count, 254)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -782,6 +821,22 @@ class ContractRepositoryTests(unittest.TestCase):
                 "disallowed_tools",
                 "approval",
                 "can_use_tool",
+                "denied_side_effects",
+                "denied_capability_tags",
+                "deny_terminal_tools",
+                "denied_cost_dimensions",
+            },
+        )
+        self.assertEqual(
+            {member["id"] for member in surfaces["sub_agent_config"]["members"]},
+            {
+                "model",
+                "description",
+                "backend",
+                "system_prompt",
+                "max_cycles",
+                "exclude_tools",
+                "metadata",
                 "denied_side_effects",
                 "denied_capability_tags",
                 "deny_terminal_tools",
@@ -1658,7 +1713,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.8.0/vv-agent-contract-0.8.0.zip"
+                    "v0.8.1/vv-agent-contract-0.8.1.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1684,7 +1739,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.8.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.8.1.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1722,7 +1777,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.8.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.8.1.zip",
                     snapshot_path="fixtures",
                 )
             )

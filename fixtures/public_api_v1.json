@@ -9,6 +9,11 @@
           "rust": "vv_agent::Agent"
         },
         {
+          "id": "agent.sub_agent_config",
+          "python": "vv_agent.SubAgentConfig",
+          "rust": "vv_agent::SubAgentConfig"
+        },
+        {
           "id": "agent.run_context",
           "python": "vv_agent.RunContext",
           "rust": "vv_agent::RunContext"
@@ -1160,6 +1165,156 @@
       ],
       "python_target": "vv_agent.Agent",
       "rust_target": "vv_agent::Agent"
+    },
+    {
+      "id": "sub_agent_config",
+      "members": [
+        {
+          "id": "model",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "model"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "model"
+          }
+        },
+        {
+          "id": "description",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "description"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "description"
+          }
+        },
+        {
+          "id": "backend",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "backend"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "backend"
+          }
+        },
+        {
+          "id": "system_prompt",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "system_prompt"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "system_prompt"
+          }
+        },
+        {
+          "id": "max_cycles",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "max_cycles"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "max_cycles"
+          }
+        },
+        {
+          "id": "exclude_tools",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "exclude_tools"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "exclude_tools"
+          }
+        },
+        {
+          "id": "metadata",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "metadata"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "metadata"
+          }
+        },
+        {
+          "id": "denied_side_effects",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "denied_side_effects"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "denied_side_effects"
+          }
+        },
+        {
+          "id": "denied_capability_tags",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "denied_capability_tags"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "denied_capability_tags"
+          }
+        },
+        {
+          "id": "deny_terminal_tools",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "deny_terminal_tools"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "deny_terminal_tools"
+          }
+        },
+        {
+          "id": "denied_cost_dimensions",
+          "kind": "field",
+          "python": {
+            "declaration": "dataclass_field",
+            "kind": "field",
+            "name": "denied_cost_dimensions"
+          },
+          "rust": {
+            "kind": "field",
+            "name": "denied_cost_dimensions"
+          }
+        }
+      ],
+      "python_target": "vv_agent.SubAgentConfig",
+      "rust_target": "vv_agent::SubAgentConfig"
     },
     {
       "id": "runner",

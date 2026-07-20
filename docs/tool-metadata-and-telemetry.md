@@ -83,6 +83,13 @@ Both schema planning and executor dispatch enforce the resulting policy.
 Distributed execution serializes the already effective policy rather than
 creating a new permission layer.
 
+`SubAgentConfig` exposes the same four denial fields explicitly. Their defaults
+are empty lists and `false`, and their values use the same normalization and
+validation rules as `ToolPolicy`. A configured child's fields are unioned with
+the effective parent policy, while `deny_terminal_tools` uses logical OR.
+Generic sub-agent `metadata` is never inspected for policy declarations. This
+keeps policy narrowing typed, host-controlled, and independent from task text.
+
 The new checks are logically ANDed with existing allowed names, denied names,
 argument predicates, approval, planned-name, budget, and runtime checks. They
 never add a tool or bypass an existing check. Existing denial precedence is

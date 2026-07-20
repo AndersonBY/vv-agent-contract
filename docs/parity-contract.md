@@ -609,7 +609,11 @@ Configured `AgentTask.sub_agents` execution follows one shared contract:
   boundary in both languages.
 - Wire decoding applies the same validation and defaults in both languages.
   Non-string optional strings, negative cycle counts, non-list exclusions, and
-  non-object metadata are rejected at the wire boundary.
+  non-object metadata are rejected at the wire boundary. The explicit
+  `denied_side_effects`, `denied_capability_tags`, `deny_terminal_tools`, and
+  `denied_cost_dimensions` fields use the same closed-enum, collection, and
+  boolean validation as `ToolPolicy`; absent fields decode as empty lists and
+  `false`. Generic `metadata` never supplies these declarations.
   A blank or whitespace-only backend is treated as unspecified before provider
   or settings-file resolution. Resolved metadata omits `endpoint` when no real
   endpoint exists; it never emits an empty endpoint placeholder.
@@ -632,9 +636,11 @@ Configured `AgentTask.sub_agents` execution follows one shared contract:
   available/active skills propagate to the child. Parent tool policy is also a
   framework-owned capability: allowed/disallowed names, argument predicates,
   approval mode, side-effect denials, terminal denial, capability-tag denials,
-  and cost-dimension denials propagate to the child, which may tighten but
-  never loosen them. Agent-as-tool and handoff targets follow the same
-  cumulative metadata-denial rule. Approval modes are `default`, `always`,
+  and cost-dimension denials propagate to the child. A configured child may
+  add denials only through its four typed `SubAgentConfig` fields; list values
+  form a set union with the parent and the terminal boolean uses logical OR, so
+  the child can tighten but never loosen policy. Agent-as-tool and handoff
+  targets follow the same cumulative metadata-denial rule. Approval modes are `default`, `always`,
   `never`, and `on_request`.
   `default` is the unset merge sentinel; `on_request` is an explicit override
   that follows each tool's static or dynamic approval declaration. `always`

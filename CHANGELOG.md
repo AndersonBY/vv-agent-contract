@@ -3,6 +3,15 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.8.1 - 2026-07-20
+
+- Add explicit metadata-denial fields to configured `SubAgentConfig` values so
+  a child can tighten inherited tool policy without promoting generic metadata
+  or relying on language-specific hidden keys.
+- Freeze the new fields in configured-sub-agent wire and public API fixtures,
+  including empty/false defaults and the parent-union/child-union producer
+  path. Contract 0.8.0 remains immutable and was not adopted by either runtime.
+
 ## 0.8.0 - 2026-07-20
 
 - Add optional, closed `ToolMetadata` declarations for coarse side-effect
