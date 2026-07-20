@@ -281,6 +281,13 @@ non-default values make the already-required child-only tightening executable
 without interpreting generic metadata. Implementations must adopt `0.8.1` or a
 later compatible patch; `0.8.0` remains immutable and unsupported.
 
+Contract `0.9.0` introduces the optional output-validation extension. It is a
+new capability line and therefore starts as `pending-adoption`; the default
+runtime behavior remains unchanged until a host explicitly enables a typed
+validator. The at-most-once repair callback is tools-free and cannot add task
+semantics or permissions. Both implementations must pass the canonical
+producer cases before the support matrix can become `verified`.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

@@ -70,10 +70,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.8.1")
+        self.assertEqual(report["version"], "0.9.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 52)
-        self.assertEqual(report["manifest_entries"], 51)
+        self.assertEqual(report["fixture_files"], 53)
+        self.assertEqual(report["manifest_entries"], 52)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -432,6 +432,32 @@ class ContractRepositoryTests(unittest.TestCase):
                 "tool_completed_not_started_cannot_have_duration",
             }.issubset(rejected)
         )
+
+    def test_output_validation_contract_is_opt_in_tools_free_and_bounded(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/output_validation_v1.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(fixture["schema_version"], "vv-agent.output-validation.v1")
+        self.assertFalse(fixture["defaults"]["enabled"])
+        self.assertEqual(fixture["defaults"]["max_repairs"], 1)
+        self.assertTrue(fixture["repair"]["tools_are_always_empty"])
+        self.assertTrue(fixture["repair"]["model_and_settings_are_independent_from_primary_run"])
+        self.assertTrue(fixture["repair"]["framework_does_not_classify_task_or_rewrite_business_answer"])
+        self.assertEqual(fixture["repair"]["maximum_attempts"], 1)
+        self.assertTrue(fixture["terminal_rules"]["disabled_preserves_trace_and_terminal_observation"])
+        self.assertTrue(fixture["terminal_rules"]["repair_success_revalidates_before_success"])
+
+        cases = {case["name"]: case for case in fixture["runner_cases"]}
+        self.assertEqual(cases["disabled"]["expected"]["validator_calls"], 0)
+        self.assertEqual(cases["one_repair_then_valid"]["expected"]["repair_calls"], 1)
+        self.assertFalse(cases["repair_result_still_invalid"]["expected"]["second_repair_attempted"])
+        self.assertEqual(
+            cases["repair_provider_failure"]["expected"]["error_code"],
+            "output_validation_failed",
+        )
+        self.assertIn("task_category", fixture["task_independence"]["forbidden_framework_fields"])
+        self.assertTrue(fixture["task_independence"]["prompt_and_tool_schema_unchanged"])
 
     def test_legacy_run_definition_defaults_compare_without_rewriting_evidence(self) -> None:
         legacy = json.loads(
@@ -1722,7 +1748,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.8.1/vv-agent-contract-0.8.1.zip"
+                    "v0.9.0/vv-agent-contract-0.9.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1730,7 +1756,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 52)
+            self.assertEqual(synced["fixture_files"], 53)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -1748,7 +1774,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.8.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.9.0.zip",
                     snapshot_path="fixtures",
                 )
             )

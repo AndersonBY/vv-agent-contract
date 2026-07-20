@@ -487,6 +487,15 @@ state for the current contract version is authoritative in
 `support-matrix.json`. While that file is `pending-adoption`, affected rows are
 still in progress even when the baseline row below says `verified`.
 
+## Optional output validation
+
+Contract `0.9.0` defines an explicitly enabled host extension for validating a
+terminal output and making at most one tools-free repair request. The extension
+is task-neutral and default-off; see `docs/output-validation.md` and the
+canonical `fixtures/output_validation_v1.json` for the producer cases. A
+runtime must not report the 0.9 capability as adopted until both language
+producers and the central cross-repository gate pass.
+
 - `focused-pass`: the current domain tests and canonical evidence pass, but the
   final full-repository gate and independent re-audit are still pending.
 - `in-progress`: implementation or real-producer evidence is incomplete.

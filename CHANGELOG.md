@@ -3,6 +3,16 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.9.0 - 2026-07-20
+
+- Add an opt-in host output validator and at-most-once repair callback.
+- Keep repair model/configuration independent from the primary run and force
+  the repair request's tool collection to be empty.
+- Define typed validation failure, revalidation, provider-failure, and second
+  repair blocking behavior without task-category or answer-semantic fields.
+- Preserve disabled-by-default runtime behavior and require producer evidence
+  in both implementations before adoption can be marked verified.
+
 ## 0.8.1 - 2026-07-20
 
 - Add explicit metadata-denial fields to configured `SubAgentConfig` values so
