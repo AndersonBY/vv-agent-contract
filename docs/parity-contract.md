@@ -309,6 +309,30 @@ Budget snapshots resume from their durable cumulative values. Active elapsed
 time does not reset, while process downtime, queueing, approvals, and
 reconciliation waits are not invented as active execution time.
 
+## Task-Neutral After-Cycle Lifecycle Hooks
+
+`after_cycle_hook_v1.json` and `docs/after-cycle-lifecycle.md` define the
+optional lifecycle extension. The callback observes one finalized cycle before
+native completion projection and checkpoint commit. Its copied/immutable
+snapshot includes cycle data, messages, shared state, cumulative usage,
+remaining cycles, next-cycle tool visibility, and the native outcome candidate;
+it contains no task category, research/coding phase, milestone, confidence, or
+lease-policy field.
+
+The closed actions are `continue`, `steer`, and `stop_non_success`. Steering is
+inserted only as bounded next-cycle user messages. Tool changes only add exact
+names to a cumulative deny set enforced at both planning and dispatch. Hooks
+cannot add permissions, remove denials, alter approval policy, or directly
+produce completed/waiting results. An impossible steer, invalid decision, or
+hook failure fails closed.
+
+No configured hook is an exact no-op. Stateful hooks pair with the existing
+checkpoint-extension protocol; framework denial state survives in the closed
+`_vv_agent_after_cycle_control` shared-state entry. Distributed v2 resolves
+`after_cycle_hook_refs` before claim and pins each reference in the run
+definition. See the dedicated document for ordering, limits, durability, and
+allowed language adaptations.
+
 ## Contract Surfaces
 
 The following surfaces are cross-language contracts:

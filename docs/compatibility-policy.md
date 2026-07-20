@@ -190,6 +190,32 @@ Checkpoint lifecycle events are accepted once only through an
 at-least-once. Terminal acknowledgement marks the v2 record acknowledged but
 does not delete it; retention cleanup is an explicit host operation.
 
+## 0.6 After-Cycle Lifecycle Compatibility
+
+Contract `0.6.x` adds after-cycle hooks only when a Runner default or per-run
+hook is explicitly supplied. With no configured hook, runtimes do not invoke a
+callback, create lifecycle control state, emit lifecycle logs, alter tool
+policy, replace the existing continuation hint, or change native terminal
+projection.
+
+Hook decisions are a closed additive control surface. They can append bounded
+user steering for a next cycle, add exact tool names to an effective deny set,
+or stop with the existing failed status/reason. They cannot return completed or
+waiting, expand permissions, remove a denial, change approval policy, or
+override cancellation, budget exhaustion, execution failure, wait-for-user,
+or max-cycles boundaries.
+
+The reserved `_vv_agent_after_cycle_control` shared-state value is absent until
+a hook first narrows permissions. Readers that do not know the key already
+preserve unknown shared state. Checkpoint v1/v2 therefore retain the deny set
+without changing their wire schemas. Stateful host logic uses the existing
+checkpoint-extension protocol and its version/size/required-state rules.
+
+Distributed v2 adds `after_cycle_hook_refs` to the existing capabilities
+object. Distributed v1 rejects the field as a v2-only capability. Missing
+references fail during capability resolution before a claim or external
+operation. Existing envelopes without the field decode to an empty list.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

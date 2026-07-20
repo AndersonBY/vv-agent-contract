@@ -3,6 +3,21 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.6.0 - 2026-07-20
+
+- Add an opt-in, typed after-cycle lifecycle hook with closed `continue`,
+  `steer`, and `stop_non_success` decisions.
+- Allow next-cycle user steering and monotonic tool denials without permitting
+  hooks to expand permissions or fabricate a successful/waiting terminal.
+- Define immutable snapshots, deterministic multi-hook composition, bounded
+  inputs, fail-closed invalid decisions, and terminal precedence without task
+  category or domain milestone fields.
+- Persist cumulative tool denials across checkpoint v1/v2 and pair stateful
+  hooks with the existing versioned checkpoint-extension state protocol.
+- Add distributed after-cycle capability references resolved before claim and
+  pinned in the immutable run definition. The capability remains
+  `pending-adoption` until both implementations and cross-repository CI pass.
+
 ## 0.5.6 - 2026-07-19
 
 - Define a non-empty `reasoning_content` value as valid runtime and resumable

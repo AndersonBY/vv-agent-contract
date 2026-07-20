@@ -60,10 +60,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.5.6")
+        self.assertEqual(report["version"], "0.6.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 48)
-        self.assertEqual(report["manifest_entries"], 47)
+        self.assertEqual(report["fixture_files"], 49)
+        self.assertEqual(report["manifest_entries"], 48)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -170,6 +170,43 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.token_usage",
                 "result.task_token_usage",
             }.issubset(capabilities)
+        )
+
+    def test_after_cycle_contract_is_closed_task_neutral_and_non_success_only(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/after_cycle_hook_v1.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(fixture["schema_version"], "vv-agent.after-cycle-hook.v1")
+        self.assertEqual(
+            fixture["decision"]["action_values"],
+            ["continue", "steer", "stop_non_success"],
+        )
+        self.assertTrue(
+            fixture["decision"]["rules"]["completed_status_cannot_be_returned_by_hook"]
+        )
+        self.assertTrue(
+            fixture["decision"]["rules"]["permission_expansion_fields_do_not_exist"]
+        )
+        self.assertEqual(
+            fixture["permission_state"]["reserved_shared_state_key"],
+            "_vv_agent_after_cycle_control",
+        )
+        self.assertTrue(fixture["distributed"]["resolved_before_claim"])
+        self.assertFalse(
+            set(fixture["snapshot"]["task_domain_fields_forbidden"])
+            & set(fixture["snapshot"]["required_fields"])
+        )
+        cases = {case["name"]: case for case in fixture["runner_cases"]}
+        self.assertEqual(cases["stop_cannot_be_projected_as_success"]["expected"]["status"], "failed")
+        self.assertEqual(
+            cases["steer_at_max_cycles_fails_closed"]["expected"]["error_code"],
+            "after_cycle_steer_unavailable",
+        )
+        invalid = {case["name"]: case for case in fixture["invalid_decisions"]}
+        self.assertIn("permission_expansion_field", invalid)
+        self.assertTrue(
+            all(case["error_code"] == "after_cycle_decision_invalid" for case in invalid.values())
         )
 
     def test_run_budget_contract_locks_bounds_dimensions_and_defaults(self) -> None:
@@ -411,7 +448,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 141)
+        self.assertEqual(len(capabilities), 147)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
         self.assertIn("checkpoint_config.credential_slots", capabilities)
 
@@ -422,7 +459,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 228)
+        self.assertEqual(surface_member_count, 229)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -434,6 +471,10 @@ class ContractRepositoryTests(unittest.TestCase):
             {"budget_limits", "host_cost_meter"}.issubset(
                 {member["id"] for member in surfaces["run_config"]["members"]}
             )
+        )
+        self.assertIn(
+            "after_cycle_hooks",
+            {member["id"] for member in surfaces["run_config"]["members"]},
         )
         self.assertTrue(
             {"budget_usage", "budget_exhaustion"}.issubset(
@@ -1138,7 +1179,12 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v2")
         self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v1")
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
+        self.assertEqual(
+            capabilities["after_cycle_hook_refs"],
+            [{"id": "lifecycle.policy", "version": "1"}],
+        )
         self.assertEqual(fixture["worker_rules"]["apalis_blocking_runtime"], "tokio_spawn_blocking")
+        self.assertTrue(fixture["worker_rules"]["after_cycle_hook_resolution_before_claim"])
         self.assertTrue(fixture["worker_rules"]["heartbeat_cannot_overwrite_journal"])
         self.assertTrue(fixture["worker_rules"]["reconciliation_provider_is_optional"])
         self.assertEqual(
@@ -1275,7 +1321,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.5.6/vv-agent-contract-0.5.6.zip"
+                    "v0.6.0/vv-agent-contract-0.6.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1283,7 +1329,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 48)
+            self.assertEqual(synced["fixture_files"], 49)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -1301,7 +1347,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.6.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.6.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1339,7 +1385,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.5.6.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.6.0.zip",
                     snapshot_path="fixtures",
                 )
             )
