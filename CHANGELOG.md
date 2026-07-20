@@ -3,6 +3,31 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.8.0 - 2026-07-20
+
+- Add optional, closed `ToolMetadata` declarations for coarse side-effect
+  class, idempotency, terminal capability, opaque capability tags, and opaque
+  cost dimensions. Typed metadata remains host-visible and is never added to
+  the model tool schema or inferred from generic metadata, names, or arguments.
+- Add cumulative metadata denial fields to `ToolPolicy`. Every new field can
+  only narrow existing name, argument, approval, and runtime policy; missing
+  tool metadata preserves existing behavior.
+- Add `tool_call_planned` and enrich executor `tool_call_started` /
+  `tool_call_completed` events with normalized metadata and typed outcome
+  telemetry. Planning is distinct from execution and is never projected by
+  App Server as a started item.
+- Freeze effective typed metadata and metadata denials in checkpoint v2 run
+  definitions while retaining legacy checkpoint readers and the public
+  `idempotency` alias. Exact 0.7.1 definitions and digests remain immutable;
+  additive defaults are used only in a comparison copy during resume.
+- Propagate metadata denials monotonically through configured sub-agents,
+  agent-as-tool runs, handoffs, and distributed workers; metadata-only drift
+  fails before claim.
+- Freeze complete App Server started/completed JSON-RPC projections and the
+  required/null rules for 0.8 completed events.
+- Keep tool schemas, prompts, default policy, completion, budgets, approvals,
+  and task-domain behavior unchanged when the capability is not declared.
+
 ## 0.7.1 - 2026-07-20
 
 - Declare `content_delta` and `delta` as equivalent accepted source fields for

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -60,10 +61,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.7.1")
+        self.assertEqual(report["version"], "0.8.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 50)
-        self.assertEqual(report["manifest_entries"], 49)
+        self.assertEqual(report["fixture_files"], 52)
+        self.assertEqual(report["manifest_entries"], 51)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -317,6 +318,213 @@ class ContractRepositoryTests(unittest.TestCase):
             }.issubset(rejected)
         )
 
+    def test_tool_metadata_contract_is_closed_task_neutral_and_observable(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/tool_metadata_v1.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(fixture["schema_version"], "vv-agent.tool-metadata.v1")
+        metadata = fixture["metadata_contract"]
+        self.assertEqual(
+            metadata["closed_fields"],
+            [
+                "side_effect",
+                "idempotency",
+                "terminal",
+                "capability_tags",
+                "cost_dimensions",
+            ],
+        )
+        self.assertFalse(metadata["model_visible"])
+        self.assertTrue(metadata["generic_metadata_is_not_a_declaration"])
+        self.assertTrue(metadata["absent_metadata_preserves_legacy_behavior"])
+        self.assertEqual(
+            fixture["collection_normalization"]["portable_whitespace_code_points"],
+            ["U+0009", "U+000A", "U+000D", "U+0020"],
+        )
+
+        normalized = fixture["normalization_cases"][0]["expected"]
+        self.assertEqual(normalized["capability_tags"], ["filesystem.read", "source.inspect"])
+        self.assertEqual(
+            normalized["cost_dimensions"],
+            ["host.cpu_ms", "workspace.bytes_read"],
+        )
+        invalid_names = {case["name"] for case in fixture["invalid_cases"]}
+        self.assertIn("unknown_field", invalid_names)
+        self.assertTrue(fixture["legacy_idempotency"]["public_alias_remains_supported"])
+        self.assertEqual(
+            fixture["legacy_idempotency"]["conflicting_non_unknown_values"],
+            "reject",
+        )
+        alias_cases = {
+            case["name"]: case for case in fixture["legacy_idempotency"]["cases"]
+        }
+        self.assertEqual(len(alias_cases), 5)
+        self.assertEqual(
+            alias_cases["typed_unknown_inherits_legacy"]["expected_effective"],
+            "supported",
+        )
+        self.assertFalse(alias_cases["conflicting_non_unknown_values_fail_closed"]["valid"])
+        self.assertTrue(fixture["legacy_idempotency"]["normalization_is_idempotent"])
+        self.assertTrue(fixture["public_construction"]["generic_metadata_remains_separate"])
+
+        policy = fixture["policy_contract"]
+        self.assertFalse(policy["can_expand_permissions"])
+        self.assertFalse(policy["can_infer_from_tool_name_or_arguments"])
+        self.assertEqual(policy["list_merge"], "set_union_then_utf16_sort")
+        self.assertIn("parent_effective_policy", policy["layers"])
+        self.assertEqual(policy["enforcement_points"], ["schema_planner", "executor"])
+        policy_cases = {case["name"]: case for case in fixture["policy_cases"]}
+        self.assertTrue(policy_cases["missing_metadata_preserves_behavior"]["allowed"])
+        self.assertFalse(policy_cases["declared_side_effect_is_denied"]["allowed"])
+
+        telemetry = fixture["telemetry_contract"]
+        self.assertEqual(
+            telemetry["event_order"],
+            [
+                "tool_call_planned",
+                "approval_if_required",
+                "tool_call_started_if_execution_begins",
+                "tool_call_completed_when_a_result_exists",
+            ],
+        )
+        self.assertFalse(telemetry["telemetry_changes_runtime_decisions"])
+        producer_cases = {case["name"]: case for case in fixture["producer_cases"]}
+        self.assertEqual(
+            producer_cases["metadata_policy_denial_has_no_execution_start"][
+                "expected_event_types"
+            ],
+            ["tool_call_planned", "tool_call_completed"],
+        )
+        self.assertEqual(fixture["app_server_projection"]["tool_call_planned"], "no_notification")
+        self.assertTrue(fixture["checkpoint_v2"]["policy_fields_are_frozen"])
+        self.assertFalse(
+            fixture["task_independence"]["terminal_declaration_automatically_finishes"]
+        )
+
+        event_types = {
+            json.loads(line)["type"]
+            for line in (ROOT / "fixtures/run_events_v1.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        }
+        self.assertIn("tool_call_planned", event_types)
+        invalid_events = json.loads(
+            (ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8")
+        )
+        rejected = {case["id"] for case in invalid_events["reject"]}
+        self.assertTrue(
+            {
+                "planned_arguments_are_not_an_object",
+                "tool_metadata_has_unknown_field",
+                "tool_completed_directive_is_unknown",
+                "tool_completed_execution_started_is_not_boolean",
+                "tool_completed_duration_is_negative",
+                "tool_completed_not_started_cannot_have_duration",
+            }.issubset(rejected)
+        )
+
+    def test_legacy_run_definition_defaults_compare_without_rewriting_evidence(self) -> None:
+        legacy = json.loads(
+            (ROOT / "fixtures/run_definition_legacy_v1.json").read_text(encoding="utf-8")
+        )
+        current = json.loads(
+            (ROOT / "fixtures/run_definition_v1.json").read_text(encoding="utf-8")
+        )
+        checkpoint = json.loads(
+            (ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8")
+        )
+        current_by_name = {case["name"]: case for case in current["golden_cases"]}
+        legacy_by_name = {case["name"]: case for case in legacy["cases"]}
+
+        self.assertEqual(legacy["source_contract_version"], "0.7.1")
+        self.assertTrue(legacy["preservation"]["reader_defaulting_uses_a_comparison_copy_only"])
+        for case in legacy["cases"]:
+            canonical = base64.b64decode(case["canonical_json_base64"], validate=True)
+            self.assertEqual(json.loads(canonical), case["definition"])
+            self.assertEqual(len(canonical), case["canonical_json_utf8_bytes"])
+            self.assertEqual(hashlib.sha256(canonical).hexdigest(), case["sha256"])
+
+        for reader_case in checkpoint["legacy_additive_reader_cases"]:
+            legacy_name = reader_case["source_fixture"].split("#", maxsplit=1)[1]
+            current_name = reader_case["current_writer_fixture"].split("#", maxsplit=1)[1]
+            stored = legacy_by_name[legacy_name]
+            comparison = deepcopy(stored["definition"])
+            for tool in comparison["tools"]:
+                tool.setdefault("tool_metadata", None)
+            for key, value in legacy["additive_defaults"]["tool_policy"].items():
+                comparison["tool_policy"].setdefault(key, deepcopy(value))
+
+            self.assertEqual(stored["sha256"], reader_case["stored_digest"])
+            self.assertEqual(comparison, current_by_name[current_name]["definition"])
+            self.assertEqual(
+                current_by_name[current_name]["sha256"],
+                reader_case["current_writer_digest"],
+            )
+            self.assertTrue(reader_case["expected"]["stored_definition_unchanged"])
+            self.assertTrue(reader_case["expected"]["stored_digest_unchanged"])
+
+    def test_metadata_denials_propagate_to_children_and_distributed_workers(self) -> None:
+        child = json.loads(
+            (ROOT / "fixtures/configured_sub_agent_v1.json").read_text(encoding="utf-8")
+        )["tool_policy_projection"]
+        handoff = json.loads(
+            (ROOT / "fixtures/handoff_contract_v1.json").read_text(encoding="utf-8")
+        )["tool_policy_projection"]
+        distributed = json.loads(
+            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+        )
+
+        for field in (
+            "denied_side_effects",
+            "denied_capability_tags",
+            "deny_terminal_tools",
+            "denied_cost_dimensions",
+        ):
+            self.assertIn(field, child["inherited"])
+        self.assertEqual(
+            child["metadata_denial_merge_case"]["enforced_at"],
+            ["schema_planner", "executor"],
+        )
+        self.assertTrue(handoff["target_inherits_source_effective_metadata_denials"])
+        drift = {case["name"]: case for case in distributed["capability_resolution_cases"]}
+        mismatch = drift["tool_metadata_drift_fails_before_claim"]
+        self.assertTrue(mismatch["model_visible_schema_digest_unchanged"])
+        self.assertEqual(mismatch["expected"]["error_code"], "checkpoint_definition_mismatch")
+        self.assertEqual(mismatch["expected"]["claim_count"], 0)
+
+    def test_app_server_tool_lifecycle_projection_is_fully_frozen(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/app_server_observable_v1.json").read_text(encoding="utf-8")
+        )["toolLifecycle"]
+
+        planned = fixture["plannedHasNoNotification"]
+        self.assertEqual(planned["notifications"], [])
+        self.assertIsNone(planned["persistedItem"])
+        self.assertTrue(planned["argumentsAvailableToApprovalRouting"])
+        self.assertFalse(planned["presentedAsExecution"])
+
+        started = fixture["executed"]["startedNotifications"]
+        completed = fixture["executed"]["completedNotifications"]
+        self.assertEqual([item["method"] for item in started], ["item/started", "item/toolCall/delta"])
+        payload = completed[0]["params"]["payload"]
+        self.assertEqual(payload["directive"], "continue")
+        self.assertIsNone(payload["errorCode"])
+        self.assertTrue(payload["executionStarted"])
+        self.assertEqual(payload["durationMs"], 7)
+        self.assertEqual(payload["toolMetadata"]["sideEffect"], "read")
+
+        denial = fixture["policyDenial"]
+        self.assertEqual(denial["startedNotifications"], [])
+        denial_payload = denial["completedNotifications"][0]["params"]["payload"]
+        self.assertFalse(denial_payload["executionStarted"])
+        self.assertIsNone(denial_payload["durationMs"])
+        self.assertEqual(denial_payload["errorCode"], "tool_not_allowed")
+        self.assertEqual(
+            set(fixture["legacyCompleted"]["notification"]["params"]["payload"]),
+            {"toolName", "toolCallId", "status"},
+        )
+
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
         fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["runner_cases"]}
@@ -528,7 +736,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 147)
+        self.assertEqual(len(capabilities), 150)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
         self.assertIn("checkpoint_config.credential_slots", capabilities)
 
@@ -539,7 +747,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 229)
+        self.assertEqual(surface_member_count, 243)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -562,6 +770,24 @@ class ContractRepositoryTests(unittest.TestCase):
             )
         )
         self.assertEqual([member["id"] for member in surfaces["host_cost_meter"]["members"]], ["read"])
+        self.assertIn("tool_metadata", {member["id"] for member in surfaces["tool"]["members"]})
+        self.assertEqual(
+            {member["id"] for member in surfaces["tool_metadata"]["members"]},
+            {"side_effect", "idempotency", "terminal", "capability_tags", "cost_dimensions"},
+        )
+        self.assertEqual(
+            {member["id"] for member in surfaces["tool_policy"]["members"]},
+            {
+                "allowed_tools",
+                "disallowed_tools",
+                "approval",
+                "can_use_tool",
+                "denied_side_effects",
+                "denied_capability_tags",
+                "deny_terminal_tools",
+                "denied_cost_dimensions",
+            },
+        )
 
     def test_manager_outcomes_preserve_completion_observation(self) -> None:
         fixture = json.loads((ROOT / "fixtures/manager_tool_envelope_v1.json").read_text(encoding="utf-8"))
@@ -685,7 +911,7 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["canonicalization"]["algorithm"],
             "RFC 8785 JSON Canonicalization Scheme",
         )
-        self.assertEqual(len(fixture["golden_cases"]), 2)
+        self.assertEqual(len(fixture["golden_cases"]), 3)
         for case in fixture["golden_cases"]:
             canonical = base64.b64decode(case["canonical_json_base64"], validate=True)
             self.assertEqual(len(canonical), case["canonical_json_utf8_bytes"])
@@ -728,6 +954,21 @@ class ContractRepositoryTests(unittest.TestCase):
             ["write_record", "read_record"],
         )
         self.assertEqual(full["tool_policy"]["allowed_tools"], ["read_record", "write_record"])
+        self.assertEqual(full["tools"][0]["tool_metadata"]["side_effect"], "write")
+        self.assertNotIn("tool_metadata", full["tools"][0]["schema"])
+        self.assertEqual(
+            full["tool_policy"]["denied_capability_tags"],
+            sorted(
+                full["tool_policy"]["denied_capability_tags"],
+                key=lambda value: value.encode("utf-16-be"),
+            ),
+        )
+        self.assertEqual(
+            fixture["golden_cases"][0]["definition"]["tool_policy"][
+                "denied_side_effects"
+            ],
+            [],
+        )
         self.assertTrue(
             all(field in fixture["golden_cases"][0]["definition"] for field in fixture["required_fields"])
         )
@@ -851,7 +1092,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             migration_050["explicit_host_migration"]["target_run_definition_digest"],
-            "a630a668985d2157f7f8570a1871b320a1df229d40807d019682a0caf3bda1b3",
+            "317014f812ca868f02939f292b2c545886400e29fdb33c82ee2550bae2be78ca",
         )
         self.assertEqual(
             migration_050["explicit_host_migration"]["atomic_fields"],
@@ -1263,8 +1504,24 @@ class ContractRepositoryTests(unittest.TestCase):
             capabilities["after_cycle_hook_refs"],
             [{"id": "lifecycle.policy", "version": "1"}],
         )
+        self.assertEqual(
+            capabilities["tool_policy"]["denied_side_effects"],
+            ["execute"],
+        )
+        self.assertEqual(
+            capabilities["tool_policy"]["denied_capability_tags"],
+            ["filesystem.delete"],
+        )
+        self.assertFalse(capabilities["tool_policy"]["deny_terminal_tools"])
+        self.assertEqual(
+            capabilities["tool_policy"]["denied_cost_dimensions"],
+            ["gpu.second"],
+        )
         self.assertEqual(fixture["worker_rules"]["apalis_blocking_runtime"], "tokio_spawn_blocking")
         self.assertTrue(fixture["worker_rules"]["after_cycle_hook_resolution_before_claim"])
+        self.assertTrue(
+            fixture["worker_rules"]["metadata_tool_policy_fields_are_serialized_before_claim"]
+        )
         self.assertTrue(fixture["worker_rules"]["heartbeat_cannot_overwrite_journal"])
         self.assertTrue(fixture["worker_rules"]["reconciliation_provider_is_optional"])
         self.assertEqual(
@@ -1401,7 +1658,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.7.1/vv-agent-contract-0.7.1.zip"
+                    "v0.8.0/vv-agent-contract-0.8.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1409,7 +1666,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 50)
+            self.assertEqual(synced["fixture_files"], 52)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -1427,7 +1684,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.7.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.8.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1465,7 +1722,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.7.1.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.8.0.zip",
                     snapshot_path="fixtures",
                 )
             )

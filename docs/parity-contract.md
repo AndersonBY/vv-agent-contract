@@ -320,6 +320,45 @@ Budget snapshots resume from their durable cumulative values. Active elapsed
 time does not reset, while process downtime, queueing, approvals, and
 reconciliation waits are not invented as active execution time.
 
+## Tool Capability Metadata And Execution Telemetry
+
+`tool_metadata_v1.json` and `docs/tool-metadata-and-telemetry.md` define an
+optional closed `ToolMetadata` declaration. Its coarse side-effect class,
+idempotency, terminal capability, opaque capability tags, and opaque cost
+dimensions are host-visible and task-neutral. They are not appended to the
+model-visible tool schema, inferred from generic metadata, names, or arguments,
+or interpreted as task stages, prices, measurements, or automatic completion.
+
+The existing tool `idempotency` input remains a compatibility alias. A typed
+non-`unknown` declaration becomes the effective checkpoint recovery value; an
+`unknown` typed value may inherit the legacy value; conflicting non-`unknown`
+values fail before external operations. Omitted typed metadata stays omitted
+from telemetry and does not match metadata policy denials.
+
+ToolPolicy adds side-effect, terminal, capability-tag, and cost-dimension
+denials. Lists union across policy layers and the terminal boolean uses logical
+OR. These checks compose with every existing name, argument, approval, budget,
+and runtime check and can never expand permission. Matching is exact and the
+SDK assigns no hierarchy or domain meaning to labels. Configured sub-agents,
+agent-as-tool runs, and handoff targets inherit parent metadata denials and may
+only add more; planning and executor dispatch both enforce the effective set.
+
+`tool_call_planned` records a normalized call before policy and approval.
+`tool_call_started` retains its strict executor-effect boundary, and
+`tool_call_completed` records typed directive, error, execution-start,
+monotonic duration, and optional declaration after a result exists. Parse
+failure has no tool lifecycle; denial and approval short-circuits have planned
+plus completed but no started event. App Server does not project planning as
+an item start. Contract 0.8 writers always include directive, nullable error,
+execution-start, and nullable duration on completed events.
+
+Checkpoint v2 run definitions freeze effective typed declarations and metadata
+denials. Older definitions without the additive nested fields keep their
+original digest and decode with absent/empty/false defaults in a comparison
+copy only. The stored object and digest are never rewritten. See the dedicated
+document for portable string normalization, field limits, event ordering,
+compatibility, and required producer evidence.
+
 ## Task-Neutral After-Cycle Lifecycle Hooks
 
 `after_cycle_hook_v1.json` and `docs/after-cycle-lifecycle.md` define the
@@ -351,14 +390,16 @@ The following surfaces are cross-language contracts:
 1. System prompt content, section order, stable/source/cache metadata, and
    environment rendering.
 2. Built-in tool names, ordering, descriptions, input schema, strict flag,
-   exposure, approval, timeout, policy, output envelope, and public error code.
+   exposure, approval, timeout, typed metadata, policy, output envelope, and
+   public error code.
 3. Agent, model settings, model provider, run configuration, result, live
    handle, background task, handoff, guardrail, and interactive-session
    behavior.
 4. Session item wire format, complete tool-turn persistence, store isolation,
    replay, and initial shared-state propagation.
-5. `RunEvent` v1 envelope, producer taxonomy, identity, ordering, approval
-   decision, parent/child graph fields, and terminal-state precedence.
+5. `RunEvent` v1 envelope, producer taxonomy, identity, ordering, tool
+   planned/started/completed boundaries, approval decision, parent/child graph
+   fields, and terminal-state precedence.
 6. App Server JSON-RPC methods, approval decisions, notifications, replay,
    schema export, and host-provider boundary.
 7. Workspace path safety, UTF-8 byte accounting, Unicode truncation, BOM/CRLF
@@ -373,7 +414,7 @@ No public domain may be omitted from parity review. The required inventory is:
 | Domain | Contract includes | Minimum evidence |
 | --- | --- | --- |
 | System prompt | Text, section order, language variants, environment, skills, sub-agent guidance, stable/source/cache metadata | Canonical prompt JSON, shared hash, public builder tests |
-| Built-in tool specification | Ordered names, descriptions, parameter schemas, strict/exposure flags, defaults, limits, and approval/timeout declarations | Canonical 16-tool export, shared hash, wording guards |
+| Built-in tool specification | Ordered names, descriptions, parameter schemas, strict/exposure flags, defaults, limits, approval/timeout, and optional typed metadata declarations | Canonical 16-tool export, shared hash, wording guards |
 | Built-in tool execution | Argument coercion, workspace/search/shell/background behavior, output envelopes, directives, status, error codes, retries, and timeouts | Handler tests plus real orchestrator tests |
 | Agent definition | Static/dynamic instructions, model and settings, tools, handoffs, guardrails, typed output, hooks, metadata, tool-use behavior, agent-as-tool, and background-agent task | Public Agent tests and normalized child traces |
 | Runner and run config | Default precedence, per-run overrides, model/provider replacement, tool policy, context, workspace, sessions, hooks, streaming, execution backend, cancellation, approvals, resume, and handoff depth | Public Runner tests and normalized producer trace |
@@ -385,7 +426,7 @@ No public domain may be omitted from parity review. The required inventory is:
 | Memory and context | Context-provider ordering/budget, memory-provider calls, compaction, microcompact, summary compact, PTL recovery, session memory, and artifact restoration | Provider spies and normalized compact events |
 | Workspace | Local/memory/S3 behavior, path safety, outside-root policy, UTF-8 bytes, Unicode truncation, BOM/CRLF, list/search/edit semantics, and filtered child views | Cross-backend behavior matrix and shared fixtures |
 | Skills | Discovery, parsing, validation, normalization, prompt rendering, activation state, and metadata propagation | Shared skill fixtures and prompt tests |
-| Events and tracing | RunEvent v1 taxonomy, identity, ordering, parent/child graph, token usage, supplemental fields, event store, spans, processors/sinks, and failure policy | Synthetic wire fixture plus real producer trace |
+| Events and tracing | RunEvent v1 taxonomy, identity, ordering, executor lifecycle, typed tool telemetry, parent/child graph, token usage, supplemental fields, event store, spans, processors/sinks, and failure policy | Synthetic wire fixture plus real producer trace |
 | App Server | JSON-RPC envelope, method registry, host/client/server facades, lifecycle ordering, approval, transport cleanup, persistence, replay, schema export, and generated TypeScript | Ordered protocol scenarios and identical schema bundle |
 | CLI, examples, and docs | User-visible defaults, supported entry points, example catalog, output shape, and documented behavior | CLI tests, example compile/run checks, and paired implementation-doc review |
 
@@ -400,8 +441,9 @@ against public production paths, not accepted as a static snapshot. The two
 implementation repositories carry lock-managed vendored copies:
 
 - `public_api_v1.json` inventories the complete capability paths and canonical
-  surfaces, including run-budget controls, observations, and host-meter
-  protocol, with fixture-driven members across Agent, Runner, RunConfig,
+  surfaces, including run-budget controls, typed tool metadata/policy,
+  observations, and host-meter protocol, with fixture-driven members across
+  Agent, Runner, RunConfig,
   result, RunHandle, interactive sessions, App Server, tools, workspace,
   memory, skills, tracing, the LLM bridge, and runtime backends.
   Language-specific names are recorded as explicit adaptations. The surface
@@ -419,6 +461,10 @@ implementation repositories carry lock-managed vendored copies:
   registration order. It records all 16 tool names, descriptions, parameter
   schemas, strictness, exposure, model visibility, approval declaration,
   timeout, kind, and metadata.
+- `tool_metadata_v1.json` drives public constructor, normalization, denial,
+  executor-event, App Server, and run-definition producer tests. Generic tool
+  metadata and model-visible schemas are checked independently so neither can
+  fabricate the typed declaration.
 - `SHA256SUMS` covers every other file in the parity directory, sorted by file
   name. It intentionally excludes only itself because a checksum file cannot
   contain a stable digest of its own bytes. There are no fixture exclusions;
@@ -585,8 +631,11 @@ Configured `AgentTask.sub_agents` execution follows one shared contract:
   removed and rewritten from the resolved child lifecycle. Language plus
   available/active skills propagate to the child. Parent tool policy is also a
   framework-owned capability: allowed/disallowed names, argument predicates,
-  and approval mode propagate to the child, which may tighten but never loosen
-  them. Approval modes are `default`, `always`, `never`, and `on_request`.
+  approval mode, side-effect denials, terminal denial, capability-tag denials,
+  and cost-dimension denials propagate to the child, which may tighten but
+  never loosen them. Agent-as-tool and handoff targets follow the same
+  cumulative metadata-denial rule. Approval modes are `default`, `always`,
+  `never`, and `on_request`.
   `default` is the unset merge sentinel; `on_request` is an explicit override
   that follows each tool's static or dynamic approval declaration. `always`
   forces approval and `never` bypasses approval without evaluating a dynamic

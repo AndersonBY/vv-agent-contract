@@ -23,6 +23,7 @@ producers until conformance tests pass.
 
 ```bash
 python3 scripts/contractctl.py validate
+node scripts/verify_jcs.mjs
 python3 -m unittest discover -s tests
 python3 scripts/contractctl.py build --output-dir dist
 ```
@@ -38,3 +39,5 @@ See `docs/change-workflow.md` for the complete workflow.
 The optional resource budget semantics are defined in `docs/run-budgets.md`.
 The opt-in durable-resume and explicit-ambiguity semantics are defined in
 `docs/checkpoint-resume.md`.
+Typed tool declarations, cumulative metadata policy, and executor lifecycle
+telemetry are defined in `docs/tool-metadata-and-telemetry.md`.

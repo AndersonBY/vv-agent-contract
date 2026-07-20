@@ -202,7 +202,11 @@
       "allowed_tools",
       "approval",
       "can_use_tool",
-      "disallowed_tools"
+      "disallowed_tools",
+      "denied_side_effects",
+      "denied_capability_tags",
+      "deny_terminal_tools",
+      "denied_cost_dimensions"
     ],
     "always_disallowed_for_child": [
       "create_sub_task",
@@ -210,6 +214,51 @@
     ],
     "child_may_only_tighten": true,
     "schema_and_execution_enforced": true,
+    "metadata_denial_merge_case": {
+      "parent": {
+        "denied_side_effects": [
+          "execute"
+        ],
+        "denied_capability_tags": [
+          "filesystem.delete"
+        ],
+        "deny_terminal_tools": false,
+        "denied_cost_dimensions": [
+          "gpu.second"
+        ]
+      },
+      "child": {
+        "denied_side_effects": [
+          "network"
+        ],
+        "denied_capability_tags": [
+          "network.unrestricted"
+        ],
+        "deny_terminal_tools": true,
+        "denied_cost_dimensions": [
+          "workflow.credit"
+        ]
+      },
+      "effective": {
+        "denied_side_effects": [
+          "execute",
+          "network"
+        ],
+        "denied_capability_tags": [
+          "filesystem.delete",
+          "network.unrestricted"
+        ],
+        "deny_terminal_tools": true,
+        "denied_cost_dimensions": [
+          "gpu.second",
+          "workflow.credit"
+        ]
+      },
+      "enforced_at": [
+        "schema_planner",
+        "executor"
+      ]
+    },
     "approval_modes": {
       "values": [
         "default",
@@ -233,6 +282,8 @@
       "allowed_tools",
       "disallowed_tools",
       "can_use_tool",
+      "tool_lookup",
+      "metadata_denials",
       "approval",
       "executor"
     ]

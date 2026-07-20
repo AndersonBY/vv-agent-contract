@@ -62,6 +62,15 @@ function verifyVector(label, value, vector) {
   }
 }
 
+function verifyImmutableVector(label, value, vector) {
+  const actual = vectorValues(value);
+  for (const [field, observed] of Object.entries(actual)) {
+    if (vector[field] !== observed) {
+      fail(`${label}: immutable ${field} mismatch: expected ${vector[field]}, observed ${observed}`);
+    }
+  }
+}
+
 function vectorValues(value) {
   const bytes = Buffer.from(canonicalize(value), "utf8");
   return {
@@ -98,9 +107,64 @@ function writeGeneratedFields(name, vectors, valueField) {
   fs.writeFileSync(fixturePath, source, "utf8");
 }
 
+function syncCheckpointRunDefinition(runDefinition) {
+  const fixturePath = path.join(ROOT, "fixtures", "checkpoint_codec_v2.json");
+  let source = fs.readFileSync(fixturePath, "utf8");
+  const checkpoint = JSON.parse(source);
+  const minimal = runDefinition.golden_cases.find((entry) => entry.name === "minimal");
+  if (!minimal) {
+    fail("run_definition_v1.json: missing minimal golden case");
+  }
+
+  const payloads = [
+    checkpoint.canonical_checkpoint,
+    ...checkpoint.valid_cases.map((entry) => entry.payload),
+    ...checkpoint.invalid_cases.map((entry) => entry.payload),
+  ].filter(
+    (payload) =>
+      payload?.run_definition_schema === "vv-agent.run-definition.v1" &&
+      payload.run_definition,
+  );
+  const previousDefinition = checkpoint.canonical_checkpoint.run_definition;
+  const previousCanonical = canonicalize(previousDefinition);
+  for (const payload of payloads) {
+    if (canonicalize(payload.run_definition) !== previousCanonical) {
+      fail("checkpoint_codec_v2.json: embedded v1 run definitions have drifted");
+    }
+  }
+
+  const nextCanonical = canonicalize(minimal.definition);
+  const previousMarker = `\"run_definition\": ${previousCanonical}`;
+  const nextMarker = `\"run_definition\": ${nextCanonical}`;
+  const replacementCount = source.split(previousMarker).length - 1;
+  if (replacementCount !== payloads.length) {
+    fail(
+      `checkpoint_codec_v2.json: expected ${payloads.length} embedded definitions, found ${replacementCount}`,
+    );
+  }
+  source = source.split(previousMarker).join(nextMarker);
+
+  const previousDigest = checkpoint.canonical_checkpoint.run_definition_digest;
+  const nextDigest = vectorValues(minimal.definition).sha256;
+  if (typeof previousDigest !== "string" || !source.includes(previousDigest)) {
+    fail("checkpoint_codec_v2.json: previous minimal definition digest not found");
+  }
+  source = source.replaceAll(previousDigest, nextDigest);
+  fs.writeFileSync(fixturePath, source, "utf8");
+}
+
 const runDefinition = readFixture("run_definition_v1.json");
 for (const vector of runDefinition.golden_cases) {
   verifyVector(`run_definition/${vector.name}`, vector.definition, vector);
+}
+
+const legacyRunDefinition = readFixture("run_definition_legacy_v1.json");
+for (const vector of legacyRunDefinition.cases) {
+  verifyImmutableVector(`run_definition_legacy/${vector.name}`, vector.definition, vector);
+}
+
+if (WRITE) {
+  syncCheckpointRunDefinition(runDefinition);
 }
 
 const operationJournal = readFixture("operation_journal_v1.json");

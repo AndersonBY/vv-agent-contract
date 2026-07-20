@@ -242,6 +242,37 @@ Contract `0.7.1` records the already-supported `delta` alias alongside
 verified adoption, and 0.7.1 is the first eligible adoption target for this
 minor capability. The patch changes no typed wire event or runtime decision.
 
+## 0.8 Tool Metadata And Execution Telemetry Compatibility
+
+Contract `0.8.x` adds optional typed metadata to tools and cumulative metadata
+denials to `ToolPolicy`. A tool without typed metadata keeps its existing
+schema, visibility, approval, execution, checkpoint, and completion behavior.
+Generic tool metadata is not promoted into the typed declaration. Metadata is
+host-visible only and does not alter model-visible tool schemas.
+
+The existing public `idempotency` field remains accepted. When typed metadata
+does not declare a non-`unknown` value, the legacy value remains effective. A
+conflict between two non-`unknown` declarations is rejected before model or
+tool operations. New checkpoint writers freeze both the effective declaration
+and metadata denial policy; readers continue to accept older v2 run
+definitions where the additive fields are absent and apply their empty/false
+defaults to a comparison copy without rewriting the stored definition or
+digest. A non-default current declaration still fails before claim or external
+operations.
+
+`tool_call_planned` is an additive event emitted only after a model tool call
+has valid normalized arguments. It precedes policy and approval and does not
+mean that execution occurred. Existing `tool_call_started` retains its strict
+meaning: the next executor step may cause effects. New writers add typed
+directive, error, execution-start, duration, and metadata observations to the
+completed event. They always write directive, nullable error, execution-start,
+and nullable duration; metadata remains optional. Older events that omit these
+fields remain readable, but readers must not manufacture facts from absence.
+
+App Server intentionally emits no item notification for planning. Existing
+started/completed items receive only additive fields. An application that does
+not consume the new fields observes the same item lifecycle as before.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are
