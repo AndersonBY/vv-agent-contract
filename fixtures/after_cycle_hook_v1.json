@@ -95,7 +95,8 @@
     "error_codes": {
       "invalid_decision": "after_cycle_decision_invalid",
       "hook_failure": "after_cycle_hook_failed",
-      "steer_unavailable": "after_cycle_steer_unavailable"
+      "steer_unavailable": "after_cycle_steer_unavailable",
+      "control_state_invalid": "after_cycle_control_state_invalid"
     }
   },
   "composition": {

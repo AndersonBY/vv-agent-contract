@@ -203,6 +203,10 @@ class ContractRepositoryTests(unittest.TestCase):
             cases["steer_at_max_cycles_fails_closed"]["expected"]["error_code"],
             "after_cycle_steer_unavailable",
         )
+        self.assertEqual(
+            fixture["decision"]["error_codes"]["control_state_invalid"],
+            "after_cycle_control_state_invalid",
+        )
         invalid = {case["name"]: case for case in fixture["invalid_decisions"]}
         self.assertIn("permission_expansion_field", invalid)
         self.assertTrue(
