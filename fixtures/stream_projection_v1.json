@@ -16,8 +16,11 @@
     "mappings": {
       "assistant_delta": {
         "wire_type": "assistant_delta",
-        "required_source_fields": [
-          "content_delta"
+        "required_source_field_alternatives": [
+          [
+            "content_delta",
+            "delta"
+          ]
         ],
         "optional_source_fields": [
           "content_chars",

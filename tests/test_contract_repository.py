@@ -60,7 +60,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.7.0")
+        self.assertEqual(report["version"], "0.7.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 50)
         self.assertEqual(report["manifest_entries"], 49)
@@ -251,6 +251,10 @@ class ContractRepositoryTests(unittest.TestCase):
             "vv-agent.stream-projection.v1",
         )
         mappings = fixture["typed_projection"]["mappings"]
+        self.assertEqual(
+            mappings["assistant_delta"]["required_source_field_alternatives"],
+            [["content_delta", "delta"]],
+        )
         self.assertEqual(
             [mappings[source]["wire_type"] for source in mappings],
             [
@@ -1397,7 +1401,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.7.0/vv-agent-contract-0.7.0.zip"
+                    "v0.7.1/vv-agent-contract-0.7.1.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1423,7 +1427,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.7.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.7.1.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1461,7 +1465,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.7.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.7.1.zip",
                     snapshot_path="fixtures",
                 )
             )

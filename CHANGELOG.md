@@ -3,6 +3,16 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.7.1 - 2026-07-20
+
+- Declare `content_delta` and `delta` as equivalent accepted source fields for
+  assistant stream projection. Built-in adapters use `content_delta`, while
+  the existing custom-model and configured-child callback surface also accepts
+  `delta`.
+- Preserve every 0.7.0 wire type, payload field, ordering rule, and safety
+  boundary. Contract 0.7.0 did not reach verified adoption; implementations
+  adopt 0.7.1 or later in this minor line.
+
 ## 0.7.0 - 2026-07-20
 
 - Add typed top-level and child `reasoning_delta`,

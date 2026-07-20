@@ -237,6 +237,11 @@ does not replace actual tool execution lifecycle events. Applications that
 require durable replay continue to use a RunEventStore and its existing
 failure policy.
 
+Contract `0.7.1` records the already-supported `delta` alias alongside
+`content_delta` for assistant raw callbacks. Version 0.7.0 did not reach
+verified adoption, and 0.7.1 is the first eligible adoption target for this
+minor capability. The patch changes no typed wire event or runtime decision.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are
