@@ -216,6 +216,27 @@ object. Distributed v1 rejects the field as a v2-only capability. Missing
 references fail during capability resolution before a claim or external
 operation. Existing envelopes without the field decode to an empty list.
 
+## 0.7 Stream Event Compatibility
+
+Contract `0.7.x` adds typed `reasoning_delta`, `model_tool_call_started`, and
+`model_tool_call_progress` RunEvent variants and optional cumulative telemetry
+on assistant deltas. Existing event types and payload meanings do not change.
+In particular, `tool_call_started` continues to mean executor dispatch, while
+the `model_` variants describe untrusted model-output generation.
+
+The raw callback keeps its existing provider-adapter payload and at-least-once
+delivery. Unknown raw events continue to reach an explicitly configured raw
+observer, but no longer become arbitrary generic typed events. This closes a
+producer safety inconsistency with the existing RunEvent rule that unknown
+event types are rejected. Known valid raw events are recorded before the raw
+observer, and observer exceptions or panics are isolated.
+
+Reasoning remains private telemetry and is not promoted to visible App Server
+assistant output. Model tool progress is additive App Server telemetry and
+does not replace actual tool execution lifecycle events. Applications that
+require durable replay continue to use a RunEventStore and its existing
+failure policy.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

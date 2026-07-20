@@ -60,10 +60,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.6.0")
+        self.assertEqual(report["version"], "0.7.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 49)
-        self.assertEqual(report["manifest_entries"], 48)
+        self.assertEqual(report["fixture_files"], 50)
+        self.assertEqual(report["manifest_entries"], 49)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -240,6 +240,78 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(overflow["expected"]["unavailable_reason"], "integer_overflow")
         self.assertIsNone(overflow["expected"]["total_tokens"])
+
+    def test_stream_projection_is_typed_ordered_and_untrusted(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/stream_projection_v1.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            fixture["schema_version"],
+            "vv-agent.stream-projection.v1",
+        )
+        mappings = fixture["typed_projection"]["mappings"]
+        self.assertEqual(
+            [mappings[source]["wire_type"] for source in mappings],
+            [
+                "assistant_delta",
+                "reasoning_delta",
+                "model_tool_call_started",
+                "model_tool_call_progress",
+            ],
+        )
+        synthetic = fixture["synthetic_top_level"]
+        self.assertEqual(len(synthetic["raw_events"]), synthetic["raw_observer_count"])
+        self.assertEqual(
+            len(synthetic["expected_wire_events"]),
+            synthetic["typed_event_count"],
+        )
+        self.assertEqual(
+            [event["type"] for event in synthetic["expected_wire_events"]],
+            [mappings[source]["wire_type"] for source in mappings],
+        )
+        self.assertEqual(synthetic["raw_events"][-1]["event"], "run_completed")
+        self.assertNotIn(
+            "run_completed",
+            {event["type"] for event in synthetic["expected_wire_events"]},
+        )
+        self.assertEqual(synthetic["execution_event_type"], "tool_call_started")
+        self.assertFalse(fixture["raw_callback"]["durable"])
+        self.assertEqual(fixture["raw_callback"]["observer_failure"], "isolated")
+        self.assertFalse(
+            fixture["consumer_policy"]["observer_configuration_changes_runtime_decisions"]
+        )
+
+        child = json.loads(
+            (ROOT / "fixtures/configured_sub_agent_v1.json").read_text(encoding="utf-8")
+        )["stream_forwarding"]
+        self.assertEqual(
+            child["typed_wire_types"],
+            {source: mapping["wire_type"] for source, mapping in mappings.items()},
+        )
+        self.assertEqual(child["canonical_cycle_field"], "cycle_index")
+        self.assertTrue(child["same_typed_projection_as_top_level"])
+
+        event_types = {
+            json.loads(line)["type"]
+            for line in (ROOT / "fixtures/run_events_v1.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        }
+        self.assertTrue(set(child["typed_wire_types"].values()).issubset(event_types))
+        invalid = json.loads(
+            (ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8")
+        )
+        rejected = {case["id"] for case in invalid["reject"]}
+        self.assertTrue(
+            {
+                "reasoning_delta_is_not_a_string",
+                "model_tool_call_id_is_empty",
+                "model_tool_name_is_empty",
+                "stream_counter_is_negative",
+                "stream_counter_exceeds_json_safe_maximum",
+            }.issubset(rejected)
+        )
 
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
         fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
@@ -1325,7 +1397,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.6.0/vv-agent-contract-0.6.0.zip"
+                    "v0.7.0/vv-agent-contract-0.7.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1333,7 +1405,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 49)
+            self.assertEqual(synced["fixture_files"], 50)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
@@ -1351,7 +1423,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.6.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.7.0.zip",
                     snapshot_path="fixtures",
                 )
             )
@@ -1389,7 +1461,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     source=ROOT,
                     revision=revision,
                     artifact=build["artifact"],
-                    artifact_url="https://example.invalid/vv-agent-contract-0.6.0.zip",
+                    artifact_url="https://example.invalid/vv-agent-contract-0.7.0.zip",
                     snapshot_path="fixtures",
                 )
             )

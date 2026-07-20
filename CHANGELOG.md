@@ -3,6 +3,23 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.7.0 - 2026-07-20
+
+- Add typed top-level and child `reasoning_delta`,
+  `model_tool_call_started`, and `model_tool_call_progress` RunEvents with
+  framework-owned run, trace, session, agent, and cycle identity.
+- Distinguish model tool-call generation from the existing executor
+  `tool_call_started` lifecycle event and lock both meanings in producer
+  evidence.
+- Restrict untrusted raw stream projection to four declared source events;
+  unknown and invalid source payloads remain available only to an explicit raw
+  observer and cannot fabricate typed lifecycle or terminal events.
+- Isolate raw observer failures, retain event-store fail-open/fail-closed
+  semantics, and keep raw callbacks at-least-once rather than presenting them
+  as durable delivery.
+- Keep reasoning private in App Server projection and preserve task, prompt,
+  tool, completion, budget, cancellation, and approval behavior.
+
 ## 0.6.0 - 2026-07-20
 
 - Add an opt-in, typed after-cycle lifecycle hook with closed `continue`,

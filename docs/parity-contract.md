@@ -67,6 +67,17 @@ approval events expose only the shared approval fields, sub-run lifecycle
 events expose their nested lifecycle metadata, and canonical child stream
 events discard private receipt and sequence markers after trust validation.
 
+`stream_projection_v1.json` and `docs/stream-events.md` define model stream
+projection. Top-level and child runs map assistant and reasoning deltas plus
+model tool-call start/progress in the same order with framework-owned identity
+and cycle fields. Model generation uses `model_tool_call_started` and
+`model_tool_call_progress`; the existing `tool_call_started` remains the
+executor lifecycle event. Unknown or invalid raw events never become typed
+lifecycle events. Raw observer failure is isolated, raw callbacks remain
+at-least-once, and event-store failure continues to follow its explicit
+fail-open or fail-closed policy. Private reasoning is not projected as visible
+App Server assistant output.
+
 ## Token Usage And Cache Accounting
 
 `token_usage_v1.json` defines the shared normalization and aggregation
@@ -591,10 +602,11 @@ Configured `AgentTask.sub_agents` execution follows one shared contract:
   into the child.
 - Child LLM stream payloads are untrusted. Only assistant/reasoning deltas and
   tool-call started/progress events cross the child boundary, with an explicit
-  field allowlist and framework-generated identity. Runtime lifecycle,
-  terminal, handoff, approval, session, cycle, and memory events are dropped.
-  An untrusted stream event can never suppress or replace the real parent or
-  child terminal event.
+  field allowlist, framework-generated identity, and framework-injected cycle.
+  They use the same typed payload mapping as a top-level run. Runtime
+  lifecycle, terminal, handoff, approval, session, and memory events are
+  dropped. An untrusted stream event can never suppress or replace the real
+  parent or child terminal event.
 - The child uses the same underlying `WorkspaceBackend`. When
   `exclude_files_pattern` is present, both implementations compile it as a
   regular expression against normalized workspace-relative paths and wrap the
