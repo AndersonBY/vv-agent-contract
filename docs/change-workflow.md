@@ -61,7 +61,9 @@ Rust refs under review. It verifies:
 4. Both complete repository quality gates pass.
 
 Record the successful run URL and exact implementation revisions in
-`support-matrix.json`, then change the version state to `verified`.
+`support-matrix.json`, then change the version state to `verified`. A recording
+run must use `main` for the contract and both implementation refs; feature
+branches may be used only for non-recording review runs.
 
 ## Codex Session Checklist
 

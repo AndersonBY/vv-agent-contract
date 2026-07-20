@@ -482,6 +482,11 @@ for public fields.
 
 Statuses are evidence-based:
 
+The table below records the last fully verified baseline. The live adoption
+state for the current contract version is authoritative in
+`support-matrix.json`. While that file is `pending-adoption`, affected rows are
+still in progress even when the baseline row below says `verified`.
+
 - `focused-pass`: the current domain tests and canonical evidence pass, but the
   final full-repository gate and independent re-audit are still pending.
 - `in-progress`: implementation or real-producer evidence is incomplete.

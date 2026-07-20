@@ -52,6 +52,15 @@ class ContractRepositoryTests(unittest.TestCase):
         for mode in ("write_python", "read_python", "write_rust", "read_rust"):
             self.assertIn(f"VV_AGENT_CROSS_RUNTIME_V2_MODE={mode}", workflow)
 
+    def test_record_verified_requires_all_default_branches(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+        recording_step = workflow.split("- name: Update verified support matrix", maxsplit=1)[1].split(
+            "- name: Commit verified support matrix", maxsplit=1
+        )[0]
+
+        for input_name in ("contract_ref", "python_ref", "rust_ref"):
+            self.assertIn(f'test "${{{{ inputs.{input_name} }}}}" = "main"', recording_step)
+
     def test_validate_workflow_supports_manual_dispatch(self) -> None:
         workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
 

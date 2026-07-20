@@ -146,6 +146,8 @@ jobs:
         run: |
           set -euo pipefail
           test "${{ inputs.contract_ref }}" = "main"
+          test "${{ inputs.python_ref }}" = "main"
+          test "${{ inputs.rust_ref }}" = "main"
           python_revision="$(git -C vv-agent rev-parse HEAD)"
           rust_revision="$(git -C vv-agent-rs rev-parse HEAD)"
           run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
