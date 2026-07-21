@@ -535,7 +535,7 @@ class ContractRepositoryTests(unittest.TestCase):
             ["tool_call_planned", "tool_call_completed"],
         )
         self.assertEqual(fixture["app_server_projection"]["tool_call_planned"], "no_notification")
-        self.assertTrue(fixture["checkpoint_v2"]["policy_fields_are_frozen"])
+        self.assertTrue(fixture["checkpoint"]["policy_fields_are_frozen"])
         self.assertFalse(
             fixture["task_independence"]["terminal_declaration_automatically_finishes"]
         )
@@ -896,7 +896,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 151)
+        self.assertEqual(len(capabilities), 149)
         self.assertIn("agent.sub_agent_config", capabilities)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
         self.assertIn("checkpoint_config.credential_slots", capabilities)
@@ -1193,7 +1193,7 @@ class ContractRepositoryTests(unittest.TestCase):
             text=True,
         )
 
-    def test_checkpoint_v2_is_strict_and_extensions_are_explicit(self) -> None:
+    def test_checkpoint_is_strict_and_extensions_are_explicit(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8"))
         canonical = fixture["canonical_checkpoint"]
         run_definition_fixture = json.loads(
@@ -1554,7 +1554,7 @@ class ContractRepositoryTests(unittest.TestCase):
         distributed = json.loads(
             (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
         )
-        runner_order = runner["checkpoint_v2_terminal_order"]["order"]
+        runner_order = runner["checkpoint_terminal_order"]["order"]
         distributed_order = distributed["worker_rules"]["terminal_commit_order"]
 
         self.assertLess(

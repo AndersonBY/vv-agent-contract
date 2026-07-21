@@ -24,51 +24,51 @@
   ],
   "operations": [
     {
-      "name": "create_v2",
+      "name": "create",
       "atomic": "insert_if_absent"
     },
     {
-      "name": "load_v2",
+      "name": "load",
       "atomic": "read_one"
     },
     {
-      "name": "claim_v2",
+      "name": "claim",
       "atomic": "compare_status_cycle_and_lease_then_claim_and_increment_resume_attempt_only_for_recovery_mode"
     },
     {
-      "name": "renew_v2",
+      "name": "renew",
       "atomic": "compare_claim_token_and_live_lease_then_update_lease_only"
     },
     {
-      "name": "progress_v2",
+      "name": "progress",
       "atomic": "compare_revision_and_claim_token_then_update_payload_and_revision_preserving_claim"
     },
     {
-      "name": "suspend_v2",
+      "name": "suspend",
       "atomic": "compare_revision_and_claim_token_then_persist_resumable_interruption_preserve_journals_and_clear_claim"
     },
     {
-      "name": "commit_cycle_v2",
+      "name": "commit_cycle",
       "atomic": "compare_revision_and_claim_token_then_commit_cycle_clear_journals_and_claim"
     },
     {
-      "name": "finalize_claimed_v2",
+      "name": "finalize_claimed",
       "atomic": "compare_revision_and_claim_token_then_write_terminal_clear_claim_and_clear_ordinary_journals"
     },
     {
-      "name": "finalize_v2",
+      "name": "finalize",
       "atomic": "compare_revision_and_no_claim_then_write_terminal_preserving_explicit_operator_abort_ambiguity"
     },
     {
-      "name": "record_event_delivery_v2",
+      "name": "record_event_delivery",
       "atomic": "compare_revision_claim_and_pending_event_identity_then_record_cursor_preserving_claim_or_terminal"
     },
     {
-      "name": "acknowledge_terminal_v2",
+      "name": "acknowledge_terminal",
       "atomic": "compare_revision_and_terminal_then_mark_acknowledged_without_delete"
     },
     {
-      "name": "delete_v2",
+      "name": "delete",
       "atomic": "explicit_host_retention_cleanup"
     }
   ],
@@ -127,7 +127,7 @@
       "name": "create_absent",
       "initial": null,
       "operation": {
-        "kind": "create_v2",
+        "kind": "create",
         "revision": 0
       },
       "expected": {
@@ -143,7 +143,7 @@
         "status": "running"
       },
       "operation": {
-        "kind": "create_v2",
+        "kind": "create",
         "revision": 0
       },
       "expected": {
@@ -161,7 +161,7 @@
         "claim_token": null
       },
       "operation": {
-        "kind": "claim_v2",
+        "kind": "claim",
         "claim_mode": "continue",
         "cycle_index": 1,
         "claim_token": "owner-a",
@@ -188,7 +188,7 @@
         "lease_expires_at_ms": 200
       },
       "operation": {
-        "kind": "claim_v2",
+        "kind": "claim",
         "claim_mode": "recovery",
         "cycle_index": 1,
         "claim_token": "owner-b",
@@ -214,7 +214,7 @@
         "lease_expires_at_ms": 200
       },
       "operation": {
-        "kind": "claim_v2",
+        "kind": "claim",
         "claim_mode": "recovery",
         "cycle_index": 1,
         "claim_token": "owner-b",
@@ -240,7 +240,7 @@
         "lease_expires_at_ms": null
       },
       "operation": {
-        "kind": "claim_v2",
+        "kind": "claim",
         "claim_mode": "recovery",
         "cycle_index": 2,
         "claim_token": "owner-resume",
@@ -266,7 +266,7 @@
         "terminal_result_present": true
       },
       "operation": {
-        "kind": "load_v2",
+        "kind": "load",
         "requested_claim_mode": "recovery"
       },
       "expected": {
@@ -287,7 +287,7 @@
         "lease_expires_at_ms": 300
       },
       "operation": {
-        "kind": "progress_v2",
+        "kind": "progress",
         "expected_revision": 2,
         "claim_token": "owner-b",
         "journal_state": "started"
@@ -311,7 +311,7 @@
         "lease_expires_at_ms": 300
       },
       "operation": {
-        "kind": "progress_v2",
+        "kind": "progress",
         "expected_revision": 2,
         "claim_token": "owner-b"
       },
@@ -332,7 +332,7 @@
         "journal_state": "started"
       },
       "operation": {
-        "kind": "renew_v2",
+        "kind": "renew",
         "claim_token": "owner-b",
         "now_ms": 250,
         "lease_expires_at_ms": 400
@@ -357,7 +357,7 @@
         "tool_journal_state": "ambiguous"
       },
       "operation": {
-        "kind": "suspend_v2",
+        "kind": "suspend",
         "expected_revision": 4,
         "claim_token": "owner-resume",
         "status": "reconciliation_required"
@@ -385,7 +385,7 @@
         "tool_journal_state": "ambiguous"
       },
       "operation": {
-        "kind": "claim_v2",
+        "kind": "claim",
         "claim_mode": "recovery",
         "cycle_index": 2,
         "claim_token": "owner-reconcile",
@@ -409,13 +409,13 @@
       },
       "operations": [
         {
-          "kind": "progress_v2",
+          "kind": "progress",
           "expected_revision": 3,
           "claim_token": "owner-b",
           "writer": "a"
         },
         {
-          "kind": "progress_v2",
+          "kind": "progress",
           "expected_revision": 3,
           "claim_token": "owner-b",
           "writer": "b"
@@ -440,7 +440,7 @@
       },
       "operations": [
         {
-          "kind": "claim_v2",
+          "kind": "claim",
           "claim_mode": "recovery",
           "cycle_index": 1,
           "claim_token": "owner-a",
@@ -448,7 +448,7 @@
           "lease_expires_at_ms": 300
         },
         {
-          "kind": "claim_v2",
+          "kind": "claim",
           "claim_mode": "recovery",
           "cycle_index": 1,
           "claim_token": "owner-b",
@@ -474,7 +474,7 @@
         "tool_journal_count": 1
       },
       "operation": {
-        "kind": "commit_cycle_v2",
+        "kind": "commit_cycle",
         "expected_revision": 4,
         "claim_token": "owner-b",
         "cycle_index": 1
@@ -498,7 +498,7 @@
         "terminal_result": null
       },
       "operation": {
-        "kind": "finalize_v2",
+        "kind": "finalize",
         "expected_revision": 5,
         "status": "completed"
       },
@@ -521,7 +521,7 @@
         "terminal_result": null
       },
       "operation": {
-        "kind": "finalize_claimed_v2",
+        "kind": "finalize_claimed",
         "expected_revision": 5,
         "claim_token": "owner-failure",
         "status": "failed"
@@ -549,7 +549,7 @@
         "terminal_result": null
       },
       "operation": {
-        "kind": "finalize_claimed_v2",
+        "kind": "finalize_claimed",
         "expected_revision": 6,
         "claim_token": "owner-reconcile",
         "status": "failed",
@@ -573,7 +573,7 @@
         "terminal_result_present": true
       },
       "operation": {
-        "kind": "finalize_v2",
+        "kind": "finalize",
         "expected_revision": 6,
         "status": "failed"
       },
@@ -593,7 +593,7 @@
         "terminal_result": null
       },
       "operation": {
-        "kind": "finalize_v2",
+        "kind": "finalize",
         "expected_revision": 6,
         "status": "failed",
         "terminal_error_code": "operator_abort_with_unknown_outcome"
@@ -616,7 +616,7 @@
         "terminal_acknowledged": false
       },
       "operation": {
-        "kind": "acknowledge_terminal_v2",
+        "kind": "acknowledge_terminal",
         "expected_revision": 6
       },
       "expected": {
@@ -639,7 +639,7 @@
         "outbox_state": "pending"
       },
       "operation": {
-        "kind": "record_event_delivery_v2",
+        "kind": "record_event_delivery",
         "expected_revision": 6,
         "claim_token": "owner-events",
         "event_id": "evt-1",
@@ -676,7 +676,7 @@
         "outbox_state": "pending"
       },
       "operation": {
-        "kind": "record_event_delivery_v2",
+        "kind": "record_event_delivery",
         "expected_revision": 7,
         "claim_token": null,
         "event_id": "evt-terminal",
@@ -711,7 +711,7 @@
         "terminal_acknowledged": true
       },
       "operation": {
-        "kind": "load_v2"
+        "kind": "load"
       },
       "expected": {
         "model_calls": 0,
@@ -728,7 +728,7 @@
         "terminal_acknowledged": true
       },
       "operation": {
-        "kind": "delete_v2"
+        "kind": "delete"
       },
       "expected": {
         "row_present": false

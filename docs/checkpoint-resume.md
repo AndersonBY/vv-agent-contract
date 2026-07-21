@@ -34,7 +34,7 @@ runtime has no older decoder, namespace probe, or migration path.
   `retry_with_duplicate_risk`;
 - `ambiguous_tool_policy`: `require_reconciliation` or
   `retry_idempotent_only`;
-- exactly one of `store` (a process-local checkpoint v2 store) or
+- exactly one of `store` (a process-local `CheckpointStore`) or
   `store_ref` (a reconstructable distributed capability reference);
 - `required_extension_namespaces`: unique, lexicographically serialized
   namespaces;
@@ -204,7 +204,7 @@ This bounds checkpoint growth without discarding information needed to resume
 an interrupted operation.
 
 Journal progress preserves the active claim. A resumable interruption uses the
-separate atomic `suspend_v2` operation: it writes
+separate atomic `suspend` operation: it writes
 `reconciliation_required`, preserves ambiguous journals and the current cycle,
 increments revision, and clears the claim tuple. A later recovery claim accepts
 that status, atomically increments `resume_attempt`, and sets the working status
@@ -212,12 +212,12 @@ back to `running`. Cycle commit is never used merely to release an interrupted
 claim because it would discard the evidence needed for reconciliation.
 
 A terminal reached while the current cycle still has a live claim uses
-`finalize_claimed_v2`. The store compares both revision and claim token, writes
+`finalize_claimed`. The store compares both revision and claim token, writes
 the terminal receipt, and clears the claim atomically. Ordinary terminals clear
 the active journals because the terminal receipt is authoritative. An explicit
 operator-abort terminal preserves its ambiguous journal and
 `ResumeObservation`. A runtime must not clear a claim locally and then call the
-unclaimed `finalize_v2`; that loses ownership proof between the two writes.
+unclaimed `finalize`; that loses ownership proof between the two writes.
 
 ## Event Cursor
 
@@ -244,7 +244,7 @@ appending a duplicate. Reusing an id with different payload bytes fails with
 observe the same stable lifecycle event without making the checkpoint itself
 undeliverable.
 
-The delivery transition uses `record_event_delivery_v2`. It compares the
+The delivery transition uses `record_event_delivery`. It compares the
 checkpoint revision, verifies the pending event id and payload digest, records
 the exact returned cursor in both the outbox entry and `event_cursor`, and
 increments revision. A running checkpoint keeps its claim and requires the
@@ -392,7 +392,7 @@ Without a conclusive decision, the invocation returns the typed status
 terminal checkpoint. The checkpoint remains resumable and retains the
 ambiguous entry; it is not converted into a business completion or failure.
 Only the explicit `abort` decision makes that checkpoint terminal, and it does
-not rewrite the operation as a definitive `failed` receipt. `finalize_v2`
+not rewrite the operation as a definitive `failed` receipt. `finalize`
 retains the ambiguous journal and observation for this terminal instead of
 clearing the unknown external outcome.
 

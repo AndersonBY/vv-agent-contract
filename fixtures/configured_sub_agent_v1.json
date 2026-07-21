@@ -182,7 +182,7 @@
       "event_sink",
       "memory_providers",
       "model_provider",
-      "state_store",
+      "checkpoint_store",
       "stream_sink",
       "trace_context"
     ],

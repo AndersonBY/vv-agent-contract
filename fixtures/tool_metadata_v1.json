@@ -600,7 +600,7 @@
     "tool_call_completed": "item_completed with required directive errorCode executionStarted durationMs and toolMetadata when declared",
     "planned_is_never_presented_as_execution_started": true
   },
-  "checkpoint_v2": {
+  "checkpoint": {
     "run_definition_tool_field": "tool_metadata",
     "missing_value": null,
     "policy_fields_are_frozen": true,
