@@ -70,7 +70,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.10.0")
+        self.assertEqual(report["version"], "0.10.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 53)
         self.assertEqual(report["manifest_entries"], 52)
@@ -102,6 +102,38 @@ class ContractRepositoryTests(unittest.TestCase):
             ["effective_threshold"],
             0,
         )
+        self.assertEqual(
+            cases[
+                "explicit_request_limit_is_not_capped_by_smaller_model_capability"
+            ]["expected"]["reserved_output_tokens"],
+            24_000,
+        )
+        self.assertEqual(
+            cases[
+                "explicit_host_reserve_is_not_capped_by_smaller_model_capability"
+            ]["expected"]["reserved_output_tokens"],
+            24_000,
+        )
+
+        context_cases = {
+            case["name"]: case
+            for case in capacity["context_window_resolution"]["cases"]
+        }
+        self.assertTrue(
+            capacity["context_window_resolution"]
+            ["non_positive_task_metadata_is_absent"]
+        )
+        self.assertEqual(
+            context_cases["zero_metadata_uses_resolved_capability"]
+            ["expected_model_context_window"],
+            64_000,
+        )
+        self.assertEqual(
+            context_cases[
+                "zero_metadata_without_resolved_capability_uses_fallback"
+            ]["expected_model_context_window"],
+            200_000,
+        )
 
         lifecycle = fixture["compaction_events"]
         self.assertEqual(
@@ -111,6 +143,18 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             lifecycle["completed"]["mode_values"],
             ["none", "micro", "structural", "summary", "emergency"],
+        )
+        self.assertEqual(
+            lifecycle["simultaneous_warning_and_microcompact"]["order"],
+            [
+                "microcompact_eligible_old_tool_results",
+                "recalculate_effective_length",
+                "append_memory_warning_only_if_post_microcompact_length_remains_eligible",
+            ],
+        )
+        self.assertEqual(
+            lifecycle["provider_and_journal_share_event_identity"],
+            ["event_id", "created_at"],
         )
         self.assertTrue(lifecycle["legacy_missing_additive_fields_are_accepted"])
 

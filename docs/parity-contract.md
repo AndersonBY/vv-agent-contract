@@ -141,8 +141,11 @@ context window and not a task-specific policy. Explicit task values continue
 to win, including values below the default.
 
 The model context window is the total prompt-plus-output capacity. Runtime
-resolution uses the explicit host `model_context_window`, then resolved model
-capability metadata, then the `200000` fallback. The output reserve uses this
+resolution uses a positive explicit host `model_context_window`, then resolved
+model capability metadata, then the `200000` fallback. A zero or negative host
+metadata value is absent rather than a known zero-sized model. Known zero
+derived prompt capacity remains representable when a positive context window
+is exhausted by the reserve and buffer. The output reserve uses this
 precedence:
 
 1. Effective per-request `ModelSettings.max_tokens` when explicitly set.
@@ -180,6 +183,13 @@ microcompact trigger is floor(`effective_full_threshold * 0.75`). Summary
 generation occurs only when cheaper local micro/structural compaction cannot
 fit the history or prompt-too-long recovery forces it.
 
+When warning and preemptive microcompact thresholds are both crossed, the
+runtime first clears eligible old tool results, recalculates effective length,
+and only then appends the optional memory warning if the post-microcompact
+length remains warning-eligible. A warning cannot prevent an otherwise
+eligible microcompact operation. This ordering is mechanical and independent
+of task or answer semantics.
+
 New `memory_compact_started` producers emit `trigger`,
 `configured_threshold`, `effective_threshold`, `microcompact_threshold`,
 `model_context_window`, nullable `model_max_output_tokens`,
@@ -192,9 +202,12 @@ a content-aware `changed` flag. Mode values are `none`, `micro`, `structural`,
 `summary`, and `emergency`. `none` means a trigger was observed but no message
 content changed. `micro` clears eligible old tool payloads; `structural`
 performs local non-summary rewrites; `summary` invokes the summary model;
-`emergency` drops older history after repeated provider rejection. Started and
-completed events retain their existing identity, counts, provider callbacks,
-and failure isolation. Legacy events may omit every additive field.
+`emergency` drops older history after repeated provider rejection. Each event's
+provider callback, runtime payload, and Runner journal projection share the
+same `event_id` and `created_at`; a mapper must not synthesize a second event
+identity. Started and completed events otherwise retain their existing counts,
+provider callbacks, and failure isolation. Legacy events may omit every
+additive field.
 
 Capacity resolution and compaction remain task-neutral. Implementations do not
 inspect task category, answer text, semantic progress, or tool names beyond
