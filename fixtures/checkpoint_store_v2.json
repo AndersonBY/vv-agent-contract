@@ -4,27 +4,22 @@
   "run_definition_schema": "vv-agent.run-definition.v1",
   "run_definition_storage": "credential_redacted_object_embedded_and_immutable_beside_matching_digest",
   "namespaces": {
-    "sqlite_table": "checkpoints_v2",
-    "redis_key_prefix": "vv-agent:checkpoint:v2:",
-    "redis_key_suffix": "lowercase_sha256_of_checkpoint_key",
-    "v1_sqlite_table": "checkpoints",
-    "v1_redis_prefix": "vv_agent:checkpoint:",
-    "v1_bytes_unchanged": true
+    "sqlite_table": "checkpoints",
+    "redis_key_prefix": "vv-agent:checkpoint:",
+    "redis_key_suffix": "lowercase_sha256_of_checkpoint_key"
   },
   "redis_key_vectors": [
     {
       "checkpoint_key": "tenant-7/run-42",
       "checkpoint_key_utf8_sha256": "900c4d195b6e2d16f4ac0725d2306d5b9685397249d4581e107769f38cb068c7",
-      "v1_data_key": "vv_agent:checkpoint:tenant-7/run-42",
-      "v2_data_key": "vv-agent:checkpoint:v2:900c4d195b6e2d16f4ac0725d2306d5b9685397249d4581e107769f38cb068c7",
-      "v2_lease_key": "vv-agent:checkpoint:v2:900c4d195b6e2d16f4ac0725d2306d5b9685397249d4581e107769f38cb068c7:lease"
+      "data_key": "vv-agent:checkpoint:900c4d195b6e2d16f4ac0725d2306d5b9685397249d4581e107769f38cb068c7",
+      "lease_key": "vv-agent:checkpoint:900c4d195b6e2d16f4ac0725d2306d5b9685397249d4581e107769f38cb068c7:lease"
     },
     {
       "checkpoint_key": "研究/运行-42",
       "checkpoint_key_utf8_sha256": "e6b1a2e6f36de6d5273e0ea9b2617ed36e49d0663668dd4cd30ea1091b0d974c",
-      "v1_data_key": "vv_agent:checkpoint:研究/运行-42",
-      "v2_data_key": "vv-agent:checkpoint:v2:e6b1a2e6f36de6d5273e0ea9b2617ed36e49d0663668dd4cd30ea1091b0d974c",
-      "v2_lease_key": "vv-agent:checkpoint:v2:e6b1a2e6f36de6d5273e0ea9b2617ed36e49d0663668dd4cd30ea1091b0d974c:lease"
+      "data_key": "vv-agent:checkpoint:e6b1a2e6f36de6d5273e0ea9b2617ed36e49d0663668dd4cd30ea1091b0d974c",
+      "lease_key": "vv-agent:checkpoint:e6b1a2e6f36de6d5273e0ea9b2617ed36e49d0663668dd4cd30ea1091b0d974c:lease"
     }
   ],
   "operations": [

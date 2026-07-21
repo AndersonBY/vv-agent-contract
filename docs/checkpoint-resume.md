@@ -1,43 +1,27 @@
 # Durable Checkpoint And Resume Contract
 
-This document defines the optional checkpoint v2 and durable-resume contract
-introduced in `vv-agent-contract` 0.5.0. It is a task-neutral persistence and
-recovery mechanism. It does not inspect prompts, answers, task categories, or
-domain milestones, and it does not decide whether a task is semantically
-complete.
+This document defines the current checkpoint v2 and durable-resume contract in
+`vv-agent-contract` 1.0.0. It is a task-neutral persistence and recovery
+mechanism. It does not inspect prompts, answers, task categories, or domain
+milestones, and it does not decide whether a task is semantically complete.
 
 The capability name is **durable resume with explicit ambiguity**. “Exact
 resume” is not used as an unqualified guarantee because an external operation
 can complete without its receipt becoming durable.
 
-## Compatibility And Activation
+## Activation And Strictness
 
-Checkpoint v2 is opt-in through `CheckpointConfig`. Omitting the configuration
-preserves the existing checkpoint v1, Runner, event, and terminal behavior.
-Checkpoint-capable execution backends must reject an enabled v2 configuration
-before the first model or tool operation when their state store or required
-worker capabilities cannot support it.
+Durable execution is enabled through `CheckpointConfig`. Without a checkpoint
+configuration, the Runner uses the ordinary non-durable flow. An enabled
+backend must reject unsupported stores or worker capabilities before the first
+model or tool operation.
 
-V1 and v2 use independent durable namespaces. SQLite stores use an independent
-`checkpoints_v2` table and Redis stores use an independent v2 key prefix. An
-older binary can continue to read and write v1 without seeing or overwriting v2
-state. V2 readers continue to decode v1 payloads for explicit migration, but an
-enabled v2 run does not silently adopt an unrelated v1 record.
-
-Contract 0.5.1 writers add `run_definition_schema` with the fixed value
-`vv-agent.run-definition.v1`. A checkpoint v2 record produced by the
-never-verified 0.5.0 contract lacks that discriminator and cannot prove which
-unspecified digest algorithm produced its hash. Missing or unknown values therefore fail with
-`checkpoint_definition_schema_unsupported` before claim or external operations;
-an explicit host migration must rebuild and attest the definition, validate the
-journals, and atomically replace the schema, digest, and revision without a live
-claim. Implementations never guess a 0.5.0 digest algorithm.
-
-An explicit v1-to-v2 migration is allowed only for a durable v1 terminal. A
-non-terminal v1 record cannot prove that no unjournaled external operation ran
-after its last cycle commit, even when its lease has expired, and therefore
-requires reconciliation instead of automatic migration. The caller supplies
-the v2 checkpoint key and run identity. An active v1 claim cannot be migrated.
+There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
+`vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
+suffix. Records require `schema_version=vv-agent.checkpoint.v2` and
+`run_definition_schema=vv-agent.run-definition.v1`. Missing, stale, unknown,
+or malformed discriminators fail before claim or external operations. The
+runtime has no older decoder, namespace probe, or migration path.
 
 ## Public Configuration
 
@@ -116,7 +100,7 @@ prompt, initial messages, initial shared state, metadata, and context reference
 instead of re-reading a session or context provider that may already have
 changed because of the interrupted run. Current tool/model schemas and stable
 capability ids/versions are resolved and compared to that definition before new
-external work. A digest without its definition is insufficient for 0.5.1.
+external work. A digest without its current typed definition is insufficient.
 
 ### Run Definition Digest
 
@@ -198,20 +182,20 @@ event cursor remain excluded.
 - `extension_state`;
 - `model_call_journal` and `tool_journal`.
 
-The existing additive `revision`, claim, lease, and `terminal_result` fields
-retain their checkpoint v1 meanings. A claim tuple remains all-or-none, and a
-terminal record cannot have an active claim.
+`revision`, the claim tuple, lease, `terminal_result`, and
+`terminal_acknowledged` are required current fields. A claim tuple is
+all-or-none, and a terminal record cannot have an active claim.
 `reconciliation_required` requires at least one ambiguous journal entry and no
 claim. A running checkpoint may retain an ambiguous entry only while a recovery
 claim is actively resolving it. Terminal records have no active journals except
 an explicit operator-abort terminal, which retains its ambiguous evidence.
 
-An absent `schema_version` is decoded strictly as checkpoint v1. A present,
-unknown discriminator returns `checkpoint_schema_unsupported`; it never falls
-back to v1. Unknown top-level v2 fields are preserved by a read-write cycle when the store
-uses a whole-object representation. Known fields with invalid types or values
-are rejected. Unknown extension namespaces are always preserved as opaque JSON
-and are not restored into an unregistered extension.
+An absent or unknown checkpoint discriminator returns
+`checkpoint_schema_unsupported`. Top-level objects are closed, so unknown
+fields and invalid types are rejected. Unknown optional extension namespaces
+may be preserved only inside the typed `extension_state` map and are not
+restored into an unregistered extension. Unknown required extensions block
+resume.
 
 Checkpoint journals contain only the active or not-yet-committed cycle. A
 successful cycle commit incorporates its messages, cycle record, usage, and
@@ -385,7 +369,8 @@ tool again. The reconstructed request digest must equal the durable digest;
 mismatch is checkpoint/journal integrity failure, not evidence that the
 external outcome is ambiguous. It returns
 `checkpoint_journal_integrity_mismatch` before claim without mutating the
-journal or replaying stale data. Explicit host repair/migration is required.
+journal or replaying stale data. The current runtime does not rewrite an
+untrusted record into a different schema.
 
 ## Ambiguity And Reconciliation
 
@@ -480,10 +465,9 @@ dedicated `turn/resume` operation, maps reconciliation-required to turn status
 `checkpoint` and `interruption` summaries. Their exact camelCase field sets and
 safe examples are defined in `app_server_observable_v1.json`. It never exposes
 the run definition or digest, operation arguments, responses, extension state,
-or idempotency keys. Public
-`AgentResult` serialization uses the additive null fields defined by
-`result_public_v1.json`; checkpoint v1 bytes strip them, and App Server omits
-absent summaries. Omitting checkpoint v2 otherwise preserves pre-0.5 behavior.
+or idempotency keys. Public `AgentResult` serialization uses the complete closed
+shape defined by `result_public_v1.json`; App Server omits only fields that its
+current schema marks optional.
 
 App Server `checkpoint.status` is the persisted `AgentStatus`; it is distinct
 from App Server `TurnStatus`. For example, durable
@@ -530,30 +514,30 @@ responsibilities. App Server projections intentionally expose only summaries.
 
 Checkpoint configuration belongs to one root run definition. Agent-as-tool and
 background children do not implicitly inherit the parent's checkpoint key; a
-host may provide a distinct child key explicitly. Contract 0.5.1 fails closed
-with `checkpoint_handoff_unsupported` when checkpoint v2 is combined with a
+host may provide a distinct child key explicitly. The current contract fails
+closed with `checkpoint_handoff_unsupported` when checkpoint v2 is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
 part of the v2 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence
 
-- `checkpoint_codec_v2.json` defines the codec, migration, namespace, size,
-  claim, and compatibility cases.
+- `checkpoint_codec_v2.json` defines the strict codec, size, claim, and current
+  validation cases.
 - `operation_journal_v1.json` defines valid entries, transitions,
   reconciliation decisions, replay, and retry boundaries.
 - `checkpoint_config_v1.json` defines public defaults, precedence, key
   generation, collision, missing-key, and run-definition mismatch behavior.
 - `run_definition_v1.json` defines the RFC 8785 digest input, credential
   redaction, canonical bytes, and SHA-256 golden vectors.
-- `checkpoint_store_v2.json` defines v2 create/load, claim-internal progress,
-  lease, CAS, terminal, outbox, append-once, and namespace behavior.
+- `checkpoint_store_v2.json` defines create/load, claim-internal progress,
+  lease, CAS, terminal, outbox, append-once, and the single current namespace.
 - `checkpoint_resume_v1.json` contains executable public Runner and distributed
   recovery cases; boolean fixture claims are insufficient producer evidence.
 - `resume_events_v1.jsonl` is a catalog of canonical scenario excerpts, not one
   continuous run. Records sharing a run id and trace id define required local
   order; different identity pairs are independent fixture groups. Grouping
   metadata is not inserted into the formal RunEvent payload.
-- `distributed_run_envelope_v2.json` defines the worker wire, required
-  extension references, and optional reconciliation capability reference. The v1 envelope fixture
-  remains byte-identical as a dual-read golden input.
+- `distributed_run_envelope_v2.json` defines the worker wire, lease lifecycle,
+  required extension references, and optional reconciliation capability
+  reference.

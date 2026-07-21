@@ -62,15 +62,6 @@ function verifyVector(label, value, vector) {
   }
 }
 
-function verifyImmutableVector(label, value, vector) {
-  const actual = vectorValues(value);
-  for (const [field, observed] of Object.entries(actual)) {
-    if (vector[field] !== observed) {
-      fail(`${label}: immutable ${field} mismatch: expected ${vector[field]}, observed ${observed}`);
-    }
-  }
-}
-
 function vectorValues(value) {
   const bytes = Buffer.from(canonicalize(value), "utf8");
   return {
@@ -109,8 +100,7 @@ function writeGeneratedFields(name, vectors, valueField) {
 
 function syncCheckpointRunDefinition(runDefinition) {
   const fixturePath = path.join(ROOT, "fixtures", "checkpoint_codec_v2.json");
-  let source = fs.readFileSync(fixturePath, "utf8");
-  const checkpoint = JSON.parse(source);
+  const checkpoint = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
   const minimal = runDefinition.golden_cases.find((entry) => entry.name === "minimal");
   if (!minimal) {
     fail("run_definition_v1.json: missing minimal golden case");
@@ -133,34 +123,37 @@ function syncCheckpointRunDefinition(runDefinition) {
     }
   }
 
-  const nextCanonical = canonicalize(minimal.definition);
-  const previousMarker = `\"run_definition\": ${previousCanonical}`;
-  const nextMarker = `\"run_definition\": ${nextCanonical}`;
-  const replacementCount = source.split(previousMarker).length - 1;
-  if (replacementCount !== payloads.length) {
-    fail(
-      `checkpoint_codec_v2.json: expected ${payloads.length} embedded definitions, found ${replacementCount}`,
-    );
-  }
-  source = source.split(previousMarker).join(nextMarker);
-
   const previousDigest = checkpoint.canonical_checkpoint.run_definition_digest;
-  const nextDigest = vectorValues(minimal.definition).sha256;
-  if (typeof previousDigest !== "string" || !source.includes(previousDigest)) {
-    fail("checkpoint_codec_v2.json: previous minimal definition digest not found");
+  if (typeof previousDigest !== "string") {
+    fail("checkpoint_codec_v2.json: previous minimal definition digest is not a string");
   }
-  source = source.replaceAll(previousDigest, nextDigest);
-  fs.writeFileSync(fixturePath, source, "utf8");
+  const nextDigest = vectorValues(minimal.definition).sha256;
+  for (const payload of payloads) {
+    payload.run_definition = structuredClone(minimal.definition);
+  }
+
+  function replaceDigest(value) {
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        value[index] = replaceDigest(value[index]);
+      }
+      return value;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, item] of Object.entries(value)) {
+        value[key] = replaceDigest(item);
+      }
+      return value;
+    }
+    return value === previousDigest ? nextDigest : value;
+  }
+  replaceDigest(checkpoint);
+  fs.writeFileSync(fixturePath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
 }
 
 const runDefinition = readFixture("run_definition_v1.json");
 for (const vector of runDefinition.golden_cases) {
   verifyVector(`run_definition/${vector.name}`, vector.definition, vector);
-}
-
-const legacyRunDefinition = readFixture("run_definition_legacy_v1.json");
-for (const vector of legacyRunDefinition.cases) {
-  verifyImmutableVector(`run_definition_legacy/${vector.name}`, vector.definition, vector);
 }
 
 if (WRITE) {

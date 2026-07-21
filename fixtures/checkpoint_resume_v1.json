@@ -11,7 +11,7 @@
   },
   "runner_cases": [
     {
-      "name": "disabled_preserves_v1_behavior",
+      "name": "disabled_uses_non_durable_flow",
       "run": {
         "agent": {
           "name": "checkpoint-agent",

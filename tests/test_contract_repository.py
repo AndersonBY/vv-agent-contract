@@ -9,7 +9,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -70,10 +69,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.10.1")
+        self.assertEqual(report["version"], "1.0.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 53)
-        self.assertEqual(report["manifest_entries"], 52)
+        self.assertEqual(report["fixture_files"], 47)
+        self.assertEqual(report["manifest_entries"], 46)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
@@ -156,7 +155,7 @@ class ContractRepositoryTests(unittest.TestCase):
             lifecycle["provider_and_journal_share_event_identity"],
             ["event_id", "created_at"],
         )
-        self.assertTrue(lifecycle["legacy_missing_additive_fields_are_accepted"])
+        self.assertTrue(lifecycle["missing_or_unknown_fields_are_rejected"])
 
     def test_release_bundle_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
@@ -227,11 +226,11 @@ class ContractRepositoryTests(unittest.TestCase):
         invalid = cases["invalid_cache_numbers_are_not_zero"]["expected"]["cache_usage"]
 
         self.assertEqual(explicit_zero["status"], "provider_reported")
-        self.assertEqual(explicit_zero["read_tokens"], 0)
+        self.assertEqual(explicit_zero["read_input_tokens"], 0)
         self.assertEqual(missing["status"], "accounting_missing")
-        self.assertIsNone(missing["read_tokens"])
+        self.assertIsNone(missing["read_input_tokens"])
         self.assertEqual(unsupported["status"], "unsupported")
-        self.assertIsNone(unsupported["read_tokens"])
+        self.assertIsNone(unsupported["read_input_tokens"])
         self.assertEqual(invalid, missing)
 
     def test_token_usage_aggregation_never_exposes_partial_total(self) -> None:
@@ -241,11 +240,70 @@ class ContractRepositoryTests(unittest.TestCase):
         complete = cases["complete_provider_cache_observations"]["expected"]
         partial = cases["partial_observation_is_not_a_partial_total"]["expected"]
 
-        self.assertEqual(complete["read_tokens"], 640)
+        self.assertEqual(complete["read_input_tokens"], 640)
         self.assertEqual(complete["uncached_input_tokens"], 1360)
         self.assertEqual(partial["status"], "accounting_missing")
-        self.assertIsNone(partial["read_tokens"])
+        self.assertIsNone(partial["read_input_tokens"])
         self.assertIsNone(partial["uncached_input_tokens"])
+
+    def test_canonical_usage_projections_use_strict_nested_shape(self) -> None:
+        token_keys = {
+            "schema_version",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "reasoning_tokens",
+            "usage_source",
+            "cache_usage",
+            "provider_usage",
+        }
+        task_keys = {
+            "schema_version",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "reasoning_tokens",
+            "cache_usage",
+            "cycles",
+        }
+        cache_keys = {
+            "status",
+            "read_input_tokens",
+            "write_input_tokens",
+            "uncached_input_tokens",
+            "source",
+        }
+
+        public_result = json.loads(
+            (ROOT / "fixtures/result_public_v1.json").read_text(encoding="utf-8")
+        )["agent_result"]
+        cycle_usage = public_result["cycles"][0]["token_usage"]
+        task_usage = public_result["token_usage"]
+        self.assertEqual(set(cycle_usage), token_keys)
+        self.assertEqual(set(cycle_usage["cache_usage"]), cache_keys)
+        self.assertEqual(set(task_usage), task_keys)
+        self.assertEqual(task_usage["schema_version"], "vv-agent.task-token-usage.v1")
+        self.assertEqual(set(task_usage["cycles"][0]), {"cycle_index", "usage"})
+        self.assertEqual(set(task_usage["cycles"][0]["usage"]), token_keys)
+
+        journal = json.loads(
+            (ROOT / "fixtures/operation_journal_v1.json").read_text(encoding="utf-8")
+        )
+        model_success = next(
+            case for case in journal["valid_entries"] if case["name"] == "model_succeeded"
+        )
+        self.assertEqual(set(model_success["entry"]["response"]["token_usage"]), token_keys)
+
+        completed_event = json.loads(
+            (ROOT / "fixtures/configured_sub_agent_events_v1.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()[1]
+        )
+        self.assertEqual(set(completed_event["token_usage"]), task_keys)
+        self.assertEqual(
+            completed_event["token_usage"]["cycles"][0]["usage"]["usage_source"],
+            "accounting_missing",
+        )
 
     def test_public_api_inventories_token_usage_types(self) -> None:
         fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
@@ -428,7 +486,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertFalse(metadata["model_visible"])
         self.assertTrue(metadata["generic_metadata_is_not_a_declaration"])
-        self.assertTrue(metadata["absent_metadata_preserves_legacy_behavior"])
+        self.assertTrue(metadata["absent_metadata_uses_neutral_defaults"])
         self.assertEqual(
             fixture["collection_normalization"]["portable_whitespace_code_points"],
             ["U+0009", "U+000A", "U+000D", "U+0020"],
@@ -442,21 +500,10 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         invalid_names = {case["name"] for case in fixture["invalid_cases"]}
         self.assertIn("unknown_field", invalid_names)
-        self.assertTrue(fixture["legacy_idempotency"]["public_alias_remains_supported"])
-        self.assertEqual(
-            fixture["legacy_idempotency"]["conflicting_non_unknown_values"],
-            "reject",
+        self.assertNotIn("legacy_idempotency", fixture)
+        self.assertTrue(
+            fixture["telemetry_contract"]["missing_required_completed_fields_are_rejected"]
         )
-        alias_cases = {
-            case["name"]: case for case in fixture["legacy_idempotency"]["cases"]
-        }
-        self.assertEqual(len(alias_cases), 5)
-        self.assertEqual(
-            alias_cases["typed_unknown_inherits_legacy"]["expected_effective"],
-            "supported",
-        )
-        self.assertFalse(alias_cases["conflicting_non_unknown_values_fail_closed"]["valid"])
-        self.assertTrue(fixture["legacy_idempotency"]["normalization_is_idempotent"])
         self.assertTrue(fixture["public_construction"]["generic_metadata_remains_separate"])
 
         policy = fixture["policy_contract"]
@@ -540,46 +587,6 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertIn("task_category", fixture["task_independence"]["forbidden_framework_fields"])
         self.assertTrue(fixture["task_independence"]["prompt_and_tool_schema_unchanged"])
-
-    def test_legacy_run_definition_defaults_compare_without_rewriting_evidence(self) -> None:
-        legacy = json.loads(
-            (ROOT / "fixtures/run_definition_legacy_v1.json").read_text(encoding="utf-8")
-        )
-        current = json.loads(
-            (ROOT / "fixtures/run_definition_v1.json").read_text(encoding="utf-8")
-        )
-        checkpoint = json.loads(
-            (ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8")
-        )
-        current_by_name = {case["name"]: case for case in current["golden_cases"]}
-        legacy_by_name = {case["name"]: case for case in legacy["cases"]}
-
-        self.assertEqual(legacy["source_contract_version"], "0.7.1")
-        self.assertTrue(legacy["preservation"]["reader_defaulting_uses_a_comparison_copy_only"])
-        for case in legacy["cases"]:
-            canonical = base64.b64decode(case["canonical_json_base64"], validate=True)
-            self.assertEqual(json.loads(canonical), case["definition"])
-            self.assertEqual(len(canonical), case["canonical_json_utf8_bytes"])
-            self.assertEqual(hashlib.sha256(canonical).hexdigest(), case["sha256"])
-
-        for reader_case in checkpoint["legacy_additive_reader_cases"]:
-            legacy_name = reader_case["source_fixture"].split("#", maxsplit=1)[1]
-            current_name = reader_case["current_writer_fixture"].split("#", maxsplit=1)[1]
-            stored = legacy_by_name[legacy_name]
-            comparison = deepcopy(stored["definition"])
-            for tool in comparison["tools"]:
-                tool.setdefault("tool_metadata", None)
-            for key, value in legacy["additive_defaults"]["tool_policy"].items():
-                comparison["tool_policy"].setdefault(key, deepcopy(value))
-
-            self.assertEqual(stored["sha256"], reader_case["stored_digest"])
-            self.assertEqual(comparison, current_by_name[current_name]["definition"])
-            self.assertEqual(
-                current_by_name[current_name]["sha256"],
-                reader_case["current_writer_digest"],
-            )
-            self.assertTrue(reader_case["expected"]["stored_definition_unchanged"])
-            self.assertTrue(reader_case["expected"]["stored_digest_unchanged"])
 
     def test_metadata_denials_propagate_to_children_and_distributed_workers(self) -> None:
         child_fixture = json.loads(
@@ -675,17 +682,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(denial_payload["executionStarted"])
         self.assertIsNone(denial_payload["durationMs"])
         self.assertEqual(denial_payload["errorCode"], "tool_not_allowed")
-        self.assertEqual(
-            set(fixture["legacyCompleted"]["notification"]["params"]["payload"]),
-            {"toolName", "toolCallId", "status"},
-        )
+        self.assertNotIn("legacyCompleted", fixture)
 
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
         fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["runner_cases"]}
 
         required = {
-            "no_limits_preserve_legacy_terminal",
+            "no_limits_uses_normal_terminal_flow",
             "total_tokens_equal_limit_can_finish",
             "total_tokens_atomic_overshoot",
             "token_limit_reached_blocks_next_llm",
@@ -731,19 +735,20 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_distributed_contract_carries_limits_meter_reference_and_budget_state(self) -> None:
         envelope = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
         )["canonical_envelope"]
-        checkpoint = json.loads((ROOT / "fixtures/checkpoint_codec_v1.json").read_text(encoding="utf-8"))
+        checkpoint = json.loads(
+            (ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8")
+        )
 
         self.assertEqual(envelope["budget_limits"]["max_total_tokens"], 5000)
         self.assertEqual(
             envelope["recipe"]["capabilities"]["host_cost_meter_ref"],
             {"id": "cost.tenant-run", "version": "1"},
         )
-        running = next(case for case in checkpoint["valid_cases"] if case["name"] == "running_with_budget_state")
-        self.assertEqual(running["payload"]["budget_usage"]["elapsed_ms"], 50)
+        self.assertEqual(checkpoint["canonical_checkpoint"]["budget_usage"]["elapsed_ms"], 125)
 
-    def test_completion_policy_is_task_agnostic_and_backward_compatible(self) -> None:
+    def test_completion_policy_is_task_agnostic(self) -> None:
         fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["policy_values"], ["continue", "wait_user", "finish"])
@@ -764,7 +769,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_distributed_lease_lifecycle_closes_side_effect_windows(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
         )
         lifecycle = fixture["lease_lifecycle"]
         rules = lifecycle["rules"]
@@ -903,7 +908,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 254)
+        self.assertEqual(surface_member_count, 251)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -913,6 +918,11 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(
             {"budget_limits", "host_cost_meter"}.issubset(
+                {member["id"] for member in surfaces["run_config"]["members"]}
+            )
+        )
+        self.assertTrue(
+            {"llm_builder", "timeout_seconds"}.isdisjoint(
                 {member["id"] for member in surfaces["run_config"]["members"]}
             )
         )
@@ -981,8 +991,13 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_completion_event_and_app_server_closure_is_explicit(self) -> None:
         invalid = json.loads((ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8"))
         rejected = {case["id"] for case in invalid["reject"]}
+        self.assertNotIn("canonicalize", invalid)
+        self.assertEqual(invalid["rules"]["unknown_top_level_fields"], "reject")
         self.assertTrue(
             {
+                "approval_approved_field_is_rejected",
+                "approval_action_is_missing",
+                "approval_action_is_unknown",
                 "unknown_completion_reason",
                 "completion_reason_is_not_a_string_or_null",
                 "completion_tool_name_is_not_a_string_or_null",
@@ -1178,10 +1193,9 @@ class ContractRepositoryTests(unittest.TestCase):
             text=True,
         )
 
-    def test_checkpoint_v2_discriminator_extensions_and_migration_are_explicit(self) -> None:
+    def test_checkpoint_v2_is_strict_and_extensions_are_explicit(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8"))
         canonical = fixture["canonical_checkpoint"]
-        migrations = {case["name"]: case for case in fixture["migration_cases"]}
         run_definition_fixture = json.loads(
             (ROOT / "fixtures/run_definition_v1.json").read_text(encoding="utf-8")
         )
@@ -1193,17 +1207,29 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
         self.assertEqual(len(canonical["run_definition_digest"]), 64)
-        self.assertTrue(fixture["discriminator"]["v1_when_field_absent"])
         self.assertEqual(
-            fixture["discriminator"]["unknown_present_value_error"],
-            "checkpoint_schema_unsupported",
+            fixture["discriminator"],
+            {
+                "required_value": "vv-agent.checkpoint.v2",
+                "missing_or_unknown_error": "checkpoint_schema_unsupported",
+            },
         )
-        self.assertFalse(migrations["running_v1_requires_reconciliation"]["expected"]["allowed"])
         self.assertEqual(
-            migrations["running_v1_requires_reconciliation"]["expected"]["status"],
-            "reconciliation_required",
+            fixture["run_definition_schema_rules"],
+            {
+                "required_value": "vv-agent.run-definition.v1",
+                "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
+                "failure_boundary": "before_claim_model_or_tool",
+            },
         )
+        self.assertNotIn("migration_cases", fixture)
+        self.assertNotIn("legacy_additive_reader_cases", fixture)
+        self.assertEqual(fixture["unknown_field_policy"]["top_level_whole_object_store"], "reject")
         self.assertEqual(fixture["unknown_field_policy"]["extension_required"], "block_resume")
+        self.assertIn(
+            "unknown_top_level_is_rejected",
+            {case["name"] for case in fixture["invalid_cases"]},
+        )
         valid_cases = {case["name"]: case["payload"] for case in fixture["valid_cases"]}
         for payload in valid_cases.values():
             self.assertEqual(payload["run_definition"], minimal_definition["definition"])
@@ -1253,32 +1279,6 @@ class ContractRepositoryTests(unittest.TestCase):
                     "tool_calls": 0,
                 },
             )
-        migration_050 = migrations["checkpoint_0_5_0_v2_requires_explicit_definition_migration"]
-        self.assertFalse(migration_050["automatic_resume"]["allowed"])
-        source_050 = migration_050["source_payload"]
-        self.assertNotIn("run_definition_schema", source_050)
-        self.assertNotIn("run_definition", source_050)
-        self.assertEqual(source_050["run_definition_digest"], "c" * 64)
-        self.assertFalse(
-            migration_050["explicit_host_migration"]["implicit_guess_of_0_5_0_digest_algorithm"]
-        )
-        self.assertEqual(
-            migration_050["explicit_host_migration"]["target_run_definition_digest"],
-            "317014f812ca868f02939f292b2c545886400e29fdb33c82ee2550bae2be78ca",
-        )
-        self.assertEqual(
-            migration_050["explicit_host_migration"]["atomic_fields"],
-            [
-                "run_definition_schema",
-                "run_definition",
-                "run_definition_digest",
-                "revision",
-            ],
-        )
-        for name in ("absent_discriminator_reads_v1", "terminal_v1_explicit_migration"):
-            terminal = migrations[name]["source"]["terminal_result"]
-            self.assertNotIn("checkpoint_key", terminal)
-            self.assertNotIn("resume_observation", terminal)
         limits = fixture["extension_limits"]
         generated = {case["name"]: case for case in limits["generated_boundary_cases"]}
         complex_vector = limits["canonicalization_vectors"][0]
@@ -1418,7 +1418,14 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(cases["terminal_ack_is_retained"]["expected"]["row_present"])
         self.assertTrue(fixture["redis_rules"]["whole_json_heartbeat_forbidden"])
-        self.assertEqual(fixture["namespaces"]["v1_redis_prefix"], "vv_agent:checkpoint:")
+        self.assertEqual(
+            fixture["namespaces"],
+            {
+                "sqlite_table": "checkpoints",
+                "redis_key_prefix": "vv-agent:checkpoint:",
+                "redis_key_suffix": "lowercase_sha256_of_checkpoint_key",
+            },
+        )
         self.assertEqual(cases["claim_next_cycle"]["expected"]["resume_attempt"], 1)
         self.assertEqual(cases["expired_claim_can_be_reclaimed"]["expected"]["resume_attempt"], 2)
         self.assertEqual(
@@ -1462,9 +1469,8 @@ class ContractRepositoryTests(unittest.TestCase):
         for vector in fixture["redis_key_vectors"]:
             digest = hashlib.sha256(vector["checkpoint_key"].encode("utf-8")).hexdigest()
             self.assertEqual(digest, vector["checkpoint_key_utf8_sha256"])
-            self.assertEqual(vector["v2_data_key"], f"vv-agent:checkpoint:v2:{digest}")
-            self.assertEqual(vector["v2_lease_key"], f"{vector['v2_data_key']}:lease")
-            self.assertNotEqual(vector["v1_data_key"], vector["v2_data_key"])
+            self.assertEqual(vector["data_key"], f"vv-agent:checkpoint:{digest}")
+            self.assertEqual(vector["lease_key"], f"{vector['data_key']}:lease")
         event_vector = fixture["event_payload_digest"]["golden_cases"][0]
         event_bytes = base64.b64decode(event_vector["canonical_json_base64"], validate=True)
         self.assertEqual(hashlib.sha256(event_bytes).hexdigest(), event_vector["sha256"])
@@ -1661,14 +1667,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(terminal_replay["response"]["result"]["status"], "completed")
         self.assertEqual(terminal_replay["externalCalls"], 0)
 
-    def test_distributed_v2_preserves_v1_and_resolves_checkpoint_capabilities(self) -> None:
+    def test_distributed_v2_resolves_checkpoint_capabilities_strictly(self) -> None:
         fixture = json.loads(
             (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
         )
         envelope = fixture["canonical_envelope"]
         capabilities = envelope["recipe"]["capabilities"]
 
-        self.assertTrue(fixture["compatibility"]["v1_bytes_must_remain_unchanged"])
+        self.assertNotIn("compatibility", fixture)
         self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v2")
         self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v1")
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
@@ -1680,6 +1686,13 @@ class ContractRepositoryTests(unittest.TestCase):
             capabilities["tool_policy"]["denied_side_effects"],
             ["execute"],
         )
+        missing = next(
+            case
+            for case in fixture["capability_resolution_cases"]
+            if case["name"] == "unknown_capability_fails_before_claim"
+        )
+        self.assertEqual(missing["expected"]["claim_count"], 0)
+        self.assertEqual(missing["expected"]["model_calls"], 0)
         self.assertEqual(
             capabilities["tool_policy"]["denied_capability_tags"],
             ["filesystem.delete"],
@@ -1729,11 +1742,11 @@ class ContractRepositoryTests(unittest.TestCase):
             {"checkpoint_claim_mode_invalid"},
         )
 
-    def test_checkpoint_sqlite_v2_is_isolated_from_v1(self) -> None:
+    def test_checkpoint_sqlite_has_one_strict_current_table(self) -> None:
         sql = (ROOT / "fixtures/checkpoint_sqlite_canonical_v2.sql").read_text(encoding="utf-8")
 
-        self.assertIn("CREATE TABLE IF NOT EXISTS checkpoints_v2", sql)
-        self.assertNotIn("CREATE TABLE IF NOT EXISTS checkpoints (", sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS checkpoints (", sql)
+        self.assertNotIn("checkpoints_v2", sql)
         self.assertIn("run_definition_schema TEXT NOT NULL", sql)
         self.assertIn("run_definition TEXT NOT NULL", sql)
         self.assertIn("terminal_acknowledged", sql)
@@ -1742,18 +1755,15 @@ class ContractRepositoryTests(unittest.TestCase):
         try:
             connection.executescript(sql)
             connection.execute(
-                "CREATE TABLE checkpoints (task_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
-            )
-            connection.execute(
                 """
-                INSERT INTO checkpoints_v2 (
+                INSERT INTO checkpoints (
                     checkpoint_key, schema_version, run_definition_schema, run_definition, task_id,
                     root_run_id, trace_id, run_definition_digest, resume_attempt,
                     cycle_index, status, messages, cycles, shared_state, budget_usage,
                     event_cursor, event_outbox, extension_state, model_call_journal,
-                    tool_journal, unknown_fields, revision, claim_token, claimed_cycle,
+                    tool_journal, revision, claim_token, claimed_cycle,
                     lease_expires_at_ms, terminal_result, terminal_acknowledged
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "key-v2",
@@ -1776,7 +1786,6 @@ class ContractRepositoryTests(unittest.TestCase):
                     "{}",
                     "[]",
                     "[]",
-                    "{}",
                     0,
                     None,
                     None,
@@ -1785,34 +1794,23 @@ class ContractRepositoryTests(unittest.TestCase):
                     0,
                 ),
             )
-            connection.execute(
-                "INSERT INTO checkpoints (task_id, payload) VALUES (?, ?)",
-                ("task-v1", "{}"),
-            )
             tables = {
                 row[0]
                 for row in connection.execute(
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 )
             }
-            self.assertTrue({"checkpoints", "checkpoints_v2"}.issubset(tables))
+            self.assertIn("checkpoints", tables)
+            self.assertNotIn("checkpoints_v2", tables)
             self.assertEqual(
                 connection.execute(
-                    "SELECT run_definition_schema FROM checkpoints_v2 WHERE checkpoint_key = ?",
+                    "SELECT run_definition_schema FROM checkpoints WHERE checkpoint_key = ?",
                     ("key-v2",),
                 ).fetchone(),
                 ("vv-agent.run-definition.v1",),
             )
         finally:
             connection.close()
-
-    def test_checkpoint_and_distributed_v1_golden_bytes_are_unchanged(self) -> None:
-        expected = {
-            "checkpoint_codec_v1.json": "e7be2cfafca7f741d32b4537cb003f0179f69162171432c17cd746a0ff2119cf",
-            "distributed_run_envelope_v1.json": "c1eb11591c93e8ac880fd4688cf06e0fe60a8b4522f7707ea13e1cccf40208e0",
-        }
-        for filename, digest in expected.items():
-            self.assertEqual(hashlib.sha256((ROOT / "fixtures" / filename).read_bytes()).hexdigest(), digest)
 
     def test_snapshot_sync_and_offline_check(self) -> None:
         revision = "b" * 40
@@ -1830,7 +1828,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v0.9.0/vv-agent-contract-0.9.0.zip"
+                    "v1.0.0/vv-agent-contract-1.0.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )
@@ -1838,7 +1836,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 53)
+            self.assertEqual(synced["fixture_files"], 47)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

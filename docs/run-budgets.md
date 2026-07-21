@@ -1,9 +1,9 @@
 # Run Budget Contract
 
-This document defines the language-neutral resource budget contract introduced
-in `vv-agent-contract` 0.4.0. Budgets control resource admission and accounting.
-They do not decide whether an Agent has answered a task correctly or whether a
-task is semantically complete.
+This document defines the current language-neutral resource budget contract.
+Budgets control resource admission and accounting. They do not decide whether
+an Agent has answered a task correctly or whether a task is semantically
+complete.
 
 ## Public Configuration
 
@@ -32,9 +32,9 @@ The same precedence applies to the optional host cost meter. Agents do not
 define implicit budgets.
 
 An object that sets only `unavailable_metric_policy` has no configured
-dimension and is therefore unlimited. Wire decoders ignore unknown object
-fields for forward compatibility but reject invalid values for every known
-field. Exact-name maps serialize in lexicographic key order.
+dimension and is therefore unlimited. Wire objects are closed: decoders reject
+unknown fields and invalid values. Exact-name maps serialize in lexicographic
+key order.
 
 ## Usage And Availability
 
@@ -56,8 +56,8 @@ and does not increment the counters.
 Provider-reported and explicitly estimated total token usage are available for
 `total_tokens`; `accounting_missing` is unavailable. Uncached input is
 available only from the typed cache observation's non-null
-`uncached_input_tokens`, including explicit zero. Legacy numeric cache fields
-do not make that metric available.
+`uncached_input_tokens`, including explicit zero. Native fields inside
+`provider_usage` do not make that metric available to the budget layer.
 
 Elapsed time is measured with monotonic clocks. Inline and thread runs count
 their active run interval. Distributed runs persist completed active intervals
@@ -187,15 +187,14 @@ terminal projections use the same wire objects.
 
 ## Resume And Distributed State
 
-Approval resume keeps the source run's budget usage even though completion
-contract 0.3 gives it a fresh run id and a fresh `max_cycles` allowance. Time
-spent waiting for approval is excluded. A new independent Runner invocation
-starts a fresh budget.
+Approval resume keeps the source run's budget usage while assigning a fresh run
+id and a fresh `max_cycles` allowance. Time spent waiting for approval is
+excluded. A new independent Runner invocation starts a fresh budget.
 
-Checkpoint v1 may persist additive budget usage so distributed cycles use one
-evaluator state without claiming durable operation resume. Opt-in checkpoint
-v2 resumes the last durable cumulative snapshot as defined by contract 0.5,
-while still making no arbitrary exactly-once external-effect guarantee.
+Checkpoint v2 persists the complete cumulative budget snapshot. Local resume,
+distributed continuation, and transport redelivery all restore that snapshot
+before the next enforcement boundary. This accounting continuity does not make
+an arbitrary external effect exactly once.
 
 ## Canonical Evidence
 

@@ -9,7 +9,8 @@ mandatory routing map; durable detail belongs in `docs/`.
 - Read `contract.json` and `support-matrix.json` before changing a contract.
 - Read `docs/parity-contract.md` for normative observable behavior.
 - Follow `docs/change-workflow.md` for contract authoring and adoption.
-- Use `docs/compatibility-policy.md` before choosing a version bump.
+- Read `docs/versioning-policy.md` before changing any schema, protocol, or
+  public behavior.
 
 ## Contract Rules
 
@@ -26,6 +27,15 @@ mandatory routing map; durable detail belongs in `docs/`.
   cross-repository workflow pass.
 - Preserve existing implementation worktrees. Contract synchronization is not
   permission to reset or overwrite unrelated changes.
+- Keep `HEAD` forward-only. It contains exactly one current canonical shape for
+  each public API, prompt, tool, runtime record, event, session, checkpoint,
+  and wire protocol. Delete superseded readers, aliases, shims, migrations,
+  fixtures, and documentation in the same change; Git is the history.
+- Keep schema and protocol discriminators only as strict validation boundaries.
+  Current readers must reject missing, stale, unknown, and malformed versions;
+  they must not dispatch to historical decoders.
+- Unknown fields are rejected unless the canonical contract explicitly defines
+  an extension map at that location.
 
 ## Required Commands
 

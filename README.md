@@ -5,8 +5,14 @@ Python [`vv-agent`](https://github.com/AndersonBY/vv-agent) and Rust
 [`vv-agent-rs`](https://github.com/AndersonBY/vv-agent-rs) implementations.
 
 The repository owns observable SDK semantics, canonical fixtures, wire
-schemas, compatibility rules, and adoption evidence. It does not contain either
+schemas, strict version rules, and adoption evidence. It does not contain either
 runtime implementation.
+
+`HEAD` is forward-only: it contains one current canonical representation for
+each contract surface. Superseded decoders, aliases, migration paths, and
+fixtures are removed rather than retained; Git history is the archive. Schema
+and protocol versions remain required so current readers can reject stale or
+malformed input.
 
 ## How Implementations Consume It
 

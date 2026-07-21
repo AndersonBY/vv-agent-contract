@@ -21,7 +21,7 @@ python3 scripts/contractctl.py build --output-dir dist
 ```
 
 完整流程见 `docs/change-workflow.md`，版本规则见
-`docs/compatibility-policy.md`。
+`docs/versioning-policy.md`。
 可选运行资源预算的规范见 `docs/run-budgets.md`。
 可选的持久化恢复、操作日志与显式歧义处理规范见
 `docs/checkpoint-resume.md`。

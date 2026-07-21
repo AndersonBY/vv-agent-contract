@@ -55,7 +55,7 @@ form a union. The first `stop_non_success` wins and later hooks are not called.
 The first exception or invalid decision fails the run with a typed runtime log
 code and completion reason `failed`.
 
-No hooks means exact legacy behavior: there is no callback invocation, no
+No hooks means the native runtime path: there is no callback invocation, no
 control state, no lifecycle log, no checkpoint extension, and no change to the
 default continuation hint or terminal result.
 

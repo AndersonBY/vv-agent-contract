@@ -1,6 +1,6 @@
 # Optional Output Validation And Repair
 
-Contract `0.9.0` adds a host extension for validating a completed output and,
+Contract `1.0.0` defines a host extension for validating a completed output and,
 when the host explicitly supplies one, asking a separate repair callback for a
 replacement value. It is deliberately outside the default agent loop.
 
@@ -8,8 +8,7 @@ replacement value. It is deliberately outside the default agent loop.
 
 The capability is disabled unless the host registers a validator and enables
 it for the run. With no enabled validator, the runtime performs no additional
-callback, emits no additional trace event, and keeps the existing terminal
-observation and output behavior byte-for-byte compatible.
+callback or trace event and uses the native terminal path.
 
 The host may set a repair callback and a maximum repair count, but the contract
 currently permits at most one repair attempt. A repair request carries the
@@ -36,7 +35,7 @@ an earlier cancellation, budget exhaustion, reconciliation, or operator-abort
 terminal. Hosts that need a domain-specific output format own that validator,
 prompt, and scorer in their application or evaluation layer.
 
-## Compatibility And Evidence
+## Evidence
 
 The canonical behavior is frozen in `fixtures/output_validation_v1.json`.
 Implementations must provide disabled, pass, fail, one-repair, second-failure,

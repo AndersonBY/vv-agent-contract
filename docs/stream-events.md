@@ -77,7 +77,7 @@ validation. The scope changes identity only:
 - A top-level event uses the current Runner identity.
 - A child event uses the framework-created child run/session/agent identity,
   includes `parent_run_id`, and retains the canonical child source payload in
-  metadata for compatibility.
+  metadata for diagnostics.
 
 The runtime inserts the current cycle before projection. Model-supplied cycle,
 run, trace, session, agent, parent, event, status, and terminal fields are not
