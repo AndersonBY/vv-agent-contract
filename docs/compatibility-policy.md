@@ -288,6 +288,38 @@ validator. The at-most-once repair callback is tools-free and cannot add task
 semantics or permissions. Both implementations must pass the canonical
 producer cases before the support matrix can become `verified`.
 
+## 0.10 Memory Capacity And Compaction Observability Compatibility
+
+Contract `0.10.x` raises the omitted `AgentTask.memory_compact_threshold`
+default from `128000` to `250000`. Explicit values, including smaller values,
+retain their existing meaning. Stored run definitions and distributed
+envelopes continue to carry their resolved numeric value, so an older durable
+record remains replayable with its original threshold instead of being
+silently rewritten to the new default.
+
+The configured value is a ceiling, not a promise that every model can accept
+that many prompt tokens. The effective full-compaction threshold is clamped to
+the active model's total context window after the request output reserve and
+auto-compaction buffer. A known derived capacity of zero remains zero; it must
+not fall back to the configured ceiling.
+
+`max_output_tokens` in model capability metadata is not a request default. It
+may describe the largest output the model can support, including values equal
+to the entire context window, and therefore cannot be copied into
+`reserved_output_tokens`. An effective request `ModelSettings.max_tokens`
+takes precedence over an explicit host reserve. With neither configured, the
+framework uses its documented conservative fallback, capped downward only
+when the model declares a smaller output capability. Capability metadata does
+not override an explicit request or host reserve.
+
+The existing memory lifecycle events gain additive fields. New producers emit
+typed trigger and capacity fields on `memory_compact_started`, plus actual
+mode and `changed` on `memory_compact_completed`. Old events without these
+fields remain readable and expose the new observations as unavailable. Known
+fields reject wrong types and unknown enum values. The observations describe
+runtime mechanics only; they do not classify tasks or infer whether an answer
+is complete.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are

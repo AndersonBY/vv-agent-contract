@@ -70,11 +70,49 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "0.9.0")
+        self.assertEqual(report["version"], "0.10.0")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 53)
         self.assertEqual(report["manifest_entries"], 52)
         self.assertEqual(report["adoption_status"], matrix["status"])
+
+    def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures" / "memory_lifecycle_v1.json").read_text(encoding="utf-8")
+        )
+        capacity = fixture["capacity_contract"]
+
+        self.assertEqual(capacity["configured_default_threshold"], 250_000)
+        self.assertEqual(
+            capacity["reserved_output_precedence"],
+            [
+                "effective_model_settings.max_tokens",
+                "task_metadata.reserved_output_tokens",
+                "framework_fallback",
+            ],
+        )
+        cases = {case["name"]: case for case in capacity["cases"]}
+        self.assertEqual(
+            cases["kimi_k3_uses_full_configured_ceiling"]["expected"]
+            ["effective_threshold"],
+            250_000,
+        )
+        self.assertEqual(
+            cases["known_zero_capacity_stays_zero"]["expected"]
+            ["effective_threshold"],
+            0,
+        )
+
+        lifecycle = fixture["compaction_events"]
+        self.assertEqual(
+            lifecycle["started"]["trigger_values"],
+            ["micro_threshold", "full_threshold", "prompt_too_long"],
+        )
+        self.assertEqual(
+            lifecycle["completed"]["mode_values"],
+            ["none", "micro", "structural", "summary", "emergency"],
+        )
+        self.assertTrue(lifecycle["legacy_missing_additive_fields_are_accepted"])
 
     def test_release_bundle_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:

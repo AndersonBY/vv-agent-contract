@@ -132,6 +132,74 @@ and `accounting_missing` for empty or mixed/partial observations. Legacy numeric
 projections continue to sum for compatibility and must not be used to claim a
 cache hit rate when the typed aggregate is unavailable.
 
+## Memory Capacity And Compaction Observability
+
+`memory_lifecycle_v1.json` defines the shared capacity and lifecycle contract.
+The omitted `AgentTask.memory_compact_threshold` default is `250000` tokens.
+It is the configured ceiling for the full compaction pipeline, not the model's
+context window and not a task-specific policy. Explicit task values continue
+to win, including values below the default.
+
+The model context window is the total prompt-plus-output capacity. Runtime
+resolution uses the explicit host `model_context_window`, then resolved model
+capability metadata, then the `200000` fallback. The output reserve uses this
+precedence:
+
+1. Effective per-request `ModelSettings.max_tokens` when explicitly set.
+2. Explicit host `reserved_output_tokens` metadata.
+3. The `16000` framework fallback.
+
+A resolved model `max_output_tokens` value is capability metadata, not a
+provider default and not an implicit request limit. It is reported separately
+as `model_max_output_tokens` and may cap only the framework fallback reserve
+downward when it is smaller; it never raises a reserve or overrides an explicit
+request/host value. In particular, a capability equal to the entire context
+window must not collapse the prompt budget to zero when the request omits
+`max_tokens`.
+
+The effective full-compaction threshold is:
+
+```text
+derived_prompt_capacity = max(
+    model_context_window
+    - reserved_output_tokens
+    - autocompact_buffer_tokens,
+    0,
+)
+effective_full_threshold = min(
+    configured_full_threshold,
+    derived_prompt_capacity,
+)
+```
+
+If the configured threshold is zero, the derived prompt capacity is used. If
+the context window is known and derived capacity is zero, the effective
+threshold remains zero; implementations do not substitute the configured
+ceiling. The default auto-compaction buffer is `13000`, and the default
+microcompact trigger is floor(`effective_full_threshold * 0.75`). Summary
+generation occurs only when cheaper local micro/structural compaction cannot
+fit the history or prompt-too-long recovery forces it.
+
+New `memory_compact_started` producers emit `trigger`,
+`configured_threshold`, `effective_threshold`, `microcompact_threshold`,
+`model_context_window`, nullable `model_max_output_tokens`,
+`reserved_output_tokens`, `reserved_output_source`, and
+`autocompact_buffer_tokens`. Trigger values are `micro_threshold`,
+`full_threshold`, and `prompt_too_long`.
+
+New `memory_compact_completed` producers emit the strongest actual `mode` and
+a content-aware `changed` flag. Mode values are `none`, `micro`, `structural`,
+`summary`, and `emergency`. `none` means a trigger was observed but no message
+content changed. `micro` clears eligible old tool payloads; `structural`
+performs local non-summary rewrites; `summary` invokes the summary model;
+`emergency` drops older history after repeated provider rejection. Started and
+completed events retain their existing identity, counts, provider callbacks,
+and failure isolation. Legacy events may omit every additive field.
+
+Capacity resolution and compaction remain task-neutral. Implementations do not
+inspect task category, answer text, semantic progress, or tool names beyond
+the existing mechanical compactability configuration.
+
 ## Completion Policy And Terminal Observation
 
 `completion_policy_v1.json` defines a task-agnostic control and observation

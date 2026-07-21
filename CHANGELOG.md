@@ -3,6 +3,24 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.10.0 - 2026-07-21
+
+- Raise the default configured full-compaction ceiling from `128000` to
+  `250000` tokens while retaining a model-safe effective threshold.
+- Define the effective threshold as the lower of the configured ceiling and
+  the active model's prompt capacity after output reserve and auto-compaction
+  buffer. A known zero-capacity result no longer falls back to an unsafe
+  configured value.
+- Separate a model's maximum output capability from the output tokens reserved
+  for one request. Explicit effective `ModelSettings.max_tokens` wins, followed
+  by an explicit host reserve and the framework fallback; capability metadata
+  is observational and may only cap, not manufacture, a request reserve.
+- Add typed compaction trigger, actual mode, changed flag, and capacity fields
+  to the existing memory compaction lifecycle events. Legacy events without
+  the additive fields remain readable.
+- Keep compaction task-neutral: the framework reports capacity and mechanics
+  but does not inspect task type, answer semantics, or domain progress.
+
 ## 0.9.0 - 2026-07-20
 
 - Add an opt-in host output validator and at-most-once repair callback.
