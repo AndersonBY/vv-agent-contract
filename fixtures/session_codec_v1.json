@@ -157,6 +157,13 @@
           }
         ]
       }
+    },
+    {
+      "name": "superseded_tagged_item_is_rejected",
+      "input": {
+        "type": "user",
+        "content": "old tagged wire"
+      }
     }
   ]
 }
