@@ -3,6 +3,20 @@
 All notable language-neutral contract changes are recorded here. Contract
 versions follow the compatibility policy in `docs/compatibility-policy.md`.
 
+## 0.10.1 - 2026-07-21
+
+- Treat non-positive explicit model-context metadata as absent so resolution
+  continues to model capability and then the framework fallback; retain zero
+  only for a derived prompt capacity exhausted by reserve and buffer.
+- Add decisive cases proving that an explicit request limit or host reserve is
+  not capped by smaller model output-capability metadata.
+- Require eligible old tool results to be microcompacted before the optional
+  memory warning is evaluated from recalculated usage.
+- Require memory provider callbacks, runtime payloads, and Runner journal
+  projections for one compaction event to reuse `event_id` and `created_at`.
+- Close frozen run-metadata producer evidence for checkpoint resume without
+  changing the existing run-definition wire shape.
+
 ## 0.10.0 - 2026-07-21
 
 - Raise the default configured full-compaction ceiling from `128000` to

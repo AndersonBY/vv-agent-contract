@@ -320,6 +320,16 @@ fields reject wrong types and unknown enum values. The observations describe
 runtime mechanics only; they do not classify tasks or infer whether an answer
 is complete.
 
+Contract `0.10.1` closes four inconsistencies found before the 0.10 capability
+reached verified adoption. Non-positive explicit context metadata is treated
+as absent, while a zero derived capacity from a positive context remains zero.
+Explicit request and host reserves remain authoritative even when model
+capability metadata is smaller. Eligible old tool results are microcompacted
+before an optional warning is evaluated from the recalculated length, and the
+provider callback plus Runner journal reuse the runtime event identity. These
+are patch corrections to the pending 0.10 behavior; `0.10.0` remains immutable
+and unsupported.
+
 ## Allowed Language Adaptations
 
 Language-idiomatic names, builders, async forms, and type representations are
