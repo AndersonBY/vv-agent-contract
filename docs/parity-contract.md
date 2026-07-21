@@ -91,9 +91,8 @@ and other provider field names remain inside adapter input and
 ## Events And Streaming
 
 RunEvent v1 is a closed, typed wire. Every event requires `version=v1`,
-identity, and a finite non-negative `created_at` in Unix seconds. There is no
-millisecond timestamp alias. Approval resolution carries one `action` value;
-there is no redundant `approved` field.
+identity, and a finite non-negative `created_at` in Unix seconds. Approval
+resolution carries exactly one `action` value.
 
 Memory compaction and tool lifecycle events require every current field.
 Readers reject incomplete events. Stream deltas preserve order and use
@@ -105,9 +104,9 @@ and App Server projection.
 
 ## Tool Metadata And Policy
 
-`ToolMetadata` is the only typed declaration for side effect, idempotency,
-terminal capability, capability tags, and cost dimensions. There is no
-separate idempotency alias. Omitted metadata has neutral effective defaults.
+`ToolMetadata` contains side effect, idempotency, terminal capability,
+capability tags, and cost dimensions. Omitted metadata has neutral effective
+defaults.
 
 Metadata policy is denial-only. Denials union across Agent, Runner, run,
 configured-child, agent-as-tool, handoff, and distributed layers. They are
@@ -122,9 +121,8 @@ code, execution-start flag, and nullable monotonic duration.
 ## Sessions And Message History
 
 Session items use one canonical current wire and one current SQLite schema.
-Stores do not migrate an unversioned or language-specific table. Message roles,
-tool-call structure, metadata types, and session item variants are validated
-strictly.
+Stores reject any other schema. Message roles, tool-call structure, metadata
+types, and session item variants are validated strictly.
 
 Continuation sanitization keeps only complete assistant tool-call/result
 blocks in matching order. Orphan, duplicate, empty-id, or mismatched blocks are
@@ -136,7 +134,7 @@ valid history; completely empty assistant messages are removed.
 Checkpoint records require `vv-agent.checkpoint.v2` and embed an exact
 `vv-agent.run-definition.v1` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
-namespace. There is no v1 table, prefix, reader, or migration.
+namespace. Readers reject any other table, prefix, or record shape.
 
 Claims, leases, progress CAS, operation journals, event outboxes,
 reconciliation, terminal retention, and acknowledgement have the same atomic

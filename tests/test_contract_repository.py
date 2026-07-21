@@ -43,13 +43,13 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("path: vv-agent\n", python_checkout)
         self.assertIn("path: vv-agent-rs\n", rust_checkout)
 
-    def test_cross_repository_gate_runs_bidirectional_sqlite_v2_probe(self) -> None:
+    def test_cross_repository_gate_runs_bidirectional_sqlite_probe(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
 
-        self.assertIn("Verify cross-language SQLite checkpoint v2", workflow)
-        self.assertEqual(workflow.count("VV_AGENT_CROSS_RUNTIME_V2_MODE="), 4)
+        self.assertIn("Verify cross-language SQLite checkpoint", workflow)
+        self.assertEqual(workflow.count("VV_AGENT_CROSS_RUNTIME_MODE="), 4)
         for mode in ("write_python", "read_python", "write_rust", "read_rust"):
-            self.assertIn(f"VV_AGENT_CROSS_RUNTIME_V2_MODE={mode}", workflow)
+            self.assertIn(f"VV_AGENT_CROSS_RUNTIME_MODE={mode}", workflow)
 
     def test_record_verified_requires_all_default_branches(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
@@ -69,7 +69,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "1.0.0")
+        self.assertEqual(report["version"], "1.0.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 47)
         self.assertEqual(report["manifest_entries"], 46)
@@ -500,7 +500,6 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         invalid_names = {case["name"] for case in fixture["invalid_cases"]}
         self.assertIn("unknown_field", invalid_names)
-        self.assertNotIn("legacy_idempotency", fixture)
         self.assertTrue(
             fixture["telemetry_contract"]["missing_required_completed_fields_are_rejected"]
         )
@@ -682,7 +681,6 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(denial_payload["executionStarted"])
         self.assertIsNone(denial_payload["durationMs"])
         self.assertEqual(denial_payload["errorCode"], "tool_not_allowed")
-        self.assertNotIn("legacyCompleted", fixture)
 
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
         fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
@@ -1222,8 +1220,6 @@ class ContractRepositoryTests(unittest.TestCase):
                 "failure_boundary": "before_claim_model_or_tool",
             },
         )
-        self.assertNotIn("migration_cases", fixture)
-        self.assertNotIn("legacy_additive_reader_cases", fixture)
         self.assertEqual(fixture["unknown_field_policy"]["top_level_whole_object_store"], "reject")
         self.assertEqual(fixture["unknown_field_policy"]["extension_required"], "block_resume")
         self.assertIn(
@@ -1667,14 +1663,13 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(terminal_replay["response"]["result"]["status"], "completed")
         self.assertEqual(terminal_replay["externalCalls"], 0)
 
-    def test_distributed_v2_resolves_checkpoint_capabilities_strictly(self) -> None:
+    def test_distributed_resolves_checkpoint_capabilities_strictly(self) -> None:
         fixture = json.loads(
             (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
         )
         envelope = fixture["canonical_envelope"]
         capabilities = envelope["recipe"]["capabilities"]
 
-        self.assertNotIn("compatibility", fixture)
         self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v2")
         self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v1")
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
@@ -1746,7 +1741,6 @@ class ContractRepositoryTests(unittest.TestCase):
         sql = (ROOT / "fixtures/checkpoint_sqlite_canonical_v2.sql").read_text(encoding="utf-8")
 
         self.assertIn("CREATE TABLE IF NOT EXISTS checkpoints (", sql)
-        self.assertNotIn("checkpoints_v2", sql)
         self.assertIn("run_definition_schema TEXT NOT NULL", sql)
         self.assertIn("run_definition TEXT NOT NULL", sql)
         self.assertIn("terminal_acknowledged", sql)
@@ -1766,13 +1760,13 @@ class ContractRepositoryTests(unittest.TestCase):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    "key-v2",
+                    "checkpoint-key",
                     "vv-agent.checkpoint.v2",
                     "vv-agent.run-definition.v1",
                     "{}",
-                    "task-v2",
-                    "run-v2",
-                    "trace-v2",
+                    "task-1",
+                    "run-1",
+                    "trace-1",
                     "c" * 64,
                     1,
                     0,
@@ -1800,12 +1794,11 @@ class ContractRepositoryTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 )
             }
-            self.assertIn("checkpoints", tables)
-            self.assertNotIn("checkpoints_v2", tables)
+            self.assertEqual(tables, {"checkpoints"})
             self.assertEqual(
                 connection.execute(
                     "SELECT run_definition_schema FROM checkpoints WHERE checkpoint_key = ?",
-                    ("key-v2",),
+                    ("checkpoint-key",),
                 ).fetchone(),
                 ("vv-agent.run-definition.v1",),
             )
@@ -1828,7 +1821,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v1.0.0/vv-agent-contract-1.0.0.zip"
+                    "v1.0.1/vv-agent-contract-1.0.1.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )

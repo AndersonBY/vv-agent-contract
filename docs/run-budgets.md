@@ -191,7 +191,7 @@ Approval resume keeps the source run's budget usage while assigning a fresh run
 id and a fresh `max_cycles` allowance. Time spent waiting for approval is
 excluded. A new independent Runner invocation starts a fresh budget.
 
-Checkpoint v2 persists the complete cumulative budget snapshot. Local resume,
+The checkpoint persists the complete cumulative budget snapshot. Local resume,
 distributed continuation, and transport redelivery all restore that snapshot
 before the next enforcement boundary. This accounting continuity does not make
 an arbitrary external effect exactly once.

@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
-This document defines the current checkpoint v2 and durable-resume contract in
-`vv-agent-contract` 1.0.0. It is a task-neutral persistence and recovery
+This document defines the current durable checkpoint and resume contract in
+`vv-agent-contract` 1.0.1. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -61,7 +61,7 @@ The default resume policy is `new`. Both ambiguous-operation policies default
 to `require_reconciliation`. Per-run checkpoint configuration replaces a
 configured Runner default as one object; individual fields are not merged.
 
-`new` requires a supplied v2 key to be absent, or generates a key when null.
+`new` requires a supplied checkpoint key to be absent, or generates one when null.
 `resume_if_present` and `require_existing` require an explicit key. The former
 atomically loads or creates a compatible record; the latter fails when absent.
 Existing terminal state is replayed without model or tool execution. A live,
@@ -138,7 +138,7 @@ sorted and deduplicated by UTF-16 code units, and extensions are sorted by
 namespace with the same ordering. Workspace,
 session, and predicate references use the ordinary `{id, version}` capability
 shape. A process-local dynamic predicate without a stable reference cannot be
-used with checkpoint v2.
+used with checkpointing.
 
 The run-definition top level is closed: unknown fields are rejected instead of
 being ignored by one implementation. Every process-local capability that can
@@ -165,7 +165,7 @@ never merged or resolved by last-write-wins.
 The selected store, checkpoint/run/trace/task identities, claims, leases, and
 event cursor remain excluded.
 
-## Checkpoint V2 Wire
+## Current Checkpoint Wire
 
 `checkpoint_codec_v2.json` defines the canonical object. Required fields are:
 
@@ -231,7 +231,7 @@ the original cursor for an identical duplicate and rejects the same event id
 with a different digest. Re-emission after recovery therefore uses the same
 identity and an idempotent consumer does not consume it twice.
 
-The v2 checkpoint contains a bounded `event_outbox`. An event is first stored
+The checkpoint contains a bounded `event_outbox`. An event is first stored
 as `pending`, then delivered with `append_once`, then marked `delivered` with
 the returned cursor. Recovery redelivers pending entries with the same id and
 digest. Delivered entries may be compacted after the enclosing cycle or
@@ -253,7 +253,7 @@ token. The operation never rewrites the terminal receipt. This separate CAS is
 required because terminal event delivery occurs after terminal finalization.
 
 The cursor and outbox do not turn an arbitrary callback into a transactional
-consumer. Checkpoint v2 provides accepted-once delivery only through an
+consumer. The checkpoint protocol provides accepted-once delivery only through an
 `IdempotentRunEventStore`; raw stream callbacks remain at-least-once and must
 deduplicate stable event ids. The contract must not describe this as universal
 exactly-once event delivery.
@@ -422,7 +422,7 @@ reconstructed and is not guessed.
 
 ## Session Persistence
 
-Checkpoint v2 cannot make a separate session store transactional with the
+Checkpointing cannot make a separate session store transactional with the
 checkpoint store. When a configured run also uses a session, the session must
 therefore implement append-once persistence. The framework computes:
 
@@ -439,7 +439,7 @@ identical replay, and rejects the same id with a different digest as
 `session_commit_identity_conflict`. A checkpoint-enabled run whose session
 does not provide this capability fails with
 `checkpoint_session_idempotency_unsupported` before the first model or tool
-operation. Runs without checkpoint v2 keep the existing `add_items` behavior.
+operation. Runs without checkpointing use `add_items`.
 
 Terminal ordering is output guardrail, append-once session persistence,
 durable `session_persisted` observation, terminal event staged as pending,
@@ -481,7 +481,7 @@ returns its existing owner without a new run or notifications. A retained
 terminal is replayed in the response without new external calls or duplicate
 terminal notifications.
 
-A v2 terminal acknowledgement marks the checkpoint acknowledged but retains
+A terminal acknowledgement marks the checkpoint acknowledged but retains
 the row and terminal receipt for redelivery. Deletion is an explicit host
 retention operation after the host no longer needs replay.
 
@@ -494,7 +494,7 @@ durable before output guardrail or session finalization and later rewritten.
 
 ## Safety Boundary
 
-Checkpoint v2 provides these guarantees:
+The current checkpoint protocol provides these guarantees:
 
 - committed cycle and operation receipts are replayed without re-execution;
 - ambiguous non-idempotent operations are never silently retried;
@@ -504,7 +504,7 @@ Checkpoint v2 provides these guarantees:
 
 It does not make an arbitrary external API exactly-once, recover a model
 response that was never durably received, make host hooks transactional, or
-atomically commit an unrelated event store and state store. Those limitations
+atomically commit an unrelated event store and checkpoint store. Those limitations
 must remain visible in documentation and observations.
 
 Checkpoint stores contain conversation state and may contain tool arguments,
@@ -515,7 +515,7 @@ responsibilities. App Server projections intentionally expose only summaries.
 Checkpoint configuration belongs to one root run definition. Agent-as-tool and
 background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
-closed with `checkpoint_handoff_unsupported` when checkpoint v2 is combined with a
+closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
 part of the v2 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.

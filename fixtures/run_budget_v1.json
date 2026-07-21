@@ -462,7 +462,7 @@
             },
             {
               "id": "call-search-v2",
-              "name": "search_v2",
+              "name": "search",
               "arguments": {}
             }
           ]

@@ -80,7 +80,7 @@ deterministic or idempotent. External effects belong in tools or a host outbox.
 
 ## Distributed Execution
 
-Distributed v2 adds `recipe.capabilities.after_cycle_hook_refs`. Every
+The distributed protocol carries `recipe.capabilities.after_cycle_hook_refs`. Every
 reference is resolved before checkpoint claim, model invocation, or tool
 dispatch and is pinned as `after_cycle_hook:<index>` in the run definition.
 Stateful hooks additionally use the existing `checkpoint_extension_refs`

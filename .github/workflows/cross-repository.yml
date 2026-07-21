@@ -106,27 +106,27 @@ jobs:
           cargo check --examples
           cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Verify cross-language SQLite checkpoint v2
+      - name: Verify cross-language SQLite checkpoint
         shell: bash
         run: |
           set -euo pipefail
-          database="$RUNNER_TEMP/vv-agent-cross-runtime-v2.sqlite3"
-          VV_AGENT_CROSS_RUNTIME_V2_DB="$database" \
-            VV_AGENT_CROSS_RUNTIME_V2_MODE=write_python \
+          database="$RUNNER_TEMP/vv-agent-cross-runtime.sqlite3"
+          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+            VV_AGENT_CROSS_RUNTIME_MODE=write_python \
             uv run --directory vv-agent pytest \
-              tests/test_checkpoint_v2.py::test_cross_runtime_sqlite_v2_probe_from_environment
-          VV_AGENT_CROSS_RUNTIME_V2_DB="$database" \
-            VV_AGENT_CROSS_RUNTIME_V2_MODE=read_python \
+              tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
+          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+            VV_AGENT_CROSS_RUNTIME_MODE=read_python \
             cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-              --test checkpoint_v2_core cross_runtime_sqlite_v2_probe_from_environment -- --exact
-          VV_AGENT_CROSS_RUNTIME_V2_DB="$database" \
-            VV_AGENT_CROSS_RUNTIME_V2_MODE=write_rust \
+              --test checkpoint_core cross_runtime_sqlite_probe_from_environment -- --exact
+          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+            VV_AGENT_CROSS_RUNTIME_MODE=write_rust \
             cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-              --test checkpoint_v2_core cross_runtime_sqlite_v2_probe_from_environment -- --exact
-          VV_AGENT_CROSS_RUNTIME_V2_DB="$database" \
-            VV_AGENT_CROSS_RUNTIME_V2_MODE=read_rust \
+              --test checkpoint_core cross_runtime_sqlite_probe_from_environment -- --exact
+          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+            VV_AGENT_CROSS_RUNTIME_MODE=read_rust \
             uv run --directory vv-agent pytest \
-              tests/test_checkpoint_v2.py::test_cross_runtime_sqlite_v2_probe_from_environment
+              tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
 
       - name: Record evidence
         shell: bash

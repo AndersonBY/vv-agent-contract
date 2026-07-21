@@ -249,7 +249,7 @@
         "checkpoint_config"
       ],
       "value": null,
-      "error": "distributed v2 requires checkpoint_config"
+      "error": "distributed run requires checkpoint_config"
     },
     {
       "name": "missing_checkpoint_store_ref",
@@ -259,7 +259,7 @@
         "checkpoint_store_ref"
       ],
       "value": null,
-      "error": "distributed v2 requires checkpoint_store_ref"
+      "error": "distributed run requires checkpoint_store_ref"
     },
     {
       "name": "missing_required_extension_ref",
