@@ -22,14 +22,14 @@
   "canonical_settings": {
     "VERSION": "2",
     "backends": {
-      "demo": {
+      "openai": {
         "models": {
-          "demo-model": {
-            "id": "demo-model",
+          "contract-model": {
+            "id": "contract-model",
             "endpoints": [
               {
-                "endpoint_id": "demo-endpoint",
-                "model_id": "demo-model"
+                "endpoint_id": "contract-endpoint",
+                "model_id": "contract-model"
               }
             ],
             "context_length": 1000000,
@@ -40,7 +40,7 @@
     },
     "endpoints": [
       {
-        "id": "demo-endpoint",
+        "id": "contract-endpoint",
         "api_base": "https://example.invalid/v1",
         "api_key": "test-key-value"
       }
