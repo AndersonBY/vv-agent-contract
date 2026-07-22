@@ -149,8 +149,8 @@
     },
     {
       "capability": "typed_run_events",
-      "python": "RunHandle event iterator plus optional stream observer",
-      "rust": "RunHandle event stream",
+      "python": "RunHandle event iterator plus optional typed stream observer",
+      "rust": "RunHandle event stream plus optional typed event observer",
       "status": "equivalent"
     },
     {
@@ -190,15 +190,9 @@
       "status": "equivalent"
     },
     {
-      "capability": "raw_runtime_observers",
-      "python": "runtime_log_handler plus runtime_stream_callback",
-      "rust": "runtime_log_handler plus runtime_stream_callback",
-      "status": "equivalent"
-    },
-    {
       "capability": "diagnostics",
-      "python": "log_preview_chars plus debug_dump_dir",
-      "rust": "log_preview_chars plus debug_dump_dir",
+      "python": "typed DiagnosticEvent plus log_preview_chars and debug_dump_dir",
+      "rust": "typed Diagnostic payload plus log_preview_chars and debug_dump_dir",
       "status": "equivalent"
     }
   ]

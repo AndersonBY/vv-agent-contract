@@ -1,6 +1,6 @@
 # Tool Metadata And Execution Telemetry
 
-Contract `1.0.1` defines one typed, task-neutral declaration for host policy and
+Contract `2.0.0` defines one typed, task-neutral declaration for host policy and
 execution telemetry. The framework does not inspect prompts, infer semantics
 from tool names or arguments, or decide whether a business answer is complete.
 

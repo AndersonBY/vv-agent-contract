@@ -16,7 +16,7 @@ from typing import Any
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-f]{64})  (.+)$")
-ALLOWED_ADOPTION_STATES = {"pending-adoption", "in-progress", "verified", "superseded"}
+ALLOWED_ADOPTION_STATES = {"pending-adoption", "in-progress", "verified"}
 FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
 
 

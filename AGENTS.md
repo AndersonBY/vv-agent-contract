@@ -29,7 +29,7 @@ mandatory routing map; durable detail belongs in `docs/`.
   permission to reset or overwrite unrelated changes.
 - Keep `HEAD` forward-only. It contains exactly one current canonical shape for
   each public API, prompt, tool, runtime record, event, session, checkpoint,
-  and wire protocol. Delete superseded readers, aliases, shims, migrations,
+  and wire protocol. Delete replaced readers, aliases, shims, migrations,
   fixtures, and documentation in the same change; Git is the history.
 - Keep schema and protocol discriminators only as strict validation boundaries.
   Current readers must reject missing, stale, unknown, and malformed versions;

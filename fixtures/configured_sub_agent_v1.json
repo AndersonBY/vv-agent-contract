@@ -50,10 +50,7 @@
       "selected_model": "child-model",
       "model_id": "child-model"
     },
-    "child_runtime_inherits": {
-      "settings_file": true,
-      "default_backend": true
-    },
+    "child_runtime_inherits_model_provider": true,
     "explicit_backend_requires_resolver": true,
     "same_model_reuses_parent_client_only_without_explicit_backend": true,
     "same_model_parent_client_inherits_token_limits": true,
@@ -93,12 +90,11 @@
     "model": "child-model",
     "user_prompt": "Collect facts\n\n<Output Requirements>\nReturn JSON\n</Output Requirements>",
     "max_cycles": 4,
-    "memory_compact_threshold": 64000,
+    "memory_compact_threshold": 250000,
     "memory_threshold_percentage": 80,
     "no_tool_policy": "continue",
     "allow_interruption": false,
     "use_workspace": true,
-    "has_sub_agents": false,
     "agent_type": "computer",
     "native_multimodal": true,
     "extra_tool_names": [
@@ -111,8 +107,7 @@
       "sub_task_status"
     ],
     "model_settings": {
-      "temperature": 0.25,
-      "max_tokens": 512
+      "temperature": 0.25
     },
     "initial_messages": [],
     "initial_shared_state": {}
@@ -183,7 +178,6 @@
       "memory_providers",
       "model_provider",
       "checkpoint_store",
-      "stream_sink",
       "trace_context"
     ],
     "derived": [
@@ -296,14 +290,16 @@
     ]
   },
   "stream_forwarding": {
-    "untrusted_event_policy": "allowlist_and_canonicalize",
-    "allowed_events": [
+    "public_payload": "RunEvent",
+    "raw_callback": false,
+    "provider_adapter_policy": "allowlist_validate_and_project",
+    "provider_adapter_allowed_events": [
       "assistant_delta",
       "reasoning_delta",
       "tool_call_started",
       "tool_call_progress"
     ],
-    "producer_fields": {
+    "provider_adapter_fields": {
       "assistant_delta": [
         "content_chars",
         "content_delta",
@@ -334,7 +330,7 @@
         "tool_call_index"
       ]
     },
-    "typed_wire_types": {
+    "provider_adapter_wire_types": {
       "assistant_delta": "assistant_delta",
       "reasoning_delta": "reasoning_delta",
       "tool_call_started": "model_tool_call_started",
@@ -386,7 +382,7 @@
       "session_",
       "sub_run_"
     ],
-    "normal_events_preserved": true,
+    "typed_events_preserved": true,
     "same_typed_projection_as_top_level": true,
     "untrusted_terminal_cannot_suppress_real_terminal": true,
     "stream_observer_failure_isolated": true,
@@ -533,7 +529,6 @@
       "event_sink",
       "parent_run_id",
       "parent_tool_call_id",
-      "stream_sink",
       "tool_policy",
       "trace_id"
     ],

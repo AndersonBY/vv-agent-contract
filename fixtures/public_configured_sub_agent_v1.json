@@ -81,7 +81,6 @@
     }
   },
   "projection": {
-    "has_sub_agents": false,
     "sub_agents_enabled": true,
     "configured_tool_names": [
       "create_sub_task",

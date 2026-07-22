@@ -146,19 +146,6 @@
       }
     },
     {
-      "id": "superseded_created_at_ms_field",
-      "input": {
-        "version": "v1",
-        "type": "run_started",
-        "event_id": "evt_invalid",
-        "run_id": "run_invalid",
-        "trace_id": "trace_invalid",
-        "created_at": 1,
-        "created_at_ms": 1000,
-        "input": "hello"
-      }
-    },
-    {
       "id": "missing_event_id",
       "input": {
         "version": "v1",
@@ -731,6 +718,48 @@
         "created_at": 1,
         "delta": "x",
         "content_chars": 9007199254740992
+      }
+    },
+    {
+      "id": "diagnostic_level_is_unknown",
+      "input": {
+        "version": "v1",
+        "type": "diagnostic",
+        "event_id": "evt_invalid_diagnostic",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "level": "notice",
+        "code": "cycle_observation",
+        "details": {}
+      }
+    },
+    {
+      "id": "diagnostic_code_is_empty",
+      "input": {
+        "version": "v1",
+        "type": "diagnostic",
+        "event_id": "evt_invalid_diagnostic",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "level": "info",
+        "code": "",
+        "details": {}
+      }
+    },
+    {
+      "id": "diagnostic_details_is_not_an_object",
+      "input": {
+        "version": "v1",
+        "type": "diagnostic",
+        "event_id": "evt_invalid_diagnostic",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "level": "info",
+        "code": "cycle_observation",
+        "details": []
       }
     },
     {

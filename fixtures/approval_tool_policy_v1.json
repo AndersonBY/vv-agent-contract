@@ -24,7 +24,7 @@
       "approval_resolved"
     ],
     "result_shape": {
-      "status": "error",
+      "status_code": "ERROR",
       "directive": "continue",
       "content_keys": [
         "ok",
@@ -93,7 +93,7 @@
     "message": "Tool dangerous is not allowed for these arguments.",
     "error_code": "tool_not_allowed",
     "result_shape": {
-      "status": "error",
+      "status_code": "ERROR",
       "directive": "continue",
       "content_keys": [
         "ok",

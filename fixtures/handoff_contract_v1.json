@@ -85,7 +85,6 @@
     }
   },
   "lifecycle_order": [
-    "handoff",
     "source_run_terminal",
     "handoff_started",
     "target_run_started",

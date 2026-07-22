@@ -14,7 +14,7 @@ shared contract itself must change.
 ## 2. Author The Canonical Contract
 
 Update the normative document, canonical fixture/schema, and versioning note
-together. Replace the current shape in place and remove every superseded
+together. Replace the current shape in place and remove every replaced
 reader, alias, shim, migration, fixture, and documentation reference in the
 same three-repository change. Run:
 
@@ -78,4 +78,4 @@ branches may be used only for non-recording review runs.
 7. Run both full gates and central cross-repository CI.
 8. Leave a handoff containing all refs, checks, adaptations, and open debt.
 9. Confirm repository-wide searches find no decoder or fixture for the
-   superseded shape.
+   replaced shape.

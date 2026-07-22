@@ -15,7 +15,6 @@
           {
             "tool_call_id": "call_1",
             "content": "Approval is required.",
-            "status": "error",
             "status_code": "ERROR",
             "directive": "wait_user",
             "error_code": "approval_required",
@@ -33,7 +32,6 @@
           {
             "tool_call_id": "call_duplicate",
             "content": "Duplicate event.",
-            "status": "error",
             "status_code": "ERROR",
             "directive": "wait_user",
             "metadata": {
@@ -45,7 +43,6 @@
           {
             "tool_call_id": "call_irrelevant",
             "content": "Not an approval.",
-            "status": "success",
             "status_code": "SUCCESS",
             "directive": "continue",
             "metadata": {

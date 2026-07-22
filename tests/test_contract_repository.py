@@ -69,11 +69,89 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "1.0.1")
+        self.assertEqual(report["version"], "2.0.0")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 47)
         self.assertEqual(report["manifest_entries"], 46)
         self.assertEqual(report["adoption_status"], matrix["status"])
+
+    def test_session_codec_has_one_closed_current_wire(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/session_codec_v1.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(set(fixture), {"version", "canonical_cases", "invalid_cases"})
+        self.assertEqual(fixture["version"], 1)
+        self.assertEqual(
+            {case["name"] for case in fixture["canonical_cases"]},
+            {
+                "plain_message_uses_current_wire",
+                "openai_function_tool_call_is_canonicalized",
+            },
+        )
+
+        message_fields = {
+            "role",
+            "content",
+            "name",
+            "tool_call_id",
+            "tool_calls",
+            "reasoning_content",
+            "image_url",
+            "metadata",
+        }
+        for case in fixture["canonical_cases"]:
+            for key in ("input", "canonical"):
+                message = case[key]
+                self.assertTrue({"role", "content"}.issubset(message))
+                self.assertTrue(set(message).issubset(message_fields))
+                for tool_call in message.get("tool_calls", []):
+                    self.assertTrue(
+                        {"id", "type", "function"}.issubset(tool_call)
+                    )
+                    self.assertTrue(
+                        set(tool_call).issubset(
+                            {"id", "type", "function", "extra_content"}
+                        )
+                    )
+                    self.assertEqual(tool_call["type"], "function")
+                    self.assertEqual(set(tool_call["function"]), {"name", "arguments"})
+                    arguments = tool_call["function"]["arguments"]
+                    self.assertIsInstance(arguments, str)
+                    self.assertIsInstance(json.loads(arguments), dict)
+
+        invalid_names = {case["name"] for case in fixture["invalid_cases"]}
+        self.assertTrue(
+            {
+                "content_is_required",
+                "unknown_message_field_is_rejected",
+                "tool_call_unknown_field_is_rejected",
+                "tool_function_unknown_field_is_rejected",
+                "message_missing_content_is_rejected",
+                "tool_arguments_must_be_a_json_string",
+                "tool_call_requires_function_envelope",
+                "message_requires_role_field",
+            }.issubset(invalid_names)
+        )
+
+    def test_checkpoint_outbox_embeds_a_complete_current_run_event(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8")
+        )
+        entry = fixture["canonical_checkpoint"]["event_outbox"][0]
+        event = entry["event"]
+
+        self.assertEqual(
+            set(entry),
+            {"event_id", "payload_digest", "state", "event", "cursor"},
+        )
+        self.assertEqual(entry["event_id"], event["event_id"])
+        self.assertEqual(event["version"], "v1")
+        self.assertTrue(
+            {"version", "type", "event_id", "run_id", "trace_id", "created_at"}.issubset(
+                event
+            )
+        )
 
     def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
         fixture = json.loads(
@@ -322,6 +400,37 @@ class ContractRepositoryTests(unittest.TestCase):
             }.issubset(capabilities)
         )
 
+    def test_tool_execution_result_has_one_typed_status_field(self) -> None:
+        behavior = json.loads(
+            (ROOT / "fixtures/builtin_tool_behavior_v1.json").read_text(encoding="utf-8")
+        )["tool_execution_result_projection"]
+        canonical = behavior["canonical"]
+
+        self.assertEqual(
+            behavior["required_fields"],
+            ["tool_call_id", "content", "status_code", "directive"],
+        )
+        self.assertEqual(behavior["unknown_fields"], "reject")
+        self.assertEqual(canonical["status_code"], "ERROR")
+        self.assertNotIn("status", canonical)
+
+        for fixture_name in (
+            "builtin_tool_behavior_v1.json",
+            "checkpoint_resume_v1.json",
+            "operation_journal_v1.json",
+            "result_public_v1.json",
+        ):
+            root = json.loads((ROOT / "fixtures" / fixture_name).read_text(encoding="utf-8"))
+            stack = [root]
+            while stack:
+                value = stack.pop()
+                if isinstance(value, dict):
+                    if "status_code" in value:
+                        self.assertNotIn("status", value, fixture_name)
+                    stack.extend(value.values())
+                elif isinstance(value, list):
+                    stack.extend(value)
+
     def test_after_cycle_contract_is_closed_task_neutral_and_non_success_only(self) -> None:
         fixture = json.loads(
             (ROOT / "fixtures/after_cycle_hook_v1.json").read_text(encoding="utf-8")
@@ -391,16 +500,18 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(overflow["expected"]["unavailable_reason"], "integer_overflow")
         self.assertIsNone(overflow["expected"]["total_tokens"])
 
-    def test_stream_projection_is_typed_ordered_and_untrusted(self) -> None:
+    def test_llm_stream_projection_is_private_typed_and_untrusted(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/stream_projection_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/llm_stream_projection_v1.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(
             fixture["schema_version"],
-            "vv-agent.stream-projection.v1",
+            "vv-agent.llm-stream-projection.v1",
         )
-        mappings = fixture["typed_projection"]["mappings"]
+        self.assertEqual(fixture["adapter_boundary"]["visibility"], "private")
+        self.assertFalse(fixture["adapter_boundary"]["public_raw_callback"])
+        mappings = fixture["mappings"]
         self.assertEqual(
             mappings["assistant_delta"]["required_source_field_alternatives"],
             [["content_delta", "delta"]],
@@ -415,7 +526,6 @@ class ContractRepositoryTests(unittest.TestCase):
             ],
         )
         synthetic = fixture["synthetic_top_level"]
-        self.assertEqual(len(synthetic["raw_events"]), synthetic["raw_observer_count"])
         self.assertEqual(
             len(synthetic["expected_wire_events"]),
             synthetic["typed_event_count"],
@@ -424,14 +534,18 @@ class ContractRepositoryTests(unittest.TestCase):
             [event["type"] for event in synthetic["expected_wire_events"]],
             [mappings[source]["wire_type"] for source in mappings],
         )
-        self.assertEqual(synthetic["raw_events"][-1]["event"], "run_completed")
+        self.assertEqual(synthetic["provider_payloads"][-1]["event"], "run_completed")
+        self.assertEqual(synthetic["dropped_provider_payload_indexes"], [4])
         self.assertNotIn(
             "run_completed",
             {event["type"] for event in synthetic["expected_wire_events"]},
         )
         self.assertEqual(synthetic["execution_event_type"], "tool_call_started")
-        self.assertFalse(fixture["raw_callback"]["durable"])
-        self.assertEqual(fixture["raw_callback"]["observer_failure"], "isolated")
+        self.assertFalse(fixture["public_event_surface"]["raw_runtime_observer"])
+        self.assertFalse(fixture["public_event_surface"]["raw_provider_observer"])
+        self.assertEqual(fixture["public_event_surface"]["observer_payload"], "RunEvent")
+        self.assertEqual(fixture["diagnostic_event"]["wire_type"], "diagnostic")
+        self.assertFalse(fixture["diagnostic_event"]["state_authority"])
         self.assertFalse(
             fixture["consumer_policy"]["observer_configuration_changes_runtime_decisions"]
         )
@@ -439,8 +553,9 @@ class ContractRepositoryTests(unittest.TestCase):
         child = json.loads(
             (ROOT / "fixtures/configured_sub_agent_v1.json").read_text(encoding="utf-8")
         )["stream_forwarding"]
+        self.assertFalse(child["raw_callback"])
         self.assertEqual(
-            child["typed_wire_types"],
+            child["provider_adapter_wire_types"],
             {source: mapping["wire_type"] for source, mapping in mappings.items()},
         )
         self.assertEqual(child["canonical_cycle_field"], "cycle_index")
@@ -452,7 +567,8 @@ class ContractRepositoryTests(unittest.TestCase):
             .read_text(encoding="utf-8")
             .splitlines()
         }
-        self.assertTrue(set(child["typed_wire_types"].values()).issubset(event_types))
+        self.assertTrue(set(child["provider_adapter_wire_types"].values()).issubset(event_types))
+        self.assertIn("diagnostic", event_types)
         invalid = json.loads(
             (ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8")
         )
@@ -464,6 +580,9 @@ class ContractRepositoryTests(unittest.TestCase):
                 "model_tool_name_is_empty",
                 "stream_counter_is_negative",
                 "stream_counter_exceeds_json_safe_maximum",
+                "diagnostic_level_is_unknown",
+                "diagnostic_code_is_empty",
+                "diagnostic_details_is_not_an_object",
             }.issubset(rejected)
         )
 
@@ -906,7 +1025,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 251)
+        self.assertEqual(surface_member_count, 247)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertTrue(
@@ -920,7 +1039,7 @@ class ContractRepositoryTests(unittest.TestCase):
             )
         )
         self.assertTrue(
-            {"llm_builder", "timeout_seconds"}.isdisjoint(
+            {"settings_file", "default_backend", "llm_builder", "timeout_seconds"}.isdisjoint(
                 {member["id"] for member in surfaces["run_config"]["members"]}
             )
         )
@@ -1160,6 +1279,39 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["top_level_field_policy"]["closed"])
         for case in fixture["golden_cases"]:
             self.assertEqual(set(case["definition"]), set(fixture["required_fields"]))
+        nested_policy = fixture["nested_field_policy"]
+        self.assertEqual(
+            nested_policy["rule"],
+            "Unknown fields are rejected in every closed object. Open maps accept application, provider, or JSON Schema keys only at the listed path.",
+        )
+        self.assertTrue(
+            {
+                "/agent",
+                "/model",
+                "/model/settings",
+                "/runtime_controls",
+                "/tools/*",
+                "/tools/*/schema",
+                "/tools/*/schema/function",
+                "/tools/*/tool_metadata",
+                "/tools/*/approval",
+                "/tool_policy",
+                "/checkpoint_policy",
+                "/budget_limits",
+                "/budget_limits/max_host_cost",
+                "/extensions/*",
+                "/capability_refs/*",
+            }.issubset(nested_policy["closed_objects"])
+        )
+        self.assertTrue(
+            {
+                "/initial_shared_state",
+                "/run_metadata",
+                "/model/settings/extra_body",
+                "/tools/*/schema/function/parameters",
+                "/output_schema",
+            }.issubset(nested_policy["open_maps"])
+        )
         digest_relations = {
             case["expected_digest_relation"]
             for case in fixture["producer_cases"]
@@ -1181,6 +1333,39 @@ class ContractRepositoryTests(unittest.TestCase):
             }.issubset(invalid_codes)
         )
         self.assertTrue(all(case.get("error_code") for case in fixture["invalid_cases"]))
+        invalid_names = {case["name"] for case in fixture["invalid_cases"]}
+        self.assertTrue(
+            {
+                "agent_unknown_field",
+                "agent_missing_name",
+                "initial_message_unknown_field",
+                "initial_message_missing_content",
+                "model_unknown_field",
+                "model_missing_backend",
+                "model_settings_unknown_field",
+                "model_retry_unknown_field",
+                "runtime_controls_unknown_field",
+                "runtime_controls_missing_max_cycles",
+                "tool_unknown_field",
+                "tool_missing_approval",
+                "tool_schema_unknown_field",
+                "tool_function_unknown_field",
+                "tool_metadata_unknown_field",
+                "tool_approval_unknown_field",
+                "tool_policy_unknown_field",
+                "tool_policy_missing_allowed_tools",
+                "checkpoint_policy_unknown_field",
+                "checkpoint_policy_missing_ambiguous_model_policy",
+                "budget_limits_unknown_field",
+                "budget_limits_missing_max_total_tokens",
+                "host_cost_unknown_field",
+                "host_cost_missing_currency",
+                "extension_unknown_field",
+                "extension_missing_version",
+                "capability_ref_unknown_field",
+                "capability_ref_missing_version",
+            }.issubset(invalid_names)
+        )
 
     def test_rfc8785_vectors_match_ecmascript_reference_serialization(self) -> None:
         subprocess.run(
@@ -1821,7 +2006,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v1.0.1/vv-agent-contract-1.0.1.zip"
+                    "v2.0.0/vv-agent-contract-2.0.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )

@@ -11,7 +11,7 @@ When a shape changes, the same change must:
 1. update the canonical documentation and fixture;
 2. update both real implementations and their producer tests;
 3. update every current caller and evaluation adapter;
-4. delete the superseded reader, writer, alias, shim, migration, fixture, test,
+4. delete the replaced reader, writer, alias, shim, migration, fixture, test,
    and documentation path.
 
 Git history is the only archive. Runtime packages and the contract release do
@@ -51,8 +51,6 @@ older runtime use the corresponding Git tag and package release.
   not yet available.
 - `verified`: both repositories pin the same contract revision and pass real
   producer, full repository, fixture, and cross-repository checks.
-- `superseded`: a later verified release has replaced this release in Git
-  history; it is not accepted by current readers.
 
 Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains

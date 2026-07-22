@@ -1,67 +1,92 @@
 {
-  "schema_version": "vv-agent.stream-projection.v1",
+  "schema_version": "vv-agent.llm-stream-projection.v1",
   "wire_version": "v1",
   "json_safe_integer_maximum": 9007199254740991,
-  "raw_callback": {
-    "delivery": "synchronous_at_least_once",
-    "durable": false,
-    "observer_failure": "isolated",
-    "unknown_event_policy": "raw_observer_only"
-  },
-  "typed_projection": {
-    "record_before_raw_observer": true,
-    "unknown_event_policy": "drop",
-    "invalid_known_event_policy": "drop",
+  "adapter_boundary": {
+    "visibility": "private",
+    "input": "provider_adapter_payload",
+    "output": "RunEvent",
+    "public_raw_callback": false,
     "framework_identity_overrides_source": true,
-    "mappings": {
-      "assistant_delta": {
-        "wire_type": "assistant_delta",
-        "required_source_field_alternatives": [
-          [
-            "content_delta",
-            "delta"
-          ]
-        ],
-        "optional_source_fields": [
-          "content_chars",
-          "estimated_tokens"
+    "unknown_source_event_policy": "drop",
+    "invalid_known_event_policy": "drop",
+    "lifecycle_shaped_source_event_policy": "drop"
+  },
+  "mappings": {
+    "assistant_delta": {
+      "wire_type": "assistant_delta",
+      "required_source_field_alternatives": [
+        [
+          "content_delta",
+          "delta"
         ]
-      },
-      "reasoning_delta": {
-        "wire_type": "reasoning_delta",
-        "required_source_fields": [
-          "reasoning_delta"
-        ],
-        "optional_source_fields": [
-          "estimated_tokens",
-          "reasoning_chars"
-        ]
-      },
-      "tool_call_started": {
-        "wire_type": "model_tool_call_started",
-        "required_source_fields": [
-          "function_name",
-          "tool_call_id"
-        ],
-        "optional_source_fields": [
-          "arguments_chars",
-          "estimated_tokens",
-          "tool_call_index"
-        ]
-      },
-      "tool_call_progress": {
-        "wire_type": "model_tool_call_progress",
-        "required_source_fields": [
-          "function_name",
-          "tool_call_id"
-        ],
-        "optional_source_fields": [
-          "arguments_chars",
-          "estimated_tokens",
-          "tool_call_index"
-        ]
-      }
+      ],
+      "optional_source_fields": [
+        "content_chars",
+        "estimated_tokens"
+      ]
+    },
+    "reasoning_delta": {
+      "wire_type": "reasoning_delta",
+      "required_source_fields": [
+        "reasoning_delta"
+      ],
+      "optional_source_fields": [
+        "estimated_tokens",
+        "reasoning_chars"
+      ]
+    },
+    "tool_call_started": {
+      "wire_type": "model_tool_call_started",
+      "required_source_fields": [
+        "function_name",
+        "tool_call_id"
+      ],
+      "optional_source_fields": [
+        "arguments_chars",
+        "estimated_tokens",
+        "tool_call_index"
+      ]
+    },
+    "tool_call_progress": {
+      "wire_type": "model_tool_call_progress",
+      "required_source_fields": [
+        "function_name",
+        "tool_call_id"
+      ],
+      "optional_source_fields": [
+        "arguments_chars",
+        "estimated_tokens",
+        "tool_call_index"
+      ]
     }
+  },
+  "public_event_surface": {
+    "observer": "RunConfig.stream",
+    "observer_payload": "RunEvent",
+    "observer_failure": "isolated",
+    "typed_event_recorded_before_observer": true,
+    "durable_replay": "RunEventStore",
+    "raw_runtime_observer": false,
+    "raw_provider_observer": false
+  },
+  "diagnostic_event": {
+    "wire_type": "diagnostic",
+    "required_fields": [
+      "level",
+      "code",
+      "details"
+    ],
+    "levels": [
+      "debug",
+      "info",
+      "warning",
+      "error"
+    ],
+    "details_shape": "json_object_extension_map",
+    "state_authority": false,
+    "may_change_completion_or_tool_decisions": false,
+    "raw_provider_payload_exposed": false
   },
   "scope_rules": {
     "top_level": {
@@ -90,7 +115,7 @@
       "agent_name": "stream-agent",
       "cycle_index": 3
     },
-    "raw_events": [
+    "provider_payloads": [
       {
         "event": "assistant_delta",
         "content_delta": "done",
@@ -191,7 +216,9 @@
         "estimated_tokens": 5
       }
     ],
-    "raw_observer_count": 5,
+    "dropped_provider_payload_indexes": [
+      4
+    ],
     "typed_event_count": 4,
     "execution_event_type": "tool_call_started"
   }

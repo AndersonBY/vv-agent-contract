@@ -438,9 +438,9 @@
       "remove": "schema_version"
     },
     {
-      "name": "stale_schema_version",
+      "name": "unsupported_schema_version",
       "replace": {
-        "schema_version": "vv-agent.token-usage.v0"
+        "schema_version": "vv-agent.token-usage.v2"
       }
     },
     {

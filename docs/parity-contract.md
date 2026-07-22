@@ -34,8 +34,11 @@ default maximum applies.
 
 Resolved context capacity is projected into task metadata for compaction. A
 declared output capacity may inform memory reservation, but must never be copied
-into request settings implicitly. Configured children resolve their own model
-and receive the same rules as top-level runs.
+into request settings implicitly. Top-level and configured child runs use the
+same explicit `ModelProvider`; child runtimes inherit that provider rather than
+reconstructing one from settings paths or backend fields. A child resolves its
+own model unless it can reuse the parent client under the canonical same-model
+rule.
 
 Native provider request and response fields are decoded only at the provider
 adapter boundary. They do not become alternate internal wire formats.
@@ -94,9 +97,20 @@ RunEvent v1 is a closed, typed wire. Every event requires `version=v1`,
 identity, and a finite non-negative `created_at` in Unix seconds. Approval
 resolution carries exactly one `action` value.
 
+The public runtime exposes only this typed event surface. Provider stream
+payloads stay private to the LLM adapter, and public runtime-log/provider
+callbacks do not exist. Runtime producers create semantic lifecycle events
+directly; child forwarding preserves their identity rather than converting
+through an untyped payload.
+
 Memory compaction and tool lifecycle events require every current field.
 Readers reject incomplete events. Stream deltas preserve order and use
 JSON-safe counters.
+
+Task-neutral internal observations use `diagnostic` with required `level`,
+non-empty `code`, and JSON-object `details`. `details` is an explicit extension
+map, but diagnostics have no state authority and cannot replace lifecycle,
+tool, approval, budget, cancellation, or terminal events.
 
 Event ids and timestamps are created once by the producer and remain identical
 through provider callbacks, runtime journals, event stores, child forwarding,
@@ -107,6 +121,11 @@ and App Server projection.
 `ToolMetadata` contains side effect, idempotency, terminal capability,
 capability tags, and cost dimensions. Omitted metadata has neutral effective
 defaults.
+
+`ToolExecutionResult` has one status field: the required typed `status_code`.
+The current wire values are `SUCCESS`, `ERROR`, `WAIT_RESPONSE`, `RUNNING`, and
+`PENDING_COMPRESS`. Unknown fields are rejected, and no reader derives another
+status vocabulary from `status_code`.
 
 Metadata policy is denial-only. Denials union across Agent, Runner, run,
 configured-child, agent-as-tool, handoff, and distributed layers. They are

@@ -281,7 +281,6 @@
           "result": {
             "tool_call_id": "call_1",
             "content": "ok",
-            "status": "success",
             "status_code": "SUCCESS",
             "directive": "continue",
             "error_code": null,
@@ -390,7 +389,6 @@
           "result": {
             "tool_call_id": "call_1",
             "content": "ok",
-            "status": "success",
             "status_code": "SUCCESS",
             "directive": "continue",
             "error_code": null,
@@ -448,7 +446,6 @@
           "result": {
             "tool_call_id": "call_1",
             "content": "ok",
-            "status": "success",
             "status_code": "SUCCESS",
             "directive": "continue",
             "error_code": null,

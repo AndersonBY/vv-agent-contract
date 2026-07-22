@@ -439,11 +439,6 @@
           "rust": "vv_agent::ToolContext"
         },
         {
-          "id": "tools.call_context",
-          "python": "vv_agent.ToolCallContext",
-          "rust": "vv_agent::ToolCallContext"
-        },
-        {
           "id": "tools.orchestrator",
           "python": "vv_agent.tools.ToolOrchestrator",
           "rust": "vv_agent::ToolOrchestrator"
@@ -660,6 +655,12 @@
           "id": "events.tool_call_planned",
           "python": "vv_agent.ToolCallPlannedEvent",
           "rust": "vv_agent::RunEventPayload::ToolCallPlanned"
+        },
+        {
+          "adaptation": "Python exports a concrete event class; Rust exports a RunEventPayload variant.",
+          "id": "events.diagnostic",
+          "python": "vv_agent.DiagnosticEvent",
+          "rust": "vv_agent::RunEventPayload::Diagnostic"
         }
       ],
       "id": "tracing"
@@ -1872,32 +1873,6 @@
           }
         },
         {
-          "id": "runtime_log_handler",
-          "kind": "field",
-          "python": {
-            "declaration": "dataclass_field",
-            "kind": "field",
-            "name": "runtime_log_handler"
-          },
-          "rust": {
-            "kind": "field",
-            "name": "runtime_log_handler"
-          }
-        },
-        {
-          "id": "runtime_stream_callback",
-          "kind": "field",
-          "python": {
-            "declaration": "dataclass_field",
-            "kind": "field",
-            "name": "runtime_stream_callback"
-          },
-          "rust": {
-            "kind": "field",
-            "name": "runtime_stream_callback"
-          }
-        },
-        {
           "id": "metadata",
           "kind": "field",
           "python": {
@@ -1965,34 +1940,6 @@
             "kind": "method",
             "name": "events",
             "target": "vv_agent::RunHandle"
-          }
-        },
-        {
-          "adaptation": "Python can construct a provider from a settings path at run time; Rust receives a ModelProvider.",
-          "id": "settings_file",
-          "kind": "field",
-          "python": {
-            "declaration": "dataclass_field",
-            "kind": "field",
-            "name": "settings_file"
-          },
-          "rust": {
-            "kind": "field",
-            "name": "model_provider"
-          }
-        },
-        {
-          "adaptation": "Python's settings adapter carries the backend selector; Rust's ModelProvider owns it.",
-          "id": "default_backend",
-          "kind": "field",
-          "python": {
-            "declaration": "dataclass_field",
-            "kind": "field",
-            "name": "default_backend"
-          },
-          "rust": {
-            "kind": "field",
-            "name": "model_provider"
           }
         },
         {

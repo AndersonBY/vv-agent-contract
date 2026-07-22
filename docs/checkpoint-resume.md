@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 1.0.1. It is a task-neutral persistence and recovery
+`vv-agent-contract` 2.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -22,6 +22,14 @@ suffix. Records require `schema_version=vv-agent.checkpoint.v2` and
 `run_definition_schema=vv-agent.run-definition.v1`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
+
+The top level has one exact current field set. Every listed field is present,
+including fields whose value may be null; readers do not synthesize omissions.
+Every contract-defined nested object is closed by its own current shape. Only
+locations explicitly declared as opaque JSON or typed extension data are open,
+and an open value does not make its containing contract object open. A rejected
+record is not rewritten, repaired, or advanced by store initialization, load,
+claim, or resume.
 
 ## Public Configuration
 
@@ -63,7 +71,8 @@ configured Runner default as one object; individual fields are not merged.
 
 `new` requires a supplied checkpoint key to be absent, or generates one when null.
 `resume_if_present` and `require_existing` require an explicit key. The former
-atomically loads or creates a compatible record; the latter fails when absent.
+atomically loads or creates a current record with the exact run-definition
+digest; the latter fails when absent.
 Existing terminal state is replayed without model or tool execution. A live,
 unexpired claim remains owned by its worker and cannot be stolen by a new
 resume attempt.
@@ -190,12 +199,17 @@ claim. A running checkpoint may retain an ambiguous entry only while a recovery
 claim is actively resolving it. Terminal records have no active journals except
 an explicit operator-abort terminal, which retains its ambiguous evidence.
 
-An absent or unknown checkpoint discriminator returns
-`checkpoint_schema_unsupported`. Top-level objects are closed, so unknown
-fields and invalid types are rejected. Unknown optional extension namespaces
-may be preserved only inside the typed `extension_state` map and are not
-restored into an unregistered extension. Unknown required extensions block
-resume.
+A missing, stale, future, unknown, or malformed checkpoint discriminator returns
+`checkpoint_schema_unsupported`. The same invalid forms of the run-definition
+discriminator return `checkpoint_definition_schema_unsupported`. The checkpoint
+top level and every nested fixed-shape object are closed: all current required
+fields must be present, unknown fields and invalid types are rejected, and no
+reader fills fields from another shape. There is no discriminator fallback,
+historical decoder dispatch, migration, or in-place repair. Only fields
+explicitly defined as opaque JSON or typed extension maps remain open. Unknown
+optional extension namespaces may be preserved only inside the typed
+`extension_state` map and are not restored into an unregistered extension.
+Unknown required extensions block resume.
 
 Checkpoint journals contain only the active or not-yet-committed cycle. A
 successful cycle commit incorporates its messages, cycle record, usage, and
@@ -231,10 +245,16 @@ the original cursor for an identical duplicate and rejects the same event id
 with a different digest. Re-emission after recovery therefore uses the same
 identity and an idempotent consumer does not consume it twice.
 
-The checkpoint contains a bounded `event_outbox`. An event is first stored
-as `pending`, then delivered with `append_once`, then marked `delivered` with
-the returned cursor. Recovery redelivers pending entries with the same id and
-digest. Delivered entries may be compacted after the enclosing cycle or
+The checkpoint contains a bounded `event_outbox`. Every entry has exactly
+`event_id`, `payload_digest`, `state`, `event`, and `cursor`, and contains one
+complete canonical event accepted by the current RunEvent v1 decoder. A
+type-only placeholder, partial payload, non-current event spelling, missing or
+unknown event field, or wrong event version is invalid. The embedded RunEvent
+`event_id` must exactly equal the enclosing outbox `event_id`, and the payload
+digest is computed from that complete validated event. An event is first stored
+as `pending`, then delivered with `append_once`, then marked `delivered` with the
+returned cursor. Recovery redelivers pending entries with the same event, id,
+and digest. Delivered entries may be compacted after the enclosing cycle or
 terminal acknowledgement becomes durable.
 
 Event ids are unique within one checkpoint outbox. Enqueueing an id that is
@@ -252,11 +272,11 @@ matching claim token; an unclaimed or terminal checkpoint requires a null claim
 token. The operation never rewrites the terminal receipt. This separate CAS is
 required because terminal event delivery occurs after terminal finalization.
 
-The cursor and outbox do not turn an arbitrary callback into a transactional
-consumer. The checkpoint protocol provides accepted-once delivery only through an
-`IdempotentRunEventStore`; raw stream callbacks remain at-least-once and must
-deduplicate stable event ids. The contract must not describe this as universal
-exactly-once event delivery.
+The cursor and outbox do not turn an observer into a transactional consumer.
+The checkpoint protocol provides accepted-once delivery only through an
+`IdempotentRunEventStore`; the optional typed observer is not durable delivery
+evidence. The contract must not describe this as universal exactly-once event
+delivery.
 
 ## Extension State
 
@@ -348,9 +368,9 @@ resume runs to execute the approved effect.
 
 The bound approval is claimed before the new checkpoint is atomically created
 or loaded. Creation durably seeds a `planned` tool journal entry with the
-captured source identity before `started`; an existing compatible checkpoint
-continues through the ordinary claim CAS. That seeded entry is the
-checkpoint-v2 durable approval boundary.
+captured source identity before `started`; an existing current checkpoint with
+the exact immutable definition continues through the ordinary claim CAS. That
+seeded entry is the checkpoint-v2 durable approval boundary.
 The new operation id is stable within the resume run, while the source tool
 call id, request digest, and idempotency key remain unchanged. A crash after
 the seed is durable therefore resumes the approved planned call without asking

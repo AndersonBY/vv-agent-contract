@@ -452,7 +452,7 @@
           "tool_calls": [
             {
               "id": "call-search-1",
-              "name": "search",
+              "name": "lookup_records",
               "arguments": {}
             },
             {
