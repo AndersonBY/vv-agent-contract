@@ -11,6 +11,7 @@
       "model_visible": true,
       "name": "task_finish",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "exposed_files": {
             "description": "Optional workspace-relative paths for created or modified deliverables the user should inspect. Include concrete artifact paths, not transient logs, prose descriptions, or unrelated files.",
@@ -29,8 +30,7 @@
           }
         },
         "required": [],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -45,6 +45,7 @@
       "model_visible": true,
       "name": "ask_user",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "allow_custom_options": {
             "description": "Whether users can add custom options. Set true when preset options may be incomplete or the user may need to provide a custom path, credential label, or preference.",
@@ -73,8 +74,7 @@
         "required": [
           "question"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -89,6 +89,7 @@
       "model_visible": true,
       "name": "activate_skill",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "reason": {
             "description": "Optional reason for activating this skill. Explain briefly why this skill applies before acting.",
@@ -102,8 +103,7 @@
         "required": [
           "skill_name"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -118,10 +118,12 @@
       "model_visible": true,
       "name": "todo_write",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "todos": {
             "description": "Complete TODO list replacement payload. Send every item that should remain; omitted existing ids are removed.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "id": {
                   "description": "Existing TODO id for update; omit for new item. When omitted, a generated 8-character id is assigned.",
@@ -155,8 +157,7 @@
                 "status",
                 "priority"
               ],
-              "type": "object",
-              "additionalProperties": false
+              "type": "object"
             },
             "type": "array"
           }
@@ -164,8 +165,7 @@
         "required": [
           "todos"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -180,6 +180,7 @@
       "model_visible": true,
       "name": "compress_memory",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "core_information": {
             "description": "Key information that should be preserved after compression. Include concrete names, paths, commands, and decisions when relevant.",
@@ -189,8 +190,7 @@
         "required": [
           "core_information"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -205,6 +205,7 @@
       "model_visible": true,
       "name": "find_files",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "glob": {
             "description": "Optional glob filter such as `**/*.rs` or `src/**/*.md`. Use it to narrow by filename, directory, or extensions before listing broad trees. Default **/*.",
@@ -249,8 +250,7 @@
           }
         },
         "required": [],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -265,6 +265,7 @@
       "model_visible": true,
       "name": "file_info",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "path": {
             "description": "Target file path (workspace-relative by default; absolute path allowed when outside-workspace access is enabled).",
@@ -274,8 +275,7 @@
         "required": [
           "path"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -290,6 +290,7 @@
       "model_visible": true,
       "name": "read_file",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "end_line": {
             "description": "Optional ending line number (1-based, inclusive). Pair with `start_line` to keep large-file reads bounded.",
@@ -313,8 +314,7 @@
         "required": [
           "path"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -329,6 +329,7 @@
       "model_visible": true,
       "name": "write_file",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "append": {
             "description": "Set true to append instead of overwrite. Default is false (overwrite). Use append only when existing content must be preserved.",
@@ -355,8 +356,7 @@
           "path",
           "content"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -371,6 +371,7 @@
       "model_visible": true,
       "name": "edit_file",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "new_string": {
             "description": "Replacement text. May be empty; preserve intended indentation, line endings, and surrounding whitespace.",
@@ -394,8 +395,7 @@
           "old_string",
           "new_string"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -410,6 +410,7 @@
       "model_visible": true,
       "name": "search_files",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "a": {
             "description": "Lines after each match. Only used in content mode. Use when each match needs following context, such as a function body, config value, stack trace continuation, or adjacent TODO detail.",
@@ -490,8 +491,7 @@
         "required": [
           "pattern"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -506,6 +506,7 @@
       "model_visible": true,
       "name": "bash",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "auto_confirm": {
             "description": "Pipe yes to the command for non-interactive confirmation prompts. Use carefully: do not enable for destructive operations unless the user has already authorized the action and the command target is explicit.",
@@ -535,8 +536,7 @@
         "required": [
           "command"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -551,6 +551,7 @@
       "model_visible": true,
       "name": "check_background_command",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "session_id": {
             "description": "Background session identifier. It is returned by `bash` when `run_in_background=true` or when a foreground command times out.",
@@ -560,8 +561,7 @@
         "required": [
           "session_id"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -576,6 +576,7 @@
       "model_visible": true,
       "name": "create_sub_task",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "agent_id": {
             "description": "Exact sub-agent identifier from the configured `sub_agents` mapping. Do not pass a display name, model name, or inferred label.",
@@ -600,6 +601,7 @@
           "tasks": {
             "description": "Batch mode: multiple independent tasks for the same sub-agent. Use when parallel work can be safely delegated without shared mutable state or ordering dependencies.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "output_requirements": {
                   "description": "Optional output constraints for one sub-task. State success criteria, expected format, concrete deliverables, and verification evidence.",
@@ -613,8 +615,7 @@
               "required": [
                 "task_description"
               ],
-              "type": "object",
-              "additionalProperties": false
+              "type": "object"
             },
             "minItems": 1,
             "type": "array"
@@ -627,8 +628,7 @@
         "required": [
           "agent_id"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -643,6 +643,7 @@
       "model_visible": true,
       "name": "sub_task_status",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "check_interval_seconds": {
             "default": 300,
@@ -700,8 +701,7 @@
         "required": [
           "task_ids"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
@@ -716,6 +716,7 @@
       "model_visible": true,
       "name": "read_image",
       "parameters": {
+        "additionalProperties": false,
         "properties": {
           "path": {
             "description": "Image path or URL to attach. Workspace files may be PNG, JPEG, WEBP, or BMP; workspace-relative paths are preferred unless outside-workspace access is enabled. HTTP URLs are passed through without downloading.",
@@ -725,8 +726,7 @@
         "required": [
           "path"
         ],
-        "type": "object",
-        "additionalProperties": false
+        "type": "object"
       },
       "strict": true,
       "timeout_seconds": null,
