@@ -71,8 +71,8 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(report["version"], "2.0.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 48)
-        self.assertEqual(report["manifest_entries"], 47)
+        self.assertEqual(report["fixture_files"], 49)
+        self.assertEqual(report["manifest_entries"], 48)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
@@ -2041,7 +2041,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 48)
+            self.assertEqual(synced["fixture_files"], 49)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

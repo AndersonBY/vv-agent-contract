@@ -63,6 +63,22 @@ threshold. A provider prompt-too-long response may still force compaction.
 Native provider request and response fields are decoded only at the provider
 adapter boundary. They do not become alternate internal wire formats.
 
+## CLI Projection
+
+The direct-task CLI contract is frozen in `fixtures/cli_contract.json`. Both
+implementations consume that one fixture for settings-file precedence, prompt
+joining, argument projection, resolved-model capability projection, and process
+outcomes. Language-specific default settings filenames are the only declared
+adaptation.
+
+CLI model capabilities remain observations rather than request limits. In
+particular, `max_output_tokens` is copied into task metadata for capacity
+planning but does not populate `ModelSettings.max_tokens`; an output limit is
+sent only when the user explicitly supplies one.
+
+There is no implementation-local CLI contract fixture or compatibility parser.
+Current CLI producers must satisfy this shape directly.
+
 ## Prompt And Built-In Tools
 
 The prompt bundle and built-in tool inventory are generated from the canonical
