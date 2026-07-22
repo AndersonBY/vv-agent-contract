@@ -157,6 +157,17 @@ Started marks the external-effect boundary. A denial or approval short-circuit
 has no started event. Completed events always include directive, nullable error
 code, execution-start flag, and nullable monotonic duration.
 
+Every tool call is validated against its declared JSON Schema Draft 2020-12
+parameter schema after the planned event and before policy predicates,
+approval, the started event, or handler execution. Invalid arguments return
+`invalid_tool_arguments`, a stable list of `instance_path`, `schema_path`, and
+`rule` issues, and `execution_started=false`. Issue ordering is lexical by those
+three fields. Object schemas are closed by default: registration adds
+`additionalProperties=false` whenever an object schema does not state an
+explicit policy. This rule applies equally to built-ins, function tools,
+handoffs, agent tools, and host-registered custom tools; it does not inspect or
+infer task semantics.
+
 ## Sessions And Message History
 
 Session items use one canonical current wire and one current SQLite schema.

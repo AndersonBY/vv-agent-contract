@@ -6,6 +6,24 @@
       "error",
       "error_code"
     ],
+    "argument_validation": {
+      "json_schema_draft": "2020-12",
+      "boundary": "after_planned_before_policy_approval_started",
+      "handler_called_on_failure": false,
+      "error_code": "invalid_tool_arguments",
+      "error_message": "Tool arguments do not match the declared schema",
+      "issue_fields": [
+        "instance_path",
+        "schema_path",
+        "rule"
+      ],
+      "issue_order": [
+        "instance_path",
+        "schema_path",
+        "rule"
+      ],
+      "strict_object_default": "additionalProperties_false_unless_explicitly_set"
+    },
     "metadata_policy": {
       "description": "Host metadata contains only bounded machine fields and never repeats model-facing bulk output.",
       "forbidden_large_keys": [
@@ -46,6 +64,50 @@
     }
   },
   "tools": {
+    "schema_validation": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "invalid_arguments": {
+        "value": "not-an-integer",
+        "removed_alias": true
+      },
+      "result": {
+        "status_code": "ERROR",
+        "directive": "continue",
+        "error_code": "invalid_tool_arguments",
+        "content": {
+          "ok": false,
+          "error": "Tool arguments do not match the declared schema",
+          "error_code": "invalid_tool_arguments",
+          "issues": [
+            {
+              "instance_path": "",
+              "schema_path": "/additionalProperties",
+              "rule": "additionalProperties"
+            },
+            {
+              "instance_path": "/value",
+              "schema_path": "/properties/value/type",
+              "rule": "type"
+            }
+          ]
+        },
+        "metadata": {
+          "error_code": "invalid_tool_arguments",
+          "issue_count": 2
+        }
+      }
+    },
     "compress_memory": {
       "success": {
         "arguments": {
@@ -194,14 +256,22 @@
         "result": {
           "status_code": "ERROR",
           "directive": "continue",
-          "error_code": "invalid_timeout",
+          "error_code": "invalid_tool_arguments",
           "content": {
             "ok": false,
-            "error": "`timeout` must be an integer",
-            "error_code": "invalid_timeout"
+            "error": "Tool arguments do not match the declared schema",
+            "error_code": "invalid_tool_arguments",
+            "issues": [
+              {
+                "instance_path": "/timeout",
+                "schema_path": "/properties/timeout/type",
+                "rule": "type"
+              }
+            ]
           },
           "metadata": {
-            "error_code": "invalid_timeout"
+            "error_code": "invalid_tool_arguments",
+            "issue_count": 1
           }
         }
       },
@@ -261,21 +331,22 @@
         "result": {
           "status_code": "ERROR",
           "directive": "continue",
-          "error_code": "invalid_arguments",
+          "error_code": "invalid_tool_arguments",
           "content": {
             "ok": false,
-            "error": "`path` is required.",
-            "error_code": "invalid_arguments",
-            "message": "`path` is required.",
-            "missing_arguments": [
-              "path"
+            "error": "Tool arguments do not match the declared schema",
+            "error_code": "invalid_tool_arguments",
+            "issues": [
+              {
+                "instance_path": "",
+                "schema_path": "/required",
+                "rule": "required"
+              }
             ]
           },
           "metadata": {
-            "error_code": "invalid_arguments",
-            "missing_arguments": [
-              "path"
-            ]
+            "error_code": "invalid_tool_arguments",
+            "issue_count": 1
           }
         }
       }

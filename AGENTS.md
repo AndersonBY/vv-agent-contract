@@ -31,6 +31,9 @@ mandatory routing map; durable detail belongs in `docs/`.
   each public API, prompt, tool, runtime record, event, session, checkpoint,
   and wire protocol. Delete replaced readers, aliases, shims, migrations,
   fixtures, and documentation in the same change; Git is the history.
+- Backward compatibility is not a contract goal. Prefer a breaking replacement
+  when it produces a clearer current design; update active consumers together,
+  while consumers that require old behavior must pin an old release.
 - Keep schema and protocol discriminators only as strict validation boundaries.
   Current readers must reject missing, stale, unknown, and malformed versions;
   they must not dispatch to historical decoders.
