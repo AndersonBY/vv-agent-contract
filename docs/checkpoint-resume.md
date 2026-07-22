@@ -468,6 +468,45 @@ delivery recording, retained terminal acknowledgement, and only then host or
 scheduler acknowledgement. A crash at any boundary reuses the same session
 commit and outbox identities.
 
+## Distributed Worker Response
+
+The distributed transport returns one closed current response object with
+`schema_version=vv-agent.distributed-worker-response.v1` and a required `type`
+discriminator. The only variants are:
+
+- `pending`, with no state fields, reports that this delivery returned no
+  durable cycle progress;
+- `committed`, with exactly `checkpoint_revision` and `committed_cycle`, reports
+  one durable non-terminal cycle commit;
+- `terminal_candidate`, with exactly `checkpoint_revision` and a complete
+  current `AgentResult`, asks the controller to perform output guardrails,
+  append-once session persistence, terminal event handling, and durable terminal
+  finalization;
+- `terminal_replay`, with exactly `checkpoint_revision` and the complete
+  retained `AgentResult`, reports a terminal value that is already authoritative
+  in the checkpoint store and must not be finalized or executed again.
+
+A terminal candidate may carry `reconciliation_required`, `wait_user`,
+`completed`, `failed`, or `max_cycles`. A terminal replay may carry only the
+durable terminal statuses `wait_user`, `completed`, `failed`, or `max_cycles`;
+`reconciliation_required` remains resumable checkpoint state and is not a
+retained terminal replay. Both variants reject `pending` and `running`.
+
+Every response is an observation, not authority to advance state. After
+`pending`, `committed`, a terminal candidate, a terminal replay, a timeout, or a
+transport error, the scheduler reads the authoritative checkpoint and verifies
+the reported revision and result before it decides whether to acknowledge,
+finalize, wait, or redispatch in recovery mode. A candidate cannot overwrite an
+existing durable terminal. A replay result must exactly equal the retained
+durable result.
+
+Transport failure is an out-of-band dispatch error, not a fifth worker response
+variant. The replaced object containing `finished`, `terminal_candidate`, or
+`terminal_replay` booleans is not accepted under the current schema. Missing,
+stale, future, null, Boolean, or numeric discriminators; unknown or cross-variant
+fields; non-JSON-safe revisions; and incomplete or non-canonical results are
+rejected rather than normalized.
+
 ## Terminal And Observable Projection
 
 `resume_requires_reconciliation` is a typed interruption reason with
@@ -561,3 +600,5 @@ resuming under the wrong agent definition.
 - `distributed_run_envelope.json` defines the worker wire, lease lifecycle,
   required extension references, and optional reconciliation capability
   reference.
+- `distributed_worker_response.json` defines the four closed tagged worker
+  response variants and rejects the replaced boolean-combination response.

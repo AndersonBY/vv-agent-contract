@@ -71,8 +71,8 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(report["version"], "2.0.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 49)
-        self.assertEqual(report["manifest_entries"], 48)
+        self.assertEqual(report["fixture_files"], 50)
+        self.assertEqual(report["manifest_entries"], 49)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
@@ -410,6 +410,69 @@ class ContractRepositoryTests(unittest.TestCase):
             completed_event["token_usage"]["cycles"][0]["usage"]["usage_source"],
             "accounting_missing",
         )
+
+    def test_public_agent_result_has_one_closed_current_wire(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/result_public.json").read_text(encoding="utf-8")
+        )
+        wire = fixture["agent_result_wire"]
+        required = {
+            "status",
+            "completion_reason",
+            "completion_tool_name",
+            "partial_output",
+            "messages",
+            "cycles",
+            "final_answer",
+            "wait_reason",
+            "error",
+            "shared_state",
+            "token_usage",
+            "checkpoint_key",
+            "resume_observation",
+        }
+        optional = {"budget_usage", "budget_exhaustion", "error_code"}
+
+        self.assertEqual(set(wire["required_fields"]), required)
+        self.assertEqual(set(wire["optional_fields"]), optional)
+        self.assertTrue(wire["optional_fields_omitted_when_absent"])
+        self.assertTrue(wire["optional_fields_reject_null"])
+        self.assertEqual(wire["unknown_fields"], "reject")
+        self.assertEqual(
+            wire["statuses"],
+            [
+                "pending",
+                "running",
+                "reconciliation_required",
+                "wait_user",
+                "completed",
+                "failed",
+                "max_cycles",
+            ],
+        )
+        self.assertEqual(set(fixture["agent_result"]), required)
+        self.assertTrue(optional.isdisjoint(fixture["agent_result"]))
+
+        checkpoint_fixture = json.loads(
+            (ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8")
+        )
+        retained_results: list[dict[str, object]] = []
+
+        def collect_retained_results(value: object) -> None:
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    if key == "terminal_result" and isinstance(nested, dict):
+                        retained_results.append(nested)
+                    collect_retained_results(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    collect_retained_results(nested)
+
+        collect_retained_results(checkpoint_fixture)
+        self.assertGreaterEqual(len(retained_results), 2)
+        for result in retained_results:
+            self.assertEqual(set(result), required)
+            self.assertTrue(optional.isdisjoint(result))
 
     def test_public_api_inventories_token_usage_types(self) -> None:
         fixture = json.loads((ROOT / "fixtures/public_api.json").read_text(encoding="utf-8"))
@@ -1949,6 +2012,176 @@ class ContractRepositoryTests(unittest.TestCase):
             {"checkpoint_claim_mode_invalid"},
         )
 
+    def test_distributed_worker_response_has_one_closed_tagged_wire(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/distributed_worker_response.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            fixture["schema_version"],
+            "vv-agent.distributed-worker-response.v1",
+        )
+        rules = fixture["wire_rules"]
+        self.assertEqual(rules["discriminator"], "type")
+        self.assertTrue(rules["closed_objects"])
+        self.assertTrue(rules["boolean_is_not_an_integer"])
+        self.assertEqual(rules["json_safe_integer_maximum"], 9_007_199_254_740_991)
+        self.assertEqual(rules["checkpoint_revision_minimum"], 0)
+        self.assertEqual(rules["committed_cycle_minimum"], 1)
+        self.assertEqual(
+            rules["terminal_candidate_statuses"],
+            [
+                "reconciliation_required",
+                "wait_user",
+                "completed",
+                "failed",
+                "max_cycles",
+            ],
+        )
+        self.assertEqual(
+            rules["terminal_replay_statuses"],
+            ["wait_user", "completed", "failed", "max_cycles"],
+        )
+        self.assertTrue(rules["scheduler_must_verify_authoritative_checkpoint"])
+        self.assertFalse(rules["transport_failure_is_response_variant"])
+        self.assertTrue(rules["legacy_boolean_wire_is_rejected"])
+
+        result_wire = fixture["agent_result_wire"]
+        required_result_fields = {
+            "status",
+            "completion_reason",
+            "completion_tool_name",
+            "partial_output",
+            "messages",
+            "cycles",
+            "final_answer",
+            "wait_reason",
+            "error",
+            "shared_state",
+            "token_usage",
+            "checkpoint_key",
+            "resume_observation",
+        }
+        optional_result_fields = {"budget_usage", "budget_exhaustion", "error_code"}
+        self.assertEqual(set(result_wire["required_fields"]), required_result_fields)
+        self.assertEqual(set(result_wire["optional_fields"]), optional_result_fields)
+        self.assertTrue(result_wire["optional_fields_omitted_when_absent"])
+        self.assertTrue(result_wire["optional_fields_reject_null"])
+        self.assertEqual(result_wire["unknown_fields"], "reject")
+
+        status_matrix = {
+            case["type"]: case["accepted_statuses"]
+            for case in fixture["status_matrix_cases"]
+        }
+        self.assertEqual(status_matrix["terminal_candidate"], rules["terminal_candidate_statuses"])
+        self.assertEqual(status_matrix["terminal_replay"], rules["terminal_replay_statuses"])
+        self.assertIsNone(fixture["transport_failure"]["worker_response_type"])
+        self.assertEqual(
+            fixture["transport_failure"]["representation"],
+            "out_of_band_dispatch_error",
+        )
+        self.assertEqual(
+            fixture["legacy_wire_fields"],
+            ["finished", "terminal_candidate", "terminal_replay"],
+        )
+
+        valid = {case["name"]: case["response"] for case in fixture["valid_cases"]}
+        self.assertEqual(
+            set(valid),
+            {"pending", "committed", "terminal_candidate", "terminal_replay"},
+        )
+        self.assertEqual(set(valid["pending"]), {"schema_version", "type"})
+        self.assertEqual(
+            set(valid["committed"]),
+            {"schema_version", "type", "checkpoint_revision", "committed_cycle"},
+        )
+        for name in ("terminal_candidate", "terminal_replay"):
+            response = valid[name]
+            self.assertEqual(
+                set(response),
+                {"schema_version", "type", "checkpoint_revision", "result"},
+            )
+            self.assertEqual(response["result"]["status"], "completed")
+            self.assertEqual(response["result"]["completion_reason"], "no_tool_finish")
+            self.assertIsNone(response["result"]["completion_tool_name"])
+            self.assertEqual(
+                set(response["result"]),
+                required_result_fields,
+            )
+
+        self.assertEqual(
+            {case["name"] for case in fixture["invalid_cases"]},
+            {
+                "payload_is_not_an_object",
+                "payload_is_null",
+                "payload_is_boolean",
+                "payload_is_number",
+                "missing_schema_version",
+                "null_schema_version",
+                "boolean_schema_version",
+                "number_schema_version",
+                "stale_schema_version",
+                "unknown_schema_version",
+                "missing_type",
+                "null_type",
+                "boolean_type",
+                "number_type",
+                "unknown_type",
+                "legacy_finished_discriminator",
+                "current_schema_with_legacy_finished_field",
+                "current_schema_with_terminal_candidate_boolean",
+                "current_schema_with_terminal_replay_boolean",
+                "pending_unknown_field",
+                "committed_missing_revision",
+                "committed_missing_cycle",
+                "committed_boolean_revision",
+                "committed_negative_revision",
+                "committed_float_revision",
+                "committed_revision_above_wire_maximum",
+                "committed_boolean_cycle",
+                "committed_negative_cycle",
+                "committed_float_cycle",
+                "committed_zero_cycle",
+                "committed_cycle_above_wire_maximum",
+                "committed_mixed_with_result",
+                "terminal_candidate_missing_revision",
+                "terminal_candidate_missing_result",
+                "terminal_candidate_boolean_revision",
+                "terminal_candidate_negative_revision",
+                "terminal_candidate_float_revision",
+                "terminal_candidate_revision_above_wire_maximum",
+                "terminal_candidate_mixed_with_committed_cycle",
+                "terminal_candidate_unknown_field",
+                "terminal_candidate_invalid_result",
+                "terminal_result_is_null",
+                "terminal_result_is_list",
+                "terminal_result_missing_required_field",
+                "terminal_result_unknown_field",
+                "terminal_result_optional_budget_usage_is_null",
+                "terminal_result_optional_budget_exhaustion_is_null",
+                "terminal_result_optional_error_code_is_null",
+                "terminal_candidate_pending_result",
+                "terminal_candidate_running_result",
+                "terminal_replay_mixed_with_committed_cycle",
+                "terminal_replay_unknown_field",
+                "terminal_replay_reconciliation_required_result",
+            },
+        )
+
+        valid_by_name = {case["name"]: case["response"] for case in fixture["valid_cases"]}
+        for case in fixture["invalid_cases"]:
+            if "response" in case:
+                self.assertNotIn("mutation", case)
+                continue
+            self.assertIn(case["base_valid_case"], valid_by_name)
+            mutation = case["mutation"]
+            self.assertIn(mutation["operation"], {"add", "replace", "remove"})
+            self.assertGreaterEqual(len(mutation["path"]), 1)
+            if mutation["operation"] == "remove":
+                self.assertNotIn("value", mutation)
+            else:
+                self.assertIn("value", mutation)
+
     def test_checkpoint_sqlite_has_one_strict_current_table(self) -> None:
         sql = (ROOT / "fixtures/checkpoint_sqlite_canonical.sql").read_text(encoding="utf-8")
 
@@ -2041,7 +2274,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 49)
+            self.assertEqual(synced["fixture_files"], 50)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

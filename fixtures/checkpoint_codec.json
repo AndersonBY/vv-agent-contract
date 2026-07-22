@@ -888,8 +888,6 @@
             },
             "cycles": []
           },
-          "budget_usage": null,
-          "budget_exhaustion": null,
           "checkpoint_key": "terminal",
           "resume_observation": null
         },
@@ -1556,8 +1554,6 @@
             },
             "cycles": []
           },
-          "budget_usage": null,
-          "budget_exhaustion": null,
           "checkpoint_key": "terminal",
           "resume_observation": null
         },

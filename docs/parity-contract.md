@@ -217,6 +217,33 @@ lease; progress updates preserve the claim; terminal commit precedes scheduler
 acknowledgement. Redelivery replays a durable terminal without executing the
 model or tools again.
 
+The worker response is a separate closed wire with
+`schema_version=vv-agent.distributed-worker-response.v1` and one required
+`type` discriminator. Exactly four variants exist:
+
+- `pending` has no state fields and means that no durable cycle progress was
+  returned by this delivery attempt;
+- `committed` has exactly `checkpoint_revision` and `committed_cycle`;
+- `terminal_candidate` has exactly `checkpoint_revision` and a complete
+  current `AgentResult` wire object that still requires controller-side durable
+  finalization;
+- `terminal_replay` has exactly `checkpoint_revision` and the retained complete
+  current `AgentResult` already authoritative in the checkpoint store.
+
+The response object and nested current `AgentResult` are closed. Revisions are
+integers in `0..9007199254740991`; committed cycle indexes are integers in
+`1..9007199254740991`; booleans are not integers.
+Candidates accept `reconciliation_required`, `wait_user`, `completed`, `failed`,
+or `max_cycles`. Replays accept only `wait_user`, `completed`, `failed`, or
+`max_cycles`; both reject `pending` and `running`, and a replay additionally
+rejects `reconciliation_required`. Optional `AgentResult` fields are omitted
+when absent and reject explicit null. Every scheduler outcome, including a
+transport error, is reconciled against the authoritative checkpoint before the
+controller acknowledges, finalizes, waits, or redispatches. Transport failure
+is out of band and is not a fifth response type. The replaced `finished`,
+`terminal_candidate`, and `terminal_replay` boolean combination is not a
+compatibility input and must be rejected rather than inferred.
+
 ## Configured And Background Agents
 
 Configured and dynamic children receive explicit model, prompt, tool policy,
