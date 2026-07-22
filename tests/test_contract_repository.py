@@ -207,9 +207,13 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             context_cases[
-                "zero_metadata_without_resolved_capability_uses_fallback"
+                "zero_metadata_without_resolved_capability_uses_derived_planning_context"
             ]["expected_model_context_window"],
-            200_000,
+            279_000,
+        )
+        self.assertEqual(
+            capacity["unknown_context_window_strategy"]["default_model_context_window"],
+            279_000,
         )
 
         lifecycle = fixture["compaction_events"]

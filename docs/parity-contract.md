@@ -40,6 +40,15 @@ reconstructing one from settings paths or backend fields. A child resolves its
 own model unless it can reuse the parent client under the canonical same-model
 rule.
 
+When neither task metadata nor the resolved model declares a context window,
+the runtime derives a planning context after selecting the output reserve. Its
+prompt capacity is the positive configured compaction threshold, or the
+`250000` configured default when that threshold is zero; output reserve and the
+auto-compaction buffer are then added with unsigned-64-bit saturation. The
+default derived context is therefore `250000 + 16000 + 13000 = 279000`, so an
+unknown model capacity does not silently lower the configured compaction
+threshold. A provider prompt-too-long response may still force compaction.
+
 Native provider request and response fields are decoded only at the provider
 adapter boundary. They do not become alternate internal wire formats.
 

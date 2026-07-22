@@ -14,12 +14,16 @@
   },
   "capacity_contract": {
     "configured_default_threshold": 250000,
-    "context_window_fallback": 200000,
+    "unknown_context_window_strategy": {
+      "planning_prompt_capacity": "configured_threshold > 0 ? configured_threshold : configured_default_threshold",
+      "model_context_window": "min(planning_prompt_capacity + reserved_output_tokens + autocompact_buffer_tokens, u64_max)",
+      "default_model_context_window": 279000
+    },
     "context_window_resolution": {
       "precedence": [
         "positive_task_metadata.model_context_window",
         "resolved_model.context_length",
-        "framework_fallback"
+        "derived_planning_context"
       ],
       "non_positive_task_metadata_is_absent": true,
       "cases": [
@@ -32,12 +36,15 @@
           "expected_model_context_window": 64000
         },
         {
-          "name": "zero_metadata_without_resolved_capability_uses_fallback",
+          "name": "zero_metadata_without_resolved_capability_uses_derived_planning_context",
           "input": {
             "task_metadata_model_context_window": 0,
-            "resolved_model_context_window": null
+            "resolved_model_context_window": null,
+            "configured_threshold": 250000,
+            "reserved_output_tokens": 16000,
+            "autocompact_buffer_tokens": 13000
           },
-          "expected_model_context_window": 200000
+          "expected_model_context_window": 279000
         }
       ]
     },
