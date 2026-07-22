@@ -79,7 +79,7 @@
         "framework_unlimited"
       ],
       "merge": "whole_object_replace",
-      "fixture": "run_budget_v1.json"
+      "fixture": "run_budget.json"
     },
     {
       "capability": "durable_checkpoint_resume",
@@ -92,7 +92,7 @@
         "framework_disabled"
       ],
       "merge": "whole_object_replace",
-      "fixture": "checkpoint_config_v1.json"
+      "fixture": "checkpoint_config.json"
     },
     {
       "capability": "no_tool_policy",

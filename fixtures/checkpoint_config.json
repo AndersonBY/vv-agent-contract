@@ -1,5 +1,5 @@
 {
-  "contract": "checkpoint_config_v1",
+  "contract": "checkpoint_config",
   "version": 1,
   "defaults": {
     "checkpoint_config": null,

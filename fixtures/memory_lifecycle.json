@@ -1,5 +1,5 @@
 {
-  "version": "memory_lifecycle_v1",
+  "version": "memory_lifecycle",
   "summary_route": {
     "backend": "memory-backend",
     "model": "memory-model",

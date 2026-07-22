@@ -62,7 +62,7 @@ fail with `checkpoint_definition_unstable` before checkpoint creation or any
 external operation.
 
 Invalid public configuration fails with the stable error code recorded beside
-each invalid case in `checkpoint_config_v1.json`. Language-native exception or
+each invalid case in `checkpoint_config.json`. Language-native exception or
 error types may differ, but callers must be able to observe that code.
 
 The default resume policy is `new`. Both ambiguous-operation policies default
@@ -113,7 +113,7 @@ external work. A digest without its current typed definition is insufficient.
 
 ### Run Definition Digest
 
-`run_definition_v1.json` defines the exact digest input and two golden vectors.
+`run_definition.json` defines the exact digest input and two golden vectors.
 The framework serializes the complete `vv-agent.run-definition.v1` object with
 the RFC 8785 JSON Canonicalization Scheme, hashes the resulting UTF-8 bytes with
 SHA-256, and stores lowercase hexadecimal. Implementations must use an RFC 8785
@@ -176,7 +176,7 @@ event cursor remain excluded.
 
 ## Current Checkpoint Wire
 
-`checkpoint_codec_v2.json` defines the canonical object. Required fields are:
+`checkpoint_codec.json` defines the canonical object. Required fields are:
 
 - `schema_version`, exactly `vv-agent.checkpoint.v2`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v1`;
@@ -289,7 +289,7 @@ entry is `{version, required, state}`. Snapshots must be JSON values. The RFC
 8785 canonical UTF-8 bytes of the complete entry, excluding its namespace map
 key, are limited to 65536 bytes. The sum of those complete entry byte lengths
 is counted against `max_extension_state_bytes`, whose default is 262144 bytes.
-`checkpoint_codec_v2.json` gives generated exact-limit and one-byte-over cases
+`checkpoint_codec.json` gives generated exact-limit and one-byte-over cases
 so string quoting and entry metadata cannot be omitted from the calculation.
 
 Required extensions and the complete initial extension snapshot are validated
@@ -304,7 +304,7 @@ process-local object is never serialized into the distributed envelope.
 
 ## Operation Journal
 
-`operation_journal_v1.json` defines model and tool entries. Every entry has a
+`operation_journal.json` defines model and tool entries. Every entry has a
 stable `operation_id`, positive `cycle_index`, `attempt`, `state`, and lowercase
 SHA-256 `request_digest`. States are:
 
@@ -315,7 +315,7 @@ SHA-256 `request_digest`. States are:
 5. `ambiguous`: recovery observed `started` without a durable receipt.
 
 Invalid journal entries fail with the stable error code recorded beside each
-invalid case in `operation_journal_v1.json`; a parser message alone is not the
+invalid case in `operation_journal.json`; a parser message alone is not the
 cross-language contract.
 
 The runtime durably writes `planned`, then `started`, before invoking an
@@ -483,17 +483,17 @@ ambiguity, and reconciliation-required observations. App Server exposes a
 dedicated `turn/resume` operation, maps reconciliation-required to turn status
 `interrupted` without `completionReason` or `error`, and exposes optional
 `checkpoint` and `interruption` summaries. Their exact camelCase field sets and
-safe examples are defined in `app_server_observable_v1.json`. It never exposes
+safe examples are defined in `app_server_observable.json`. It never exposes
 the run definition or digest, operation arguments, responses, extension state,
 or idempotency keys. Public `AgentResult` serialization uses the complete closed
-shape defined by `result_public_v1.json`; App Server omits only fields that its
+shape defined by `result_public.json`; App Server omits only fields that its
 current schema marks optional.
 
 App Server `checkpoint.status` is the persisted `AgentStatus`; it is distinct
 from App Server `TurnStatus`. For example, durable
 `reconciliation_required` projects to turn status `interrupted`, while a live
 checkpoint `running` claim projects to turn status `running`.
-`app_server_observable_v1.json` contains complete JSON-RPC request, immediate
+`app_server_observable.json` contains complete JSON-RPC request, immediate
 response, and notification sequences. A newly claimed resume responds
 `running` before `turn/started`; reconciliation later ends with
 `turn/completed:interrupted` and omits completion/error fields. A live claim
@@ -542,22 +542,22 @@ resuming under the wrong agent definition.
 
 ## Canonical Evidence
 
-- `checkpoint_codec_v2.json` defines the strict codec, size, claim, and current
+- `checkpoint_codec.json` defines the strict codec, size, claim, and current
   validation cases.
-- `operation_journal_v1.json` defines valid entries, transitions,
+- `operation_journal.json` defines valid entries, transitions,
   reconciliation decisions, replay, and retry boundaries.
-- `checkpoint_config_v1.json` defines public defaults, precedence, key
+- `checkpoint_config.json` defines public defaults, precedence, key
   generation, collision, missing-key, and run-definition mismatch behavior.
-- `run_definition_v1.json` defines the RFC 8785 digest input, credential
+- `run_definition.json` defines the RFC 8785 digest input, credential
   redaction, canonical bytes, and SHA-256 golden vectors.
-- `checkpoint_store_v2.json` defines create/load, claim-internal progress,
+- `checkpoint_store.json` defines create/load, claim-internal progress,
   lease, CAS, terminal, outbox, append-once, and the single current namespace.
-- `checkpoint_resume_v1.json` contains executable public Runner and distributed
+- `checkpoint_resume.json` contains executable public Runner and distributed
   recovery cases; boolean fixture claims are insufficient producer evidence.
-- `resume_events_v1.jsonl` is a catalog of canonical scenario excerpts, not one
+- `resume_events.jsonl` is a catalog of canonical scenario excerpts, not one
   continuous run. Records sharing a run id and trace id define required local
   order; different identity pairs are independent fixture groups. Grouping
   metadata is not inserted into the formal RunEvent payload.
-- `distributed_run_envelope_v2.json` defines the worker wire, lease lifecycle,
+- `distributed_run_envelope.json` defines the worker wire, lease lifecycle,
   required extension references, and optional reconciliation capability
   reference.

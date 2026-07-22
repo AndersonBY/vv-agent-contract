@@ -1,5 +1,5 @@
 {
-  "contract": "approval_tool_policy_v1",
+  "contract": "approval_tool_policy",
   "request_id": {
     "regex": "^approval_[0-9a-f]{32}$",
     "same_value_at": [

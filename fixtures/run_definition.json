@@ -1,5 +1,5 @@
 {
-  "contract": "run_definition_v1",
+  "contract": "run_definition",
   "version": 1,
   "schema_version": "vv-agent.run-definition.v1",
   "canonicalization": {

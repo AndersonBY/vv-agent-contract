@@ -1,5 +1,5 @@
 {
-  "contract": "run_events_v1_invalid",
+  "contract": "run_events_invalid",
   "rules": {
     "version": "v1",
     "unknown_top_level_fields": "reject",

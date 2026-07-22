@@ -77,7 +77,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_session_codec_has_one_closed_current_wire(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/session_codec_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/session_codec.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(set(fixture), {"version", "canonical_cases", "invalid_cases"})
@@ -136,7 +136,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_checkpoint_outbox_embeds_a_complete_current_run_event(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8")
         )
         entry = fixture["canonical_checkpoint"]["event_outbox"][0]
         event = entry["event"]
@@ -155,7 +155,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures" / "memory_lifecycle_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures" / "memory_lifecycle.json").read_text(encoding="utf-8")
         )
         capacity = fixture["capacity_contract"]
 
@@ -251,7 +251,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_reasoning_history_fixture_locks_valid_assistant_projection(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures" / "assistant_reasoning_history_v1.json").read_text(
+            (ROOT / "fixtures" / "assistant_reasoning_history.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -288,14 +288,14 @@ class ContractRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             fixtures = Path(temporary) / "fixtures"
             shutil.copytree(ROOT / "fixtures", fixtures)
-            path = fixtures / "model_ref_v1.json"
+            path = fixtures / "model_ref.json"
             path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
 
             with self.assertRaisesRegex(contractctl.ContractError, "fixture digest mismatch"):
                 contractctl.parse_manifest(fixtures)
 
     def test_token_usage_contract_preserves_zero_missing_and_unsupported(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/token_usage_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/token_usage.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["normalization_cases"]}
 
         explicit_zero = cases["openai_cached_explicit_zero"]["expected"]["cache_usage"]
@@ -312,7 +312,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(invalid, missing)
 
     def test_token_usage_aggregation_never_exposes_partial_total(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/token_usage_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/token_usage.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["aggregation_cases"]}
 
         complete = cases["complete_provider_cache_observations"]["expected"]
@@ -353,7 +353,7 @@ class ContractRepositoryTests(unittest.TestCase):
         }
 
         public_result = json.loads(
-            (ROOT / "fixtures/result_public_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/result_public.json").read_text(encoding="utf-8")
         )["agent_result"]
         cycle_usage = public_result["cycles"][0]["token_usage"]
         task_usage = public_result["token_usage"]
@@ -365,7 +365,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(set(task_usage["cycles"][0]["usage"]), token_keys)
 
         journal = json.loads(
-            (ROOT / "fixtures/operation_journal_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8")
         )
         model_success = next(
             case for case in journal["valid_entries"] if case["name"] == "model_succeeded"
@@ -373,7 +373,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(set(model_success["entry"]["response"]["token_usage"]), token_keys)
 
         completed_event = json.loads(
-            (ROOT / "fixtures/configured_sub_agent_events_v1.jsonl")
+            (ROOT / "fixtures/configured_sub_agent_events.jsonl")
             .read_text(encoding="utf-8")
             .splitlines()[1]
         )
@@ -384,7 +384,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_public_api_inventories_token_usage_types(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/public_api.json").read_text(encoding="utf-8"))
         capabilities = {
             item["id"]
             for domain in fixture["domains"]
@@ -402,7 +402,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_tool_execution_result_has_one_typed_status_field(self) -> None:
         behavior = json.loads(
-            (ROOT / "fixtures/builtin_tool_behavior_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/builtin_tool_behavior.json").read_text(encoding="utf-8")
         )["tool_execution_result_projection"]
         canonical = behavior["canonical"]
 
@@ -415,10 +415,10 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertNotIn("status", canonical)
 
         for fixture_name in (
-            "builtin_tool_behavior_v1.json",
-            "checkpoint_resume_v1.json",
-            "operation_journal_v1.json",
-            "result_public_v1.json",
+            "builtin_tool_behavior.json",
+            "checkpoint_resume.json",
+            "operation_journal.json",
+            "result_public.json",
         ):
             root = json.loads((ROOT / "fixtures" / fixture_name).read_text(encoding="utf-8"))
             stack = [root]
@@ -433,7 +433,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_after_cycle_contract_is_closed_task_neutral_and_non_success_only(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/after_cycle_hook_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/after_cycle_hook.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(fixture["schema_version"], "vv-agent.after-cycle-hook.v1")
@@ -473,7 +473,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_run_budget_contract_locks_bounds_dimensions_and_defaults(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/run_budget.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["integer_bounds"], {"minimum": 0, "maximum": (1 << 53) - 1})
         self.assertEqual(fixture["defaults"]["unavailable_metric_policy"], "continue_and_mark")
@@ -502,7 +502,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_llm_stream_projection_is_private_typed_and_untrusted(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/llm_stream_projection_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/llm_stream_projection.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(
@@ -551,7 +551,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
         child = json.loads(
-            (ROOT / "fixtures/configured_sub_agent_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/configured_sub_agent.json").read_text(encoding="utf-8")
         )["stream_forwarding"]
         self.assertFalse(child["raw_callback"])
         self.assertEqual(
@@ -563,14 +563,14 @@ class ContractRepositoryTests(unittest.TestCase):
 
         event_types = {
             json.loads(line)["type"]
-            for line in (ROOT / "fixtures/run_events_v1.jsonl")
+            for line in (ROOT / "fixtures/run_events.jsonl")
             .read_text(encoding="utf-8")
             .splitlines()
         }
         self.assertTrue(set(child["provider_adapter_wire_types"].values()).issubset(event_types))
         self.assertIn("diagnostic", event_types)
         invalid = json.loads(
-            (ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
         )
         rejected = {case["id"] for case in invalid["reject"]}
         self.assertTrue(
@@ -588,7 +588,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_tool_metadata_contract_is_closed_task_neutral_and_observable(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/tool_metadata_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/tool_metadata.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(fixture["schema_version"], "vv-agent.tool-metadata.v1")
@@ -660,13 +660,13 @@ class ContractRepositoryTests(unittest.TestCase):
 
         event_types = {
             json.loads(line)["type"]
-            for line in (ROOT / "fixtures/run_events_v1.jsonl")
+            for line in (ROOT / "fixtures/run_events.jsonl")
             .read_text(encoding="utf-8")
             .splitlines()
         }
         self.assertIn("tool_call_planned", event_types)
         invalid_events = json.loads(
-            (ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
         )
         rejected = {case["id"] for case in invalid_events["reject"]}
         self.assertTrue(
@@ -682,7 +682,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_output_validation_contract_is_opt_in_tools_free_and_bounded(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/output_validation_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/output_validation.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(fixture["schema_version"], "vv-agent.output-validation.v1")
@@ -708,17 +708,17 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_metadata_denials_propagate_to_children_and_distributed_workers(self) -> None:
         child_fixture = json.loads(
-            (ROOT / "fixtures/configured_sub_agent_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/configured_sub_agent.json").read_text(encoding="utf-8")
         )
         child = child_fixture["tool_policy_projection"]
         public_child = json.loads(
-            (ROOT / "fixtures/public_configured_sub_agent_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/public_configured_sub_agent.json").read_text(encoding="utf-8")
         )
         handoff = json.loads(
-            (ROOT / "fixtures/handoff_contract_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/handoff_contract.json").read_text(encoding="utf-8")
         )["tool_policy_projection"]
         distributed = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
         )
 
         for field in (
@@ -775,7 +775,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_app_server_tool_lifecycle_projection_is_fully_frozen(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/app_server_observable_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/app_server_observable.json").read_text(encoding="utf-8")
         )["toolLifecycle"]
 
         planned = fixture["plannedHasNoNotification"]
@@ -802,7 +802,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(denial_payload["errorCode"], "tool_not_allowed")
 
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/run_budget.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["runner_cases"]}
 
         required = {
@@ -837,7 +837,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_budget_events_lock_snapshot_exhaustion_and_terminal_order(self) -> None:
         records = [
             json.loads(line)
-            for line in (ROOT / "fixtures/budget_events_v1.jsonl").read_text(encoding="utf-8").splitlines()
+            for line in (ROOT / "fixtures/budget_events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
 
         self.assertEqual(
@@ -852,10 +852,10 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_distributed_contract_carries_limits_meter_reference_and_budget_state(self) -> None:
         envelope = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
         )["canonical_envelope"]
         checkpoint = json.loads(
-            (ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(envelope["budget_limits"]["max_total_tokens"], 5000)
@@ -866,7 +866,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(checkpoint["canonical_checkpoint"]["budget_usage"]["elapsed_ms"], 125)
 
     def test_completion_policy_is_task_agnostic(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/completion_policy.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["policy_values"], ["continue", "wait_user", "finish"])
         self.assertEqual(fixture["framework_default"], "continue")
@@ -876,7 +876,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(fixture["rules"]["assistant_text_is_not_classified"])
         self.assertTrue(fixture["rules"]["completion_policy_does_not_change_tool_availability"])
-        self.assertTrue(fixture["rules"]["budget_exhausted_is_defined_by_run_budget_v1"])
+        self.assertTrue(fixture["rules"]["budget_exhausted_is_defined_by_run_budget"])
         self.assertTrue(fixture["rules"]["approval_resume_uses_fresh_cycle_budget"])
         self.assertTrue(fixture["rules"]["approval_resume_preserves_resource_budget"])
         self.assertTrue(fixture["rules"]["approved_resume_rejects_input_before_claim"])
@@ -886,7 +886,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_distributed_lease_lifecycle_closes_side_effect_windows(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
         )
         lifecycle = fixture["lease_lifecycle"]
         rules = lifecycle["rules"]
@@ -936,7 +936,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_completion_closure_locks_resume_guardrail_and_llm_failure(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/completion_policy.json").read_text(encoding="utf-8"))
         resume = fixture["approval_resume"]
         cases = {case["name"]: case for case in resume["cases"]}
 
@@ -978,7 +978,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(fixture["ordinary_llm_failure"]["terminal_count"], 1)
 
     def test_completion_cases_cover_every_current_terminal_reason(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/completion_policy_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/completion_policy.json").read_text(encoding="utf-8"))
         case_reasons = {case["expected"]["completion_reason"] for case in fixture["cases"]}
         precedence_reasons = {case["expected_reason"] for case in fixture["terminal_precedence_cases"]}
 
@@ -994,12 +994,12 @@ class ContractRepositoryTests(unittest.TestCase):
                 "failed",
             }.issubset(case_reasons | precedence_reasons)
         )
-        budget_fixture = json.loads((ROOT / "fixtures/run_budget_v1.json").read_text(encoding="utf-8"))
+        budget_fixture = json.loads((ROOT / "fixtures/run_budget.json").read_text(encoding="utf-8"))
         budget_reasons = {case["expected"]["completion_reason"] for case in budget_fixture["runner_cases"]}
         self.assertIn("budget_exhausted", budget_reasons)
 
     def test_public_api_inventories_completion_controls_and_observation(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/public_api.json").read_text(encoding="utf-8"))
         capabilities = {
             item["id"]
             for domain in fixture["domains"]
@@ -1089,7 +1089,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_manager_outcomes_preserve_completion_observation(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/manager_tool_envelope_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/manager_tool_envelope.json").read_text(encoding="utf-8"))
 
         failed = fixture["sync_failed_outcome"]["expected"]
         self.assertEqual(failed["completion_reason"], "failed")
@@ -1106,7 +1106,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(fixture["sync_wait_outcome"]["sync_single_tool_envelope_error_code"], "sub_task_wait_user")
 
     def test_completion_event_and_app_server_closure_is_explicit(self) -> None:
-        invalid = json.loads((ROOT / "fixtures/run_events_v1_invalid.json").read_text(encoding="utf-8"))
+        invalid = json.loads((ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8"))
         rejected = {case["id"] for case in invalid["reject"]}
         self.assertNotIn("canonicalize", invalid)
         self.assertEqual(invalid["rules"]["unknown_top_level_fields"], "reject")
@@ -1125,7 +1125,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
         app_server = json.loads(
-            (ROOT / "fixtures/app_server_observable_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/app_server_observable.json").read_text(encoding="utf-8")
         )
         projections = {
             case["name"]: case for case in app_server["terminal"]["agentStatusProjection"]
@@ -1139,7 +1139,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(budget["budgetUsageField"], "present")
 
     def test_public_api_properties_include_canonical_signatures(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/public_api_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/public_api.json").read_text(encoding="utf-8"))
 
         properties = [
             member["python"]
@@ -1152,7 +1152,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(all("signature" in property_member for property_member in properties))
 
     def test_checkpoint_config_uses_real_keys_and_explicit_stores(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/checkpoint_config_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/checkpoint_config.json").read_text(encoding="utf-8"))
         invalid = {case["name"]: case["config"] for case in fixture["invalid_cases"]}
         valid = {case["name"]: case["config"] for case in fixture["valid_cases"]}
 
@@ -1209,7 +1209,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_run_definition_has_rfc8785_golden_bytes_and_digests(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/run_definition_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/run_definition.json").read_text(encoding="utf-8"))
 
         self.assertEqual(
             fixture["canonicalization"]["algorithm"],
@@ -1377,10 +1377,10 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_checkpoint_is_strict_and_extensions_are_explicit(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
         canonical = fixture["canonical_checkpoint"]
         run_definition_fixture = json.loads(
-            (ROOT / "fixtures/run_definition_v1.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/run_definition.json").read_text(encoding="utf-8")
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
@@ -1528,7 +1528,7 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertEqual(case["canonical_total_entries_utf8_bytes"], expected_total)
 
     def test_operation_journal_never_silently_retries_unknown_effects(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/operation_journal_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8"))
         recovery = {case["name"]: case for case in fixture["recovery_cases"]}
         request_vectors = {
             case["name"]: case for case in fixture["request_digest"]["golden_cases"]
@@ -1587,7 +1587,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(all(case.get("error_code") for case in fixture["invalid_entries"]))
 
     def test_checkpoint_store_progress_and_terminal_retention_are_locked(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/checkpoint_store_v2.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/checkpoint_store.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["store_cases"]}
 
         self.assertTrue(fixture["revision_rules"]["progress_preserves_claim"])
@@ -1661,7 +1661,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_checkpoint_resume_fixture_covers_all_fault_boundaries(self) -> None:
-        fixture = json.loads((ROOT / "fixtures/checkpoint_resume_v1.json").read_text(encoding="utf-8"))
+        fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["runner_cases"]}
         matrix = fixture["fault_matrix"]
 
@@ -1731,9 +1731,9 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(fixture["fault_test_requirements"]["sleep_only_fault_timing"])
 
     def test_checkpoint_terminal_order_finalizes_before_event_delivery(self) -> None:
-        runner = json.loads((ROOT / "fixtures/runner_terminal_v1.json").read_text(encoding="utf-8"))
+        runner = json.loads((ROOT / "fixtures/runner_terminal.json").read_text(encoding="utf-8"))
         distributed = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
         )
         runner_order = runner["checkpoint_terminal_order"]["order"]
         distributed_order = distributed["worker_rules"]["terminal_commit_order"]
@@ -1757,8 +1757,8 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_checkpoint_outbox_event_identity_is_unique(self) -> None:
-        codec = json.loads((ROOT / "fixtures/checkpoint_codec_v2.json").read_text(encoding="utf-8"))
-        store = json.loads((ROOT / "fixtures/checkpoint_store_v2.json").read_text(encoding="utf-8"))
+        codec = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
+        store = json.loads((ROOT / "fixtures/checkpoint_store.json").read_text(encoding="utf-8"))
 
         self.assertTrue(codec["status_rules"]["event_outbox_event_ids_are_unique"])
         self.assertEqual(
@@ -1771,9 +1771,9 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_resume_events_and_app_server_projection_remain_interruptions(self) -> None:
         records = [
             json.loads(line)
-            for line in (ROOT / "fixtures/resume_events_v1.jsonl").read_text(encoding="utf-8").splitlines()
+            for line in (ROOT / "fixtures/resume_events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
-        app = json.loads((ROOT / "fixtures/app_server_observable_v1.json").read_text(encoding="utf-8"))
+        app = json.loads((ROOT / "fixtures/app_server_observable.json").read_text(encoding="utf-8"))
         projections = {case["name"]: case for case in app["terminal"]["agentStatusProjection"]}
 
         grouped: dict[str, list[dict[str, object]]] = {}
@@ -1850,7 +1850,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_distributed_resolves_checkpoint_capabilities_strictly(self) -> None:
         fixture = json.loads(
-            (ROOT / "fixtures/distributed_run_envelope_v2.json").read_text(encoding="utf-8")
+            (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
         )
         envelope = fixture["canonical_envelope"]
         capabilities = envelope["recipe"]["capabilities"]
@@ -1923,7 +1923,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
     def test_checkpoint_sqlite_has_one_strict_current_table(self) -> None:
-        sql = (ROOT / "fixtures/checkpoint_sqlite_canonical_v2.sql").read_text(encoding="utf-8")
+        sql = (ROOT / "fixtures/checkpoint_sqlite_canonical.sql").read_text(encoding="utf-8")
 
         self.assertIn("CREATE TABLE IF NOT EXISTS checkpoints (", sql)
         self.assertIn("run_definition_schema TEXT NOT NULL", sql)
@@ -2036,7 +2036,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     snapshot_path="fixtures",
                 )
             )
-            fixture = implementation / "fixtures/model_ref_v1.json"
+            fixture = implementation / "fixtures/model_ref.json"
             fixture.write_text("{}\n", encoding="utf-8")
 
             with self.assertRaisesRegex(contract_snapshot.SnapshotError, "fixture digest mismatch"):

@@ -1,5 +1,5 @@
 {
-  "contract": "checkpoint_store_v2",
+  "contract": "checkpoint_store",
   "version": 2,
   "run_definition_schema": "vv-agent.run-definition.v1",
   "run_definition_storage": "credential_redacted_object_embedded_and_immutable_beside_matching_digest",

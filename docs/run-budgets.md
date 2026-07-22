@@ -198,9 +198,9 @@ an arbitrary external effect exactly once.
 
 ## Canonical Evidence
 
-`run_budget_v1.json` contains executable evaluator and public Runner inputs.
+`run_budget.json` contains executable evaluator and public Runner inputs.
 Both implementations must drive every `runner_cases` record through the public
-Runner and real runtime/tool producer path. `budget_events_v1.jsonl` contains
+Runner and real runtime/tool producer path. `budget_events.jsonl` contains
 canonical event wire records that both event producers and decoders must
 rebuild. Assertions that merely compare fixture-owned booleans are not
 sufficient adoption evidence.

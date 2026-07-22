@@ -1,5 +1,5 @@
 {
-  "contract": "operation_journal_v1",
+  "contract": "operation_journal",
   "version": 1,
   "enums": {
     "kinds": [

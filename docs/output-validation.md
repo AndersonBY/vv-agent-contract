@@ -37,7 +37,7 @@ prompt, and scorer in their application or evaluation layer.
 
 ## Evidence
 
-The canonical behavior is frozen in `fixtures/output_validation_v1.json`.
+The canonical behavior is frozen in `fixtures/output_validation.json`.
 Implementations must provide disabled, pass, fail, one-repair, second-failure,
 and provider-failure producer tests. The fixture is vendored by both language
 repositories through `scripts/contract_snapshot.py sync`; it is never edited

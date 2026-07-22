@@ -6,9 +6,9 @@
   "fixtures": {
     "path": "fixtures",
     "manifest": "fixtures/SHA256SUMS",
-    "manifest_sha256": "8d1e0b7c8a47cc0ffe5f531297f6259285b517166bacfc8f0c723246781ce66f",
+    "manifest_sha256": "1c22d2a7a8e498b372c22001c69c5dece3040211477e3ee18084f0e9fb6520fd",
     "intentional_invalid_jsonl_records": {
-      "event_store_replay_v1.jsonl": [
+      "event_store_replay.jsonl": [
         2
       ]
     }

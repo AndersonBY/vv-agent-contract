@@ -1,5 +1,5 @@
 {
-  "contract": "run_budget_v1",
+  "contract": "run_budget",
   "version": 1,
   "integer_bounds": {
     "minimum": 0,
@@ -965,6 +965,6 @@
     "approval_wait_ms_counted": false,
     "reconciliation_wait_ms_counted": false,
     "unknown_crash_gap_ms_guessed": false,
-    "fixture": "checkpoint_resume_v1.json"
+    "fixture": "checkpoint_resume.json"
   }
 }

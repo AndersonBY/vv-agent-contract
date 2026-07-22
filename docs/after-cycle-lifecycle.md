@@ -7,7 +7,7 @@ stop with a non-success result. It does not classify tasks or decide whether a
 research, coding, browsing, or other domain-specific milestone is complete.
 
 The executable shape and limits are canonical in
-`fixtures/after_cycle_hook_v1.json`.
+`fixtures/after_cycle_hook.json`.
 
 ## Invocation Boundary
 

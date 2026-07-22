@@ -1,5 +1,5 @@
 {
-  "contract": "checkpoint_codec_v2",
+  "contract": "checkpoint_codec",
   "version": 2,
   "discriminator": {
     "required_value": "vv-agent.checkpoint.v2",

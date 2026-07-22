@@ -93,8 +93,8 @@ notifications without changing the underlying run.
 
 ## Executable Evidence
 
-`llm_stream_projection_v1.json` locks the private adapter mapping, identity,
-drop policy, and single typed observer surface. `run_events_v1.jsonl` locks all
-current wire variants, including diagnostics. `configured_sub_agent_v1.json`
+`llm_stream_projection.json` locks the private adapter mapping, identity,
+drop policy, and single typed observer surface. `run_events.jsonl` locks all
+current wire variants, including diagnostics. `configured_sub_agent.json`
 locks typed child forwarding. Both implementations must test real Runner
 producers, not only a private mapping helper.

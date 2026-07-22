@@ -1,5 +1,5 @@
 {
-  "contract": "memory_local_v1",
+  "contract": "memory_local",
   "character_unit": "unicode_code_point",
   "token_counts": [
     {

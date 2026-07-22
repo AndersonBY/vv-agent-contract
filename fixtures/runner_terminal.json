@@ -44,7 +44,7 @@
     "completion_tool_name": null,
     "partial_output": "draft over budget",
     "error": "Run budget exhausted.",
-    "budget_fixture": "run_budget_v1.json"
+    "budget_fixture": "run_budget.json"
   },
   "event_store_fail_closed": {
     "error": "run event store append failed: store down",

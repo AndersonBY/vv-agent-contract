@@ -99,11 +99,11 @@ function writeGeneratedFields(name, vectors, valueField) {
 }
 
 function syncCheckpointRunDefinition(runDefinition) {
-  const fixturePath = path.join(ROOT, "fixtures", "checkpoint_codec_v2.json");
+  const fixturePath = path.join(ROOT, "fixtures", "checkpoint_codec.json");
   const checkpoint = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
   const minimal = runDefinition.golden_cases.find((entry) => entry.name === "minimal");
   if (!minimal) {
-    fail("run_definition_v1.json: missing minimal golden case");
+    fail("run_definition.json: missing minimal golden case");
   }
 
   const payloads = [
@@ -119,13 +119,13 @@ function syncCheckpointRunDefinition(runDefinition) {
   const previousCanonical = canonicalize(previousDefinition);
   for (const payload of payloads) {
     if (canonicalize(payload.run_definition) !== previousCanonical) {
-      fail("checkpoint_codec_v2.json: embedded v1 run definitions have drifted");
+      fail("checkpoint_codec.json: embedded v1 run definitions have drifted");
     }
   }
 
   const previousDigest = checkpoint.canonical_checkpoint.run_definition_digest;
   if (typeof previousDigest !== "string") {
-    fail("checkpoint_codec_v2.json: previous minimal definition digest is not a string");
+    fail("checkpoint_codec.json: previous minimal definition digest is not a string");
   }
   const nextDigest = vectorValues(minimal.definition).sha256;
   for (const payload of payloads) {
@@ -151,7 +151,7 @@ function syncCheckpointRunDefinition(runDefinition) {
   fs.writeFileSync(fixturePath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
 }
 
-const runDefinition = readFixture("run_definition_v1.json");
+const runDefinition = readFixture("run_definition.json");
 for (const vector of runDefinition.golden_cases) {
   verifyVector(`run_definition/${vector.name}`, vector.definition, vector);
 }
@@ -160,12 +160,12 @@ if (WRITE) {
   syncCheckpointRunDefinition(runDefinition);
 }
 
-const operationJournal = readFixture("operation_journal_v1.json");
+const operationJournal = readFixture("operation_journal.json");
 for (const vector of operationJournal.request_digest.golden_cases) {
   verifyVector(`operation_request/${vector.name}`, vector.request, vector);
 }
 
-const checkpoint = readFixture("checkpoint_codec_v2.json");
+const checkpoint = readFixture("checkpoint_codec.json");
 for (const vector of checkpoint.extension_limits.canonicalization_vectors) {
   verifyVector(`checkpoint_extension/${vector.name}`, vector.entry, vector);
 }
@@ -182,12 +182,12 @@ for (const [label, payload] of checkpointPayloads) {
   }
 }
 
-const checkpointStore = readFixture("checkpoint_store_v2.json");
+const checkpointStore = readFixture("checkpoint_store.json");
 for (const vector of checkpointStore.event_payload_digest.golden_cases) {
   verifyVector(`checkpoint_event/${vector.name}`, vector.event, vector);
 }
 
-const checkpointResume = readFixture("checkpoint_resume_v1.json");
+const checkpointResume = readFixture("checkpoint_resume.json");
 verifyVector(
   "checkpoint_session_commit/golden_case",
   checkpointResume.session_persistence.golden_case.payload,
@@ -195,24 +195,24 @@ verifyVector(
 );
 
 if (WRITE) {
-  writeGeneratedFields("run_definition_v1.json", runDefinition.golden_cases, "definition");
+  writeGeneratedFields("run_definition.json", runDefinition.golden_cases, "definition");
   writeGeneratedFields(
-    "operation_journal_v1.json",
+    "operation_journal.json",
     operationJournal.request_digest.golden_cases,
     "request",
   );
   writeGeneratedFields(
-    "checkpoint_codec_v2.json",
+    "checkpoint_codec.json",
     checkpoint.extension_limits.canonicalization_vectors,
     "entry",
   );
   writeGeneratedFields(
-    "checkpoint_store_v2.json",
+    "checkpoint_store.json",
     checkpointStore.event_payload_digest.golden_cases,
     "event",
   );
   writeGeneratedFields(
-    "checkpoint_resume_v1.json",
+    "checkpoint_resume.json",
     [checkpointResume.session_persistence.golden_case],
     "payload",
   );

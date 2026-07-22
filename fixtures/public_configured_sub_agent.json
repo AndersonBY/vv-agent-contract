@@ -1,5 +1,5 @@
 {
-  "contract": "public_configured_sub_agent_v1",
+  "contract": "public_configured_sub_agent",
   "normalization": {
     "raw_entries": [
       {

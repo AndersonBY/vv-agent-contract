@@ -1,5 +1,5 @@
 {
-  "version": "result_public_v1",
+  "version": "result_public",
   "agent_result": {
     "status": "wait_user",
     "completion_reason": "wait_user",

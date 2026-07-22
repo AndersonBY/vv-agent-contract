@@ -1,5 +1,5 @@
 {
-  "contract": "checkpoint_resume_v1",
+  "contract": "checkpoint_resume",
   "version": 1,
   "run_definition_schema": "vv-agent.run-definition.v1",
   "public_entrypoints": {
