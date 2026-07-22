@@ -166,7 +166,9 @@ three fields. Object schemas are closed by default: registration adds
 `additionalProperties=false` whenever an object schema does not state an
 explicit policy. This rule applies equally to built-ins, function tools,
 handoffs, agent tools, and host-registered custom tools; it does not inspect or
-infer task semantics.
+infer task semantics. Validation is atomic for the complete argument object: an
+invalid nested array item rejects the tool call, and handlers never partially
+execute a schema-invalid batch.
 
 ## Sessions And Message History
 

@@ -563,7 +563,7 @@
     "spawn_failure_restores_previous_generation": true,
     "async_submission": {
       "single_error_code": "sub_task_submit_failed",
-      "batch_continues_after_item_failure": true,
+      "batch_continues_after_submission_failure": true,
       "all_failed_error_code": "create_sub_task_batch_failed"
     },
     "continuation_errors": {

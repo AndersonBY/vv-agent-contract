@@ -2,18 +2,6 @@
   "create_error_cases": [
     {
       "arguments": {
-        "agent_id": null,
-        "task_description": "Research"
-      },
-      "expected": {
-        "error": "`agent_id` must be a string",
-        "error_code": "invalid_agent_id",
-        "ok": false
-      },
-      "name": "null_agent_id_is_a_type_error"
-    },
-    {
-      "arguments": {
         "agent_id": "\u001c",
         "task_description": "Research"
       },
@@ -27,37 +15,6 @@
     {
       "arguments": {
         "agent_id": "researcher",
-        "exclude_files_pattern": null,
-        "task_description": "single",
-        "tasks": [
-          {
-            "task_description": "batch"
-          }
-        ]
-      },
-      "expected": {
-        "error": "`exclude_files_pattern` must be a string",
-        "error_code": "invalid_exclude_files_pattern",
-        "ok": false
-      },
-      "name": "shared_type_error_precedes_payload_conflict"
-    },
-    {
-      "arguments": {
-        "agent_id": "researcher",
-        "task_description": null
-      },
-      "expected": {
-        "error": "`task_description` must be a string",
-        "error_code": "invalid_tasks_payload",
-        "ok": false
-      },
-      "name": "null_task_description_is_a_type_error"
-    },
-    {
-      "arguments": {
-        "agent_id": "researcher",
-        "output_requirements": null,
         "task_description": "single",
         "tasks": [
           {
@@ -70,67 +27,18 @@
         "error_code": "sub_task_payload_conflict",
         "ok": false
       },
-      "name": "payload_conflict_precedes_single_only_output_validation"
+      "name": "single_and_batch_modes_conflict"
     },
     {
       "arguments": {
-        "agent_id": "researcher",
-        "output_requirements": null,
-        "tasks": "not an array"
+        "agent_id": "researcher"
       },
       "expected": {
-        "error": "`tasks` must be a non-empty array",
-        "error_code": "invalid_tasks_payload",
+        "error": "Provide either `task_description` or `tasks`",
+        "error_code": "sub_task_payload_missing",
         "ok": false
       },
-      "name": "batch_shape_precedes_single_only_output_validation"
-    },
-    {
-      "arguments": {
-        "agent_id": "researcher",
-        "output_requirements": null,
-        "task_description": "single"
-      },
-      "expected": {
-        "error": "`output_requirements` must be a string",
-        "error_code": "invalid_tasks_payload",
-        "ok": false
-      },
-      "name": "single_output_null_is_a_type_error"
-    },
-    {
-      "arguments": {
-        "agent_id": "researcher",
-        "exclude_files_pattern": "(?=secret)",
-        "output_requirements": null,
-        "tasks": [
-          {
-            "task_description": null
-          }
-        ]
-      },
-      "expected": {
-        "details": {
-          "results": [
-            {
-              "error": "`task_description` must be a string",
-              "index": 0,
-              "status": "failed"
-            }
-          ],
-          "summary": {
-            "accepted": 0,
-            "failed": 1,
-            "total": 1
-          },
-          "task_ids": [],
-          "wait_for_completion": true
-        },
-        "error": "No valid sub-tasks were provided",
-        "error_code": "invalid_tasks_payload",
-        "ok": false
-      },
-      "name": "batch_item_validation_precedes_regex_and_ignores_top_level_output"
+      "name": "task_payload_is_required"
     },
     {
       "arguments": {
@@ -143,7 +51,7 @@
         "error_code": "invalid_exclude_files_pattern",
         "ok": false
       },
-      "name": "regex_semantics_follow_payload_validation"
+      "name": "lookaround_regex_is_rejected"
     },
     {
       "arguments": {
@@ -198,7 +106,6 @@
   "status_success_cases": [
     {
       "arguments": {
-        "check_interval_seconds": "3_0",
         "task_ids": [
           "unknown"
         ]
@@ -214,7 +121,7 @@
           }
         ]
       },
-      "name": "integer_strings_use_ascii_decimal_grammar"
+      "name": "default_status_query"
     }
   ],
   "sync_failed_outcome": {
@@ -264,46 +171,6 @@
   "status_error_cases": [
     {
       "arguments": {
-        "task_ids": null
-      },
-      "expected": {
-        "error": "`task_ids` must be a non-empty array",
-        "error_code": "invalid_task_ids",
-        "ok": false
-      },
-      "name": "null_task_ids"
-    },
-    {
-      "arguments": {
-        "detail_level": null,
-        "message": null,
-        "task_ids": [
-          "unknown"
-        ]
-      },
-      "expected": {
-        "error": "`detail_level` must be a string",
-        "error_code": "invalid_detail_level",
-        "ok": false
-      },
-      "name": "detail_type_precedes_message_type"
-    },
-    {
-      "arguments": {
-        "message": null,
-        "task_ids": [
-          "unknown"
-        ]
-      },
-      "expected": {
-        "error": "`message` must be a string",
-        "error_code": "invalid_sub_task_message",
-        "ok": false
-      },
-      "name": "null_message"
-    },
-    {
-      "arguments": {
         "message": "continue",
         "task_ids": [
           "unknown"
@@ -328,17 +195,16 @@
     "recent_activity_when_unavailable": "omitted"
   },
   "validation": {
-    "non_string_schema_values": "reject",
-    "payload_validation_precedes_exclude_pattern": true,
-    "priority": [
+    "argument_validation_source": "builtin_tool_behavior.canonical.argument_validation",
+    "handler_receives_schema_valid_arguments": true,
+    "payload_mode_validation_precedes_exclude_pattern": true,
+    "semantic_priority": [
       "runtime_availability",
-      "agent_id",
-      "shared_option_types",
-      "payload_structure",
-      "branch_specific_fields",
-      "at_least_one_valid_batch_item",
+      "agent_id_non_empty",
+      "payload_mode",
       "exclude_pattern_semantics"
     ],
+    "batch_item_shape": "schema_validated_before_handler",
     "top_level_output_requirements_scope": "single_only"
   }
 }

@@ -79,7 +79,7 @@
       },
       "invalid_arguments": {
         "value": "not-an-integer",
-        "removed_alias": true
+        "unexpected_field": true
       },
       "result": {
         "status_code": "ERROR",
