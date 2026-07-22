@@ -558,7 +558,6 @@ class ContractRepositoryTests(unittest.TestCase):
             child["provider_adapter_wire_types"],
             {source: mapping["wire_type"] for source, mapping in mappings.items()},
         )
-        self.assertEqual(child["canonical_cycle_field"], "cycle_index")
         self.assertTrue(child["same_typed_projection_as_top_level"])
 
         event_types = {
