@@ -71,9 +71,33 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(report["version"], "2.0.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 47)
-        self.assertEqual(report["manifest_entries"], 46)
+        self.assertEqual(report["fixture_files"], 48)
+        self.assertEqual(report["manifest_entries"], 47)
         self.assertEqual(report["adoption_status"], matrix["status"])
+
+    def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/model_settings.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(fixture["schema_version"], "vv-agent.model-settings.v1")
+        self.assertEqual(fixture["file_contract"]["extensions"], [".py", ".json", ".toml"])
+        self.assertEqual(fixture["file_contract"]["python_assignment"], "LLM_SETTINGS")
+        self.assertTrue(fixture["file_contract"]["direct_root"])
+        self.assertFalse(fixture["file_contract"]["parser_retry"])
+        self.assertFalse(fixture["root_contract"]["default_synthesis"])
+        self.assertEqual(
+            {case["name"] for case in fixture["invalid_settings"]},
+            {
+                "missing_version",
+                "wrong_version",
+                "missing_backends",
+                "missing_endpoints",
+                "backends_wrong_type",
+                "endpoints_wrong_type",
+            },
+        )
+        self.assertTrue(fixture["resolution_contract"]["exact_backend_key"])
+        self.assertTrue(fixture["resolution_contract"]["exact_model_key"])
+        self.assertFalse(fixture["resolution_contract"]["implicit_output_limit"])
 
     def test_session_codec_has_one_closed_current_wire(self) -> None:
         fixture = json.loads(
@@ -2017,7 +2041,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 47)
+            self.assertEqual(synced["fixture_files"], 48)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

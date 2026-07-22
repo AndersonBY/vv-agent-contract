@@ -26,6 +26,17 @@ shape, fills removed fields, or rewrites stored data.
 
 ## Model And Request Semantics
 
+Local model settings have one canonical input shape, frozen in
+`fixtures/model_settings.json`. Supported file extensions are `.py`, `.json`,
+and `.toml`. A Python settings file must assign the literal mapping to
+`LLM_SETTINGS`; JSON and TOML files contain that mapping directly. The root
+must explicitly contain `VERSION = "2"`, an `endpoints` array, and a
+`backends` object. Loaders do not unwrap another root object, accept alternate
+assignment or field names, synthesize a version, or retry a different parser.
+
+Model lookup is exact within the selected backend. A missing backend or model
+is an error; one configured model key is never substituted for another.
+
 Model resolution returns the selected backend/model plus declared model
 capabilities such as context length and maximum output capacity. A capability
 is not a request limit. The framework sends an output token limit only when the
