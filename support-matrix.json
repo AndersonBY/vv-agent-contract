@@ -1,21 +1,21 @@
 {
   "schema_version": 1,
   "contract_version": "3.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "1a7eaeaf4f18252616b4418def7a7ff97bbbb7dc"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "5604f4d202495b2cacc17947df03bb0ec7356c5c"
     }
   },
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "last_verified_at": "2026-07-23T15:23:01Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/30019030120"
 }
