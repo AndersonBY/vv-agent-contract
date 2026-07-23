@@ -7,15 +7,15 @@
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
       "status": "verified",
-      "verified_revision": "73c26aa92a5f15f4bd47c0eff003bd4a2aa50b90"
+      "verified_revision": "68a774e7eac0968cac674f5f55305a69c4ed49be"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
       "status": "verified",
-      "verified_revision": "80bc64c538c62186cbeeafabeeab1cb1252ef88c"
+      "verified_revision": "3bd9907a05353b90227b8ddd8d649efce089cea2"
     }
   },
-  "last_verified_at": "2026-07-23T19:31:40Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/30037247132"
+  "last_verified_at": "2026-07-23T19:48:09Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/30038483940"
 }
