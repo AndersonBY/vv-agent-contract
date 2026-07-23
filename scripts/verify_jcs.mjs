@@ -112,14 +112,14 @@ function syncCheckpointRunDefinition(runDefinition) {
     ...checkpoint.invalid_cases.map((entry) => entry.payload),
   ].filter(
     (payload) =>
-      payload?.run_definition_schema === "vv-agent.run-definition.v1" &&
+      payload?.run_definition_schema === "vv-agent.run-definition.v2" &&
       payload.run_definition,
   );
   const previousDefinition = checkpoint.canonical_checkpoint.run_definition;
   const previousCanonical = canonicalize(previousDefinition);
   for (const payload of payloads) {
     if (canonicalize(payload.run_definition) !== previousCanonical) {
-      fail("checkpoint_codec.json: embedded v1 run definitions have drifted");
+      fail("checkpoint_codec.json: embedded v2 run definitions have drifted");
     }
   }
 
@@ -173,13 +173,25 @@ const checkpointPayloads = [
   ["canonical_checkpoint", checkpoint.canonical_checkpoint],
   ...checkpoint.valid_cases.map((entry) => [`valid_case/${entry.name}`, entry.payload]),
 ];
+let checkpointOutboxChanged = false;
 for (const [label, payload] of checkpointPayloads) {
   for (const entry of payload.event_outbox) {
     const actual = vectorValues(entry.event).sha256;
     if (actual !== entry.payload_digest) {
-      fail(`${label}/${entry.event_id}: outbox payload digest mismatch`);
+      if (!WRITE) {
+        fail(`${label}/${entry.event_id}: outbox payload digest mismatch`);
+      }
+      entry.payload_digest = actual;
+      checkpointOutboxChanged = true;
     }
   }
+}
+if (checkpointOutboxChanged) {
+  fs.writeFileSync(
+    path.join(ROOT, "fixtures", "checkpoint_codec.json"),
+    `${JSON.stringify(checkpoint, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 const checkpointStore = readFixture("checkpoint_store.json");

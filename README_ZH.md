@@ -25,5 +25,7 @@ python3 scripts/contractctl.py build --output-dir dist
 可选运行资源预算的规范见 `docs/run-budgets.md`。
 可选的持久化恢复、操作日志与显式歧义处理规范见
 `docs/checkpoint-resume.md`。
+主循环与内部模型调用的完整计量、预算、事件和恢复规范见
+`docs/model-call-accounting.md`。
 类型化工具声明、累计元数据策略和执行生命周期遥测规范见
 `docs/tool-metadata-and-telemetry.md`。

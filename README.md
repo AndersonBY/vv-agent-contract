@@ -45,5 +45,7 @@ See `docs/change-workflow.md` for the complete workflow.
 The optional resource budget semantics are defined in `docs/run-budgets.md`.
 The opt-in durable-resume and explicit-ambiguity semantics are defined in
 `docs/checkpoint-resume.md`.
+Complete primary and internal model-call usage, budget, event, and replay
+semantics are defined in `docs/model-call-accounting.md`.
 Typed tool declarations, cumulative metadata policy, and executor lifecycle
 telemetry are defined in `docs/tool-metadata-and-telemetry.md`.

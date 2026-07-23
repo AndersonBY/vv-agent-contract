@@ -1,6 +1,6 @@
 # Optional Output Validation And Repair
 
-Contract `2.0.0` defines a host extension for validating a completed output and,
+Contract `3.0.0` defines a host extension for validating a completed output and,
 when the host explicitly supplies one, asking a separate repair callback for a
 replacement value. It is deliberately outside the default agent loop.
 

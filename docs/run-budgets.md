@@ -40,15 +40,17 @@ key order.
 
 `BudgetUsageSnapshot` contains:
 
-- completed LLM `cycles`;
+- started Agent `cycles`;
 - nullable `total_tokens` and `uncached_input_tokens`;
 - admitted `tool_calls` and exact-name `tool_calls_by_name`;
 - monotonic active `elapsed_ms`;
 - nullable cumulative `host_cost`;
 - latched `unavailable_dimensions` observations.
 
-Token totals are available only when every completed LLM cycle has the
-corresponding accounting. Missing usage is never zero. Tool counts include
+Token totals are available only when every dispatched framework model attempt
+has the corresponding accounting. This includes `agent_cycle`,
+`session_memory`, and `memory_compaction`; opaque host callbacks are not
+fabricated. Missing usage is never zero. Tool counts include
 every invocation admitted for execution, regardless of success, tool error,
 timeout, approval interruption, or directive. A rejected batch is not admitted
 and does not increment the counters.
@@ -114,16 +116,17 @@ The stable boundaries are:
 
 1. `run_start`
 2. `cycle_start`
-3. `llm_complete`
+3. `model_call_complete`
 4. `tool_batch_preflight`
 5. `tool_batch_complete`
 6. `terminal`
 
 Cancellation already visible at an admission boundary is observed before the
-budget. Before an LLM call, an observed token or cost value equal to its limit
-has no remaining capacity and stops admission. An LLM call admitted below a
-limit is atomic: provider usage and host cost are observed after it completes,
-and either may exceed its limit by that one completed call.
+budget. Before a model call, an observed token or cost value equal to its limit
+has no remaining capacity and stops admission. A model call admitted below a
+limit is atomic: provider usage and host cost are observed after it terminates,
+and either may exceed its limit by that one attempt. The updated budget is
+checked before another internal or primary model call is dispatched.
 
 Tool batches are preflighted as a whole. Total calls are checked first, then
 exact-name limits in lexicographic tool-name order. A batch that would exceed

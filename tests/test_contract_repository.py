@@ -69,7 +69,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "2.0.0")
+        self.assertEqual(report["version"], "3.0.0")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 50)
         self.assertEqual(report["manifest_entries"], 49)
@@ -263,6 +263,64 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(lifecycle["missing_or_unknown_fields_are_rejected"])
 
+        session_memory = fixture["session_memory"]
+        self.assertFalse(session_memory["enabled_by_default"])
+        self.assertEqual(session_memory["accepted_aliases"], [])
+        gate_cases = {case["name"]: case for case in session_memory["gate_cases"]}
+        for name in (
+            "explicitly_disabled_ignores_all_memory_inputs",
+            "omitted_control_uses_disabled_default",
+        ):
+            expected = gate_cases[name]["expected"]
+            self.assertEqual(expected["context_sections_rendered"], 0)
+            self.assertEqual(expected["storage_read_count"], 0)
+            self.assertEqual(expected["storage_write_count"], 0)
+            self.assertEqual(expected["session_memory_model_dispatch_count"], 0)
+        child = gate_cases["child_does_not_inherit_enabled_parent"]["expected"]
+        self.assertFalse(child["child_effective_control"])
+        self.assertEqual(child["child_storage_read_count"], 0)
+        self.assertEqual(child["child_storage_write_count"], 0)
+        self.assertEqual(child["child_session_memory_model_dispatch_count"], 0)
+        replay = session_memory["checkpoint_receipt_replay"]
+        self.assertEqual(replay["new_model_dispatches"], 0)
+        self.assertEqual(replay["new_model_call_records"], 0)
+        self.assertTrue(replay["replay_is_idempotent"])
+
+    def test_prompt_bundle_requires_explicit_session_memory_enablement(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/prompt_bundle.json").read_text(encoding="utf-8")
+        )
+        gate = fixture["session_memory_gate"]
+        scenarios = {case["id"]: case for case in fixture["scenarios"]}
+
+        self.assertFalse(gate["default"])
+        self.assertTrue(gate["session_memory_section_requires_enabled_true"])
+        self.assertTrue(gate["context_presence_does_not_enable_session_memory"])
+        self.assertEqual(
+            {case["name"] for case in gate["probe_cases"]},
+            {
+                "explicit_false_ignores_nonempty_context",
+                "omitted_control_ignores_nonempty_context",
+            },
+        )
+        for scenario_id in ("en-US-full", "zh-CN-full"):
+            scenario = scenarios[scenario_id]
+            self.assertTrue(scenario["input"]["session_memory_enabled"])
+            self.assertEqual(
+                [section["id"] for section in scenario["output"]["sections"]].count(
+                    "session_memory"
+                ),
+                1,
+            )
+        disabled = scenarios["en-US-minimal"]
+        self.assertFalse(disabled["input"]["session_memory_enabled"])
+        self.assertTrue(disabled["input"]["session_memory_context"])
+        self.assertNotIn("MUST NOT RENDER", disabled["output"]["prompt"])
+        self.assertNotIn(
+            "session_memory",
+            {section["id"] for section in disabled["output"]["sections"]},
+        )
+
     def test_release_bundle_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             first_report = contractctl.build_bundle(ROOT, Path(first), revision="a" * 40)
@@ -338,10 +396,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(unsupported["status"], "unsupported")
         self.assertIsNone(unsupported["read_input_tokens"])
         self.assertEqual(invalid, missing)
+        self.assertTrue(
+            fixture["model_call_rules"]["provider_usage_captured_before_after_model_hook"]
+        )
 
     def test_token_usage_aggregation_never_exposes_partial_total(self) -> None:
         fixture = json.loads((ROOT / "fixtures/token_usage.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["aggregation_cases"]}
+        task_cases = {case["name"]: case for case in fixture["task_aggregation_cases"]}
 
         complete = cases["complete_provider_cache_observations"]["expected"]
         partial = cases["partial_observation_is_not_a_partial_total"]["expected"]
@@ -351,6 +413,96 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(partial["status"], "accounting_missing")
         self.assertIsNone(partial["read_input_tokens"])
         self.assertIsNone(partial["uncached_input_tokens"])
+        empty = task_cases["no_dispatched_calls_are_exact_zero"]["expected"]
+        self.assertEqual(
+            {empty[name] for name in ("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens")},
+            {0},
+        )
+        self.assertEqual(empty["cache_usage"]["status"], "accounting_missing")
+
+    def test_task_token_usage_v2_has_strict_negative_cases(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/token_usage.json").read_text(encoding="utf-8")
+        )
+        rules = fixture["task_usage_rules"]
+        cases = {case["name"]: case for case in fixture["invalid_task_wire_cases"]}
+
+        self.assertEqual(rules["schema_version"], "vv-agent.task-token-usage.v2")
+        self.assertTrue(rules["unknown_fields_rejected"])
+        self.assertTrue(rules["aggregate_fields_must_equal_model_calls"])
+        self.assertTrue(rules["duplicate_call_ids_rejected"])
+        self.assertEqual(
+            set(cases),
+            {
+                "missing_schema_version",
+                "unsupported_schema_version",
+                "unknown_field",
+                "missing_model_calls",
+                "model_calls_not_array",
+                "negative_total_tokens",
+                "aggregate_does_not_match_model_calls",
+                "duplicate_model_call_id",
+            },
+        )
+        unsupported = cases["unsupported_schema_version"]["mutation"]["replace"]
+        self.assertNotEqual(unsupported["schema_version"], rules["schema_version"])
+
+        for path in sorted((ROOT / "fixtures").glob("*.json")):
+            stack = [json.loads(path.read_text(encoding="utf-8"))]
+            while stack:
+                value = stack.pop()
+                if isinstance(value, dict):
+                    if (
+                        value.get("schema_version") == "vv-agent.task-token-usage.v2"
+                        and "model_calls" in value
+                    ):
+                        self.assertEqual(set(value), set(rules["required_fields"]), path.name)
+                        model_calls = value.get("model_calls")
+                        self.assertIsInstance(model_calls, list, path.name)
+                        for model_call in model_calls:
+                            self.assertEqual(
+                                set(model_call),
+                                {
+                                    "call_id",
+                                    "operation_id",
+                                    "attempt",
+                                    "operation",
+                                    "cycle_index",
+                                    "backend",
+                                    "model",
+                                    "status",
+                                    "usage",
+                                    "error_code",
+                                },
+                                path.name,
+                            )
+                        for field in (
+                            "input_tokens",
+                            "output_tokens",
+                            "total_tokens",
+                            "reasoning_tokens",
+                        ):
+                            observations = [call["usage"][field] for call in model_calls]
+                            expected = (
+                                None
+                                if any(observation is None for observation in observations)
+                                else sum(observations)
+                            )
+                            self.assertEqual(value[field], expected, f"{path.name}:{field}")
+                        if model_calls == []:
+                            self.assertEqual(
+                                {
+                                    value.get("input_tokens"),
+                                    value.get("output_tokens"),
+                                    value.get("total_tokens"),
+                                    value.get("reasoning_tokens"),
+                                },
+                                {0},
+                                path.name,
+                            )
+                    stack.extend(value.values())
+                elif isinstance(value, list):
+                    stack.extend(value)
 
     def test_canonical_usage_projections_use_strict_nested_shape(self) -> None:
         token_keys = {
@@ -370,7 +522,7 @@ class ContractRepositoryTests(unittest.TestCase):
             "total_tokens",
             "reasoning_tokens",
             "cache_usage",
-            "cycles",
+            "model_calls",
         }
         cache_keys = {
             "status",
@@ -383,14 +535,28 @@ class ContractRepositoryTests(unittest.TestCase):
         public_result = json.loads(
             (ROOT / "fixtures/result_public.json").read_text(encoding="utf-8")
         )["agent_result"]
-        cycle_usage = public_result["cycles"][0]["token_usage"]
         task_usage = public_result["token_usage"]
-        self.assertEqual(set(cycle_usage), token_keys)
-        self.assertEqual(set(cycle_usage["cache_usage"]), cache_keys)
+        self.assertNotIn("token_usage", public_result["cycles"][0])
         self.assertEqual(set(task_usage), task_keys)
-        self.assertEqual(task_usage["schema_version"], "vv-agent.task-token-usage.v1")
-        self.assertEqual(set(task_usage["cycles"][0]), {"cycle_index", "usage"})
-        self.assertEqual(set(task_usage["cycles"][0]["usage"]), token_keys)
+        self.assertEqual(task_usage["schema_version"], "vv-agent.task-token-usage.v2")
+        model_call = task_usage["model_calls"][0]
+        self.assertEqual(
+            set(model_call),
+            {
+                "call_id",
+                "operation_id",
+                "attempt",
+                "operation",
+                "cycle_index",
+                "backend",
+                "model",
+                "status",
+                "usage",
+                "error_code",
+            },
+        )
+        self.assertEqual(set(model_call["usage"]), token_keys)
+        self.assertEqual(set(model_call["usage"]["cache_usage"]), cache_keys)
 
         journal = json.loads(
             (ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8")
@@ -407,7 +573,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(set(completed_event["token_usage"]), task_keys)
         self.assertEqual(
-            completed_event["token_usage"]["cycles"][0]["usage"]["usage_source"],
+            completed_event["token_usage"]["model_calls"][0]["usage"]["usage_source"],
             "accounting_missing",
         )
 
@@ -487,6 +653,9 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.cache_usage_status",
                 "result.cache_usage",
                 "result.token_usage",
+                "result.model_call_operation",
+                "result.model_call_status",
+                "result.model_call_record",
                 "result.task_token_usage",
             }.issubset(capabilities)
         )
@@ -891,6 +1060,44 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIsNone(denial_payload["durationMs"])
         self.assertEqual(denial_payload["errorCode"], "tool_not_allowed")
 
+    def test_app_server_model_lifecycle_and_task_usage_v2_are_frozen(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/app_server_observable.json").read_text(encoding="utf-8")
+        )
+        lifecycle = fixture["modelLifecycle"]
+        identity_fields = set(lifecycle["identityFields"])
+
+        self.assertEqual(lifecycle["itemType"], "modelCall")
+        started = lifecycle["startedNotifications"][0]
+        completed = lifecycle["completedNotifications"][0]
+        failed = lifecycle["failedNotifications"][0]
+        self.assertEqual(started["method"], "item/started")
+        self.assertEqual(completed["method"], "item/completed")
+        self.assertEqual(failed["method"], "item/completed")
+        for notification in (started, completed, failed):
+            params = notification["params"]
+            self.assertEqual(params["type"], "modelCall")
+            self.assertTrue(identity_fields.issubset(params["payload"]))
+            self.assertTrue(
+                set(lifecycle["forbiddenPayloadFields"]).isdisjoint(params["payload"])
+            )
+        self.assertEqual(
+            completed["params"]["payload"]["usage"]["schemaVersion"],
+            "vv-agent.token-usage.v1",
+        )
+        self.assertEqual(failed["params"]["payload"]["outcome"], "definitive")
+        self.assertEqual(failed["params"]["payload"]["errorCode"], "provider_rejected")
+
+        projection = fixture["terminal"]["tokenUsageProjection"]
+        value = projection["value"]
+        self.assertEqual(projection["sourceSchemaVersion"], "vv-agent.task-token-usage.v2")
+        self.assertEqual(value["schemaVersion"], "vv-agent.task-token-usage.v2")
+        self.assertEqual(len(value["modelCalls"]), 1)
+        self.assertEqual(value["modelCalls"][0]["usage"]["schemaVersion"], "vv-agent.token-usage.v1")
+        provider_usage = value["modelCalls"][0]["usage"]["providerUsage"]
+        self.assertIn("prompt_tokens", provider_usage)
+        self.assertNotIn("promptTokens", provider_usage)
+
     def test_run_budget_runner_cases_are_executable_inputs_not_boolean_claims(self) -> None:
         fixture = json.loads((ROOT / "fixtures/run_budget.json").read_text(encoding="utf-8"))
         cases = {case["name"]: case for case in fixture["runner_cases"]}
@@ -1103,7 +1310,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 149)
+        self.assertEqual(len(capabilities), 151)
+        self.assertNotIn("runtime_backend.cycle_runner", capabilities)
         self.assertIn("agent.sub_agent_config", capabilities)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
         self.assertIn("checkpoint_config.credential_slots", capabilities)
@@ -1115,9 +1323,14 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 247)
+        self.assertEqual(surface_member_count, 249)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
+        self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
+        self.assertIn(
+            "session_memory_enabled",
+            {member["id"] for member in surfaces["sub_agent_config"]["members"]},
+        )
         self.assertTrue(
             {"completion_reason", "completion_tool_name", "partial_output"}.issubset(
                 {member["id"] for member in surfaces["run_result"]["members"]}
@@ -1169,6 +1382,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "backend",
                 "system_prompt",
                 "max_cycles",
+                "session_memory_enabled",
                 "exclude_tools",
                 "metadata",
                 "denied_side_effects",
@@ -1205,6 +1419,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "approval_approved_field_is_rejected",
                 "approval_action_is_missing",
                 "approval_action_is_unknown",
+                "legacy_llm_started_is_rejected",
                 "unknown_completion_reason",
                 "completion_reason_is_not_a_string_or_null",
                 "completion_tool_name_is_not_a_string_or_null",
@@ -1474,8 +1689,8 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v2")
-        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v1")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v3")
+        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v2")
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
@@ -1483,14 +1698,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v2",
+                "required_value": "vv-agent.checkpoint.v3",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
         self.assertEqual(
             fixture["run_definition_schema_rules"],
             {
-                "required_value": "vv-agent.run-definition.v1",
+                "required_value": "vv-agent.run-definition.v2",
                 "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
                 "failure_boundary": "before_claim_model_or_tool",
             },
@@ -1516,6 +1731,51 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIsNone(suspended["claim_token"])
         self.assertEqual(suspended["tool_journal"][0]["state"], "ambiguous")
         self.assertTrue(fixture["status_rules"]["reconciliation_required_requires_ambiguous_journal"])
+        self.assertTrue(fixture["status_rules"]["model_call_ids_are_unique"])
+        self.assertTrue(fixture["status_rules"]["model_journal_records_actual_backend_and_model"])
+        self.assertEqual(
+            fixture["status_rules"]["model_journal_event_and_ledger_identity_fields_match_exactly"],
+            [
+                "call_id",
+                "operation_id",
+                "attempt",
+                "operation",
+                "cycle_index",
+                "backend",
+                "model",
+            ],
+        )
+        self.assertTrue(fixture["status_rules"]["model_started_journal_and_started_event_are_atomic"])
+        self.assertTrue(
+            fixture["status_rules"][
+                "ambiguous_model_journal_attempt_has_exactly_one_ambiguous_model_call_record"
+            ]
+        )
+        active_journal = canonical["model_call_journal"][0]
+        started_event = canonical["event_outbox"][0]["event"]
+        self.assertEqual(active_journal["backend"], "test")
+        self.assertEqual(active_journal["model"], "test-model")
+        for field in ("call_id", "operation_id", "attempt", "cycle_index", "backend", "model"):
+            self.assertEqual(active_journal[field], started_event[field])
+        self.assertEqual(active_journal["model_operation"], started_event["operation"])
+        self.assertTrue(
+            fixture["status_rules"]
+            ["terminal_model_event_precedes_budget_observation_in_outbox"]
+        )
+        self.assertTrue(
+            fixture["status_rules"]
+            ["terminal_result_task_usage_model_calls_equal_checkpoint_ledger"]
+        )
+        for case in [*fixture["valid_cases"], *fixture["invalid_cases"]]:
+            payload = case["payload"]
+            terminal_result = payload.get("terminal_result")
+            if terminal_result is not None:
+                self.assertEqual(
+                    terminal_result["token_usage"]["model_calls"],
+                    payload["model_calls"],
+                    case["name"],
+                )
+        self.assertEqual(canonical["model_calls"][0]["operation"], "agent_cycle")
         self.assertEqual(
             {case["error_code"] for case in fixture["status_cases"] if "error_code" in case},
             {"checkpoint_status_invalid"},
@@ -1550,6 +1810,24 @@ class ContractRepositoryTests(unittest.TestCase):
                     "tool_calls": 0,
                 },
             )
+        unknown_definition_schema = next(
+            case
+            for case in definition_schema_cases
+            if case["name"] == "unknown_definition_schema_fails_closed"
+        )["mutation"]["replace"]["run_definition_schema"]
+        self.assertNotEqual(
+            unknown_definition_schema,
+            fixture["run_definition_schema_rules"]["required_value"],
+        )
+        unknown_embedded_schema = next(
+            case
+            for case in run_definition_fixture["invalid_cases"]
+            if case["name"] == "unknown_schema"
+        )["mutation"]["value"]
+        self.assertNotEqual(
+            unknown_embedded_schema,
+            run_definition_fixture["schema_version"],
+        )
         limits = fixture["extension_limits"]
         generated = {case["name"]: case for case in limits["generated_boundary_cases"]}
         complex_vector = limits["canonicalization_vectors"][0]
@@ -1647,6 +1925,70 @@ class ContractRepositoryTests(unittest.TestCase):
         for case in valid_entries.values():
             vector_name = case["request_golden_case"]
             self.assertEqual(case["entry"]["request_digest"], request_vectors[vector_name]["sha256"])
+        model_entries = [
+            case["entry"]
+            for case in valid_entries.values()
+            if case["entry"]["kind"] == "model"
+        ]
+        self.assertTrue(model_entries)
+        self.assertTrue(
+            all(entry["backend"] == "test" and entry["model"] == "test-model" for entry in model_entries)
+        )
+
+        accounting = fixture["model_call_accounting"]
+        identity = accounting["identity_contract"]
+        self.assertEqual(
+            identity["fields"],
+            [
+                "call_id",
+                "operation_id",
+                "attempt",
+                "operation",
+                "cycle_index",
+                "backend",
+                "model",
+            ],
+        )
+        completed = accounting["completed_attempt"]
+        journal_identity = dict(completed["journal"])
+        journal_identity["operation"] = journal_identity.pop("model_operation")
+        for record_name in ("started_event", "ledger", "terminal_event"):
+            record = completed[record_name]
+            for field in identity["fields"]:
+                self.assertEqual(record[field], journal_identity[field], record_name)
+        self.assertNotEqual(
+            {
+                "backend": completed["journal"]["backend"],
+                "model": completed["journal"]["model"],
+            },
+            completed["root_run_definition_model"],
+        )
+        self.assertEqual(
+            {case["name"] for case in accounting["invalid_identity_cases"]},
+            {
+                "call_id_mismatch",
+                "operation_id_mismatch",
+                "attempt_mismatch",
+                "operation_mismatch",
+                "cycle_index_mismatch",
+                "backend_mismatch",
+                "model_mismatch",
+                "journal_backend_missing",
+                "journal_model_missing",
+            },
+        )
+        atomic_cases = {case["name"]: case for case in accounting["atomic_outbox_cases"]}
+        self.assertEqual(
+            atomic_cases["terminal_with_budget_snapshot"]["appended_event_types"],
+            ["model_call_completed", "budget_snapshot"],
+        )
+        self.assertEqual(
+            atomic_cases["terminal_with_budget_exhaustion"]["appended_event_types"],
+            ["model_call_completed", "budget_exhausted"],
+        )
+        self.assertTrue(
+            accounting["atomic_outbox_rules"]["events_are_appended_contiguously_in_listed_order"]
+        )
         self.assertIn(["planned", "failed"], fixture["transition_rules"]["allowed"])
         self.assertEqual(
             fixture["outcome_classification"]["timeout_after_started"],
@@ -1675,6 +2017,14 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertFalse(fixture["tool_context"]["model_visible_argument"])
         self.assertTrue(all(case.get("error_code") for case in fixture["invalid_entries"]))
+        invalid_entries = {case["name"]: case for case in fixture["invalid_entries"]}
+        for name in (
+            "model_backend_missing",
+            "model_backend_empty",
+            "model_name_missing",
+            "model_name_empty",
+        ):
+            self.assertEqual(invalid_entries[name]["error_code"], "model_identity_invalid")
 
     def test_checkpoint_store_progress_and_terminal_retention_are_locked(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_store.json").read_text(encoding="utf-8"))
@@ -1683,6 +2033,26 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["revision_rules"]["progress_preserves_claim"])
         self.assertFalse(fixture["revision_rules"]["heartbeat_requires_revision"])
         self.assertEqual(cases["progress_keeps_claim"]["expected"]["claim_token"], "owner-b")
+        self.assertEqual(
+            cases["progress_keeps_claim"]["expected"]["outbox_event_types"],
+            ["model_call_started"],
+        )
+        terminal_progress = cases[
+            "terminal_model_progress_updates_ledger_budget_and_outbox"
+        ]["expected"]
+        self.assertEqual(terminal_progress["model_call_count"], 1)
+        self.assertEqual(terminal_progress["budget_total_tokens"], 20)
+        self.assertEqual(
+            terminal_progress["outbox_event_types"],
+            ["model_call_started", "model_call_completed", "budget_snapshot"],
+        )
+        self.assertEqual(
+            fixture["revision_rules"]["terminal_model_outbox_order"],
+            [
+                "model_terminal_event",
+                "budget_snapshot_or_budget_exhausted_if_configured",
+            ],
+        )
         self.assertEqual(
             cases["heartbeat_after_progress_updates_lease_only"]["expected"]["journal_state"],
             "started",
@@ -1755,10 +2125,26 @@ class ContractRepositoryTests(unittest.TestCase):
         cases = {case["name"]: case for case in fixture["runner_cases"]}
         matrix = fixture["fault_matrix"]
 
-        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 9)])
+        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 10)])
+        self.assertEqual(matrix[3]["resume"], "replay_receipt_without_usage_or_budget_increment")
         self.assertEqual(
             cases["started_model_requires_reconciliation"]["expected"]["completion_reason"],
             None,
+        )
+        self.assertEqual(
+            cases["started_model_requires_reconciliation"]["expected"]["model_call_records"],
+            1,
+        )
+        self.assertEqual(
+            cases["started_model_can_retry_only_with_explicit_risk_policy"]["expected"][
+                "model_call_records"
+            ],
+            2,
+        )
+        self.assertFalse(
+            cases["started_model_can_retry_only_with_explicit_risk_policy"]["expected"][
+                "aggregate_usage_available"
+            ]
         )
         self.assertEqual(
             cases["ambiguous_non_idempotent_tool_stops"]["expected"]["silent_retries"],
@@ -1946,7 +2332,16 @@ class ContractRepositoryTests(unittest.TestCase):
         capabilities = envelope["recipe"]["capabilities"]
 
         self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v2")
-        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v1")
+        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v2")
+        unsupported_definition_schema = next(
+            case
+            for case in fixture["invalid_cases"]
+            if case["name"] == "unsupported_run_definition_schema"
+        )["value"]
+        self.assertNotEqual(
+            unsupported_definition_schema,
+            fixture["run_definition_schema_rules"]["writer_value"],
+        )
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
         self.assertEqual(
             capabilities["after_cycle_hook_refs"],
@@ -2198,16 +2593,16 @@ class ContractRepositoryTests(unittest.TestCase):
                 INSERT INTO checkpoints (
                     checkpoint_key, schema_version, run_definition_schema, run_definition, task_id,
                     root_run_id, trace_id, run_definition_digest, resume_attempt,
-                    cycle_index, status, messages, cycles, shared_state, budget_usage,
+                    cycle_index, status, messages, cycles, model_calls, shared_state, budget_usage,
                     event_cursor, event_outbox, extension_state, model_call_journal,
                     tool_journal, revision, claim_token, claimed_cycle,
                     lease_expires_at_ms, terminal_result, terminal_acknowledged
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v2",
-                    "vv-agent.run-definition.v1",
+                    "vv-agent.checkpoint.v3",
+                    "vv-agent.run-definition.v2",
                     "{}",
                     "task-1",
                     "run-1",
@@ -2216,6 +2611,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     1,
                     0,
                     "running",
+                    "[]",
                     "[]",
                     "[]",
                     "{}",
@@ -2245,7 +2641,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     "SELECT run_definition_schema FROM checkpoints WHERE checkpoint_key = ?",
                     ("checkpoint-key",),
                 ).fetchone(),
-                ("vv-agent.run-definition.v1",),
+                ("vv-agent.run-definition.v2",),
             )
         finally:
             connection.close()
@@ -2266,7 +2662,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 artifact=build["artifact"],
                 artifact_url=(
                     "https://github.com/AndersonBY/vv-agent-contract/releases/download/"
-                    "v2.0.0/vv-agent-contract-2.0.0.zip"
+                    "v3.0.0/vv-agent-contract-3.0.0.zip"
                 ),
                 snapshot_path="tests/fixtures/parity",
             )

@@ -106,7 +106,7 @@ for a tool-driven terminal.
 
 ## Token And Cache Usage
 
-Each model cycle emits one closed `TokenUsage` object with
+Each terminal model attempt carries one closed `TokenUsage` object with
 `schema_version=vv-agent.token-usage.v1`:
 
 - nullable `input_tokens`, `output_tokens`, `total_tokens`, and
@@ -117,10 +117,26 @@ Each model cycle emits one closed `TokenUsage` object with
 - `provider_usage`, the only diagnostic location for native provider fields.
 
 Task totals use the closed
-`schema_version=vv-agent.task-token-usage.v1` object. Every model cycle appears
-as `{cycle_index, usage}`. An aggregate count is null when any cycle lacks that
-count; unknown accounting is never fabricated as zero. Cache totals are
-available only when every cycle provides the corresponding measurement.
+`schema_version=vv-agent.task-token-usage.v2` object. Its `model_calls` array
+contains every framework dispatch attempt admitted across the local provider
+boundary, including Session Memory and full memory compaction. Each record
+identifies the logical operation, dispatch attempt, cycle, actual backend/model,
+terminal status, normalized usage, and a
+content-free error code. Logical retries keep `operation_id` but receive a new
+`call_id` and incremented attempt. A durable replay adds no record.
+Provider usage is fixed before an `AfterLlm` hook or equivalent callback may
+replace response content; a hook cannot rewrite accounting identity or totals.
+
+An aggregate count is null when any dispatched attempt lacks that count;
+unknown accounting is never fabricated as zero. Cache totals are available
+only when every dispatched attempt provides the corresponding measurement.
+An empty ledger has exact zero token totals and `accounting_missing` cache
+status because no provider observation occurred.
+`CycleRecord` does not duplicate token usage. The complete normative shape,
+budget boundary, and checkpoint atomicity rules are in
+`model-call-accounting.md`.
+The low-level `CycleRunner` is not a current public export; public execution
+goes through `Runner` so every terminal path can expose the complete ledger.
 
 Anthropic canonical input includes native input, cache reads, and cache writes.
 Its uncached input includes native input plus cache writes. OpenAI-compatible
@@ -132,6 +148,15 @@ and other provider field names remain inside adapter input and
 RunEvent v1 is a closed, typed wire. Every event requires `version=v1`,
 identity, and a finite non-negative `created_at` in Unix seconds. Approval
 resolution carries exactly one `action` value.
+
+`model_call_started`, `model_call_completed`, and `model_call_failed` expose
+the task-neutral model-operation lifecycle. They replace `llm_started` and
+identify the dispatch attempt, logical operation, cycle, backend, and model.
+Terminal model events carry normalized usage; failures contain no provider
+error body. Durable replay preserves the original event identity and does not
+emit a second started event.
+Completed events map to completed records, definitive failed events map to
+failed records, and ambiguous failed events map to ambiguous records.
 
 The public runtime exposes only this typed event surface. Provider stream
 payloads stay private to the LLM adapter, and public runtime-log/provider
@@ -199,12 +224,12 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v2` and embed an exact
-`vv-agent.run-definition.v1` plus its RFC 8785 SHA-256 digest. Top-level records
+Checkpoint records require `vv-agent.checkpoint.v3` and embed an exact
+`vv-agent.run-definition.v2` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
 
-Claims, leases, progress CAS, operation journals, event outboxes,
+Claims, leases, progress CAS, model-call ledgers, operation journals, event outboxes,
 reconciliation, terminal retention, and acknowledgement have the same atomic
 semantics in both languages. Unknown operation outcomes remain ambiguous until
 the host defers, retries under policy, supplies a verified receipt, records a
@@ -251,6 +276,13 @@ workspace, memory, budget, identity, lineage, and cancellation projection.
 Framework-owned identity metadata cannot be overwritten by user metadata.
 Children never inherit a parent's durable checkpoint key implicitly.
 
+Session Memory defaults to disabled for top-level and child runs. It is enabled
+only by the exact public `session_memory_enabled=true` control. There is no
+legacy alias, seed-triggered activation, existing-file activation, or implicit
+parent-to-child inheritance. When false or omitted, supplied memory context is
+not rendered, stores are not read or written, and Session Memory inference is
+not dispatched.
+
 Synchronous and asynchronous child lifecycle events use the same typed result,
 completion, token usage, and error shapes. Background task start, message,
 wait, status, cancel, and cleanup behavior must match across languages.
@@ -259,9 +291,14 @@ wait, status, cancel, and cleanup behavior must match across languages.
 
 JSON-RPC 2.0 ids, requests, responses, notifications, thread/turn state,
 approval routing, replay, and durable resume are shared observable contract.
-Terminal token usage mirrors the complete TaskTokenUsage object, including
-cycle detail. Optional fields are omitted only where the App Server schema says
-they are optional; current nested objects remain closed.
+`model_call_started`, `model_call_completed`, and `model_call_failed` project
+to `modelCall` items with the same seven identity fields and content-free
+terminal accounting. Terminal `tokenUsage` is the recursively camel-cased
+projection of the complete `vv-agent.task-token-usage.v2` object, including
+`modelCalls`; opaque native keys inside `providerUsage` remain unchanged. No
+cycle-only usage projection remains. Optional fields are
+omitted only where the App Server schema says they are optional; current nested
+objects remain closed.
 
 ## Allowed Language Adaptations
 

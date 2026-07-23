@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 2.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 3.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -18,10 +18,27 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v2` and
-`run_definition_schema=vv-agent.run-definition.v1`. Missing, stale, unknown,
+suffix. Records require `schema_version=vv-agent.checkpoint.v3` and
+`run_definition_schema=vv-agent.run-definition.v2`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
+
+The checkpoint contains the complete run-level model-call ledger. A terminal
+model attempt, its journal state, normalized usage, post-attempt budget
+snapshot, and durable lifecycle event are committed by one progress CAS. This
+atomicity is what prevents receipt replay from charging the budget twice. See
+`model-call-accounting.md` for the record and event shapes.
+The pre-dispatch `started` journal transition and `model_call_started` outbox
+entry are also one progress CAS. A recovered `started` model attempt becomes an
+ambiguous ledger record, budget observation, and failed event atomically before
+the ambiguity policy is applied.
+
+Every model journal entry stores the actual effective backend and model. The
+journal, started event, terminal event, and ledger record agree exactly on call
+id, operation id, attempt, operation, cycle, backend, and model. Terminal
+outbox entries are appended contiguously as the model terminal event followed
+by either a configured budget snapshot or a budget-exhausted event carrying
+that final snapshot.
 
 The top level has one exact current field set. Every listed field is present,
 including fields whose value may be null; readers do not synthesize omissions.
@@ -114,7 +131,7 @@ external work. A digest without its current typed definition is insufficient.
 ### Run Definition Digest
 
 `run_definition.json` defines the exact digest input and two golden vectors.
-The framework serializes the complete `vv-agent.run-definition.v1` object with
+The framework serializes the complete `vv-agent.run-definition.v2` object with
 the RFC 8785 JSON Canonicalization Scheme, hashes the resulting UTF-8 bytes with
 SHA-256, and stores lowercase hexadecimal. Implementations must use an RFC 8785
 implementation rather than approximating it with ordinary sorted-key JSON.
@@ -178,14 +195,15 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v2`;
-- `run_definition_schema`, exactly `vv-agent.run-definition.v1`;
+- `schema_version`, exactly `vv-agent.checkpoint.v3`;
+- `run_definition_schema`, exactly `vv-agent.run-definition.v2`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
 - `checkpoint_key`, `task_id`, `root_run_id`, `trace_id`, and
   `run_definition_digest`;
 - `resume_attempt`, starting at one and increasing for each claimed recovery;
-- `cycle_index`, `status`, `messages`, `cycles`, and `shared_state`;
+- `cycle_index`, `status`, `messages`, `cycles`, `model_calls`, and
+  `shared_state`;
 - nullable `budget_usage`;
 - `event_cursor` and `event_outbox`;
 - `extension_state`;
@@ -212,10 +230,13 @@ optional extension namespaces may be preserved only inside the typed
 Unknown required extensions block resume.
 
 Checkpoint journals contain only the active or not-yet-committed cycle. A
-successful cycle commit incorporates its messages, cycle record, usage, and
-state into the ordinary checkpoint fields and clears the committed journals.
-This bounds checkpoint growth without discarding information needed to resume
-an interrupted operation.
+successful cycle commit incorporates its messages, cycle record, and state
+into the ordinary checkpoint fields and clears the committed journals. The
+run-level `model_calls` ledger is retained independently, including attempts
+from an interrupted cycle. This bounds active journal growth without
+discarding cost evidence needed to resume or explain the run.
+When `terminal_result` is present, its TaskTokenUsage `model_calls` array is
+exactly the same ledger and its aggregate fields are derived from that array.
 
 Journal progress preserves the active claim. A resumable interruption uses the
 separate atomic `suspend` operation: it writes
@@ -323,6 +344,14 @@ external operation. It writes `succeeded` or `failed` before downstream cycle
 commit. Progress writes keep the active claim and do not release its lease.
 Store implementations must prevent a heartbeat update from overwriting a
 concurrent journal progress write.
+
+For a model operation, the journal stores `model_operation`, non-empty actual
+`backend`, non-empty actual `model`, and `call_id`. The `started` transition and pending
+`model_call_started` event are one progress write. Provider usage is normalized
+before any hook may replace the effective response. A dispatched terminal
+transition and its ledger record, budget snapshot, and completed/failed event
+are another single progress write. A local failure while still `planned` did
+not dispatch a physical model attempt and therefore adds no model-call record.
 
 A model entry carries a stable nullable `idempotency_key`, the effective model
 response when succeeded, and a typed error when failed. A tool entry also
