@@ -86,7 +86,7 @@
     ],
     "unknown_fields": "reject",
     "path": {
-      "representation": "normalized_POSIX_workspace_relative_path",
+      "representation": "normalized_POSIX_logical_workspace_relative_path",
       "required_prefix": ".vv-agent/artifacts/",
       "pattern": "^\\.vv-agent/artifacts/(?:[A-Za-z0-9][A-Za-z0-9._-]{0,127}/)*[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
       "maximum_utf8_bytes": 512,
@@ -106,7 +106,9 @@
     "size_bytes": "non_negative_integer_equal_to_complete_artifact_bytes",
     "sha256": "lowercase_sha256_of_complete_artifact_bytes",
     "write_boundary": "effective_workspace_backend_after_originating_tool_policy_and_approval",
-    "local_adapter_resolution": "open_below_workspace_without_following_symlinks_in_any_segment",
+    "logical_namespace": "reserved_logical_workspace_path_not_a_host_shell_path",
+    "local_adapter_resolution": "resolve_logical_artifact_path_below_private_artifact_root_without_following_symlinks_in_any_segment",
+    "shell_visibility": "private_artifact_storage_is_not_reachable_from_the_agent_shell_working_directory",
     "creation": "atomic_exclusive_create_then_fsync_before_reference",
     "collision": "generate_a_new_runtime_path_and_never_overwrite",
     "immutability": "bytes_do_not_change_after_reference_is_emitted",
@@ -118,6 +120,7 @@
     },
     "retention": "at_least_until_run_terminal_state_and_its_checkpoint_retention_end",
     "read_boundary": "existing_read_file_tool_with_normal_policy_path_and_baseline_checks",
+    "read_projection": "logical_artifact_path_resolves_only_through_the_effective_workspace_backend",
     "direct_host_path_or_bypass_reader": false
   },
   "cursor_contract": {

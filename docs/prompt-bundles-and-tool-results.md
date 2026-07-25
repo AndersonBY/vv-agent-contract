@@ -21,6 +21,13 @@ output remains the model-visible `content` preview even when the exit status is
 non-zero; status, exit code, and error identity remain typed result fields and
 bounded metadata rather than a second JSON output wrapper.
 
+Contract `4.0.6` makes the existing artifact immutability rule enforceable for
+local workspaces. The `.vv-agent/artifacts/` value remains a logical,
+workspace-relative recovery path, but a local adapter maps it to private
+artifact storage outside the agent shell's working directory. The only recovery
+path remains the policy-checked `read_file` tool through the effective
+`WorkspaceBackend`.
+
 ## Prompt Bundle
 
 A `PromptBundle` is the only structured system-prompt value after instruction
@@ -98,12 +105,16 @@ projection appends a compact canonical recovery record containing only the
 present truncation fields. This makes an artifact or cursor visible to the
 model without expanding ordinary results.
 
-An `artifact` is a closed object with workspace-relative `path`, `media_type`,
-`encoding`, `size_bytes`, and lowercase SHA-256 `sha256`. It is written through
-the effective `WorkspaceBackend` below the reserved `.vv-agent/artifacts/`
-root after the originating tool has passed its normal policy/approval boundary.
-The model never selects the artifact path. Recovery uses the existing
-policy-checked `read_file` tool; there is no artifact bypass API.
+An `artifact` is a closed object with a logical workspace-relative `path`,
+`media_type`, `encoding`, `size_bytes`, and lowercase SHA-256 `sha256`. It is
+written through the effective `WorkspaceBackend` below the reserved logical
+`.vv-agent/artifacts/` root after the originating tool has passed its normal
+policy/approval boundary. For a local adapter, that logical namespace maps to
+private storage outside the agent shell's working directory; shell commands
+cannot read, replace, delete, or mutate those bytes through a host path. The
+model never selects the artifact path. Recovery uses the existing
+policy-checked `read_file` tool, which resolves the logical path through the
+backend; there is no artifact bypass API.
 
 A `cursor` is a closed object with `kind`, `offset_chars`, and source
 `sha256`. `read_file` accepts the same cursor together with its required path,

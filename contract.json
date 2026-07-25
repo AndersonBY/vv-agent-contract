@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "name": "vv-agent-contract",
-  "version": "4.0.5",
+  "version": "4.0.6",
   "repository": "https://github.com/AndersonBY/vv-agent-contract",
   "fixtures": {
     "path": "fixtures",
     "manifest": "fixtures/SHA256SUMS",
-    "manifest_sha256": "cc442791bb31c38af4f1346200d2468e2e7c0c879587482fdb154f5446b88710",
+    "manifest_sha256": "d2d95f0240d20e0cbc6d01b3da041695b0d1f1d1b52f44452b235f1ddc4a2c7a",
     "intentional_invalid_jsonl_records": {
       "event_store_replay.jsonl": [
         2
