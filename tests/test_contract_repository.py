@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "4.0.0")
+        self.assertEqual(report["version"], "4.0.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -541,10 +541,16 @@ class ContractRepositoryTests(unittest.TestCase):
         checkpoint = json.loads(
             (ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8")
         )
-        checkpoint_journal = checkpoint["canonical_checkpoint"]["tool_journal"][0]
-        self.assertEqual(checkpoint_journal["request_digest"], bash_request["sha256"])
-        self.assertEqual(checkpoint_journal["tool_call_id"], expected["tool_call_id"])
-        self.assertEqual(checkpoint_journal["arguments"], bash_request["request"]["request"]["arguments"])
+        journal_entry = next(
+            case["entry"]
+            for case in journal["valid_entries"]
+            if case["name"] == "tool_succeeded_truncated_bash"
+        )
+        self.assertEqual(journal_entry["request_digest"], bash_request["sha256"])
+        self.assertEqual(journal_entry["tool_call_id"], expected["tool_call_id"])
+        self.assertEqual(journal_entry["arguments"], bash_request["request"]["request"]["arguments"])
+        committed_result = checkpoint["canonical_checkpoint"]["cycles"][0]["tool_results"][0]
+        self.assertEqual(committed_result, expected)
 
     def test_current_builtin_surface_is_compact_and_has_only_real_exposure(self) -> None:
         fixture = json.loads(
@@ -2041,6 +2047,9 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
+        for journal_name in ("model_call_journal", "tool_journal"):
+            for entry in canonical[journal_name]:
+                self.assertEqual(entry["cycle_index"], canonical["claimed_cycle"])
         self.assertEqual(len(canonical["run_definition_digest"]), 64)
         self.assertEqual(
             fixture["discriminator"],
@@ -2174,6 +2183,15 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertNotEqual(
             unknown_embedded_schema,
             run_definition_fixture["schema_version"],
+        )
+        unknown_checkpoint_schema = next(
+            case["payload"]["schema_version"]
+            for case in fixture["invalid_cases"]
+            if case["name"] == "unknown_schema"
+        )
+        self.assertNotEqual(
+            unknown_checkpoint_schema,
+            fixture["discriminator"]["required_value"],
         )
         limits = fixture["extension_limits"]
         generated = {case["name"]: case for case in limits["generated_boundary_cases"]}

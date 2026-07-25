@@ -223,41 +223,7 @@
         "call_id": "op_model_cycle_2_main:attempt:1"
       }
     ],
-    "tool_journal": [
-      {
-        "kind": "tool",
-        "operation_id": "op_tool_cycle_1_call_bash",
-        "cycle_index": 1,
-        "attempt": 1,
-        "state": "succeeded",
-        "request_digest": "fcc962c133bbfcad8ae7f79523da0a3b70cd5de5dbf1b5a4448b18918bf725dc",
-        "tool_call_id": "call-bash",
-        "tool_name": "bash",
-        "arguments": {
-          "command": "python generate_large_output.py"
-        },
-        "idempotency_key": null,
-        "idempotency_support": "unsupported",
-        "result": {
-          "tool_call_id": "call-bash",
-          "content": "first output\n... output omitted; full text in artifact ...\nlast output",
-          "status_code": "SUCCESS",
-          "directive": "continue",
-          "truncated": true,
-          "truncation_reason": "output_limit",
-          "original_bytes": 100000,
-          "visible_bytes": 70,
-          "artifact": {
-            "path": ".vv-agent/artifacts/task-7/call-bash-0123456789abcdef.txt",
-            "media_type": "text/plain",
-            "encoding": "utf-8",
-            "size_bytes": 100000,
-            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-          }
-        },
-        "error": null
-      }
-    ],
+    "tool_journal": [],
     "revision": 9,
     "claim_token": "claim_worker_7",
     "claimed_cycle": 2,
@@ -1277,7 +1243,7 @@
     {
       "name": "unknown_schema",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
+        "schema_version": "vv-agent.checkpoint.v3",
         "checkpoint_key": "fresh",
         "task_id": "task-1",
         "root_run_id": "run-1",
