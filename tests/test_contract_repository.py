@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "4.0.6")
+        self.assertEqual(report["version"], "4.1.0")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -393,6 +393,8 @@ class ContractRepositoryTests(unittest.TestCase):
             + fixture["bash_contract"]["tail_chars"],
             fixture["bash_contract"]["preview_limit_chars"],
         )
+        self.assertIn("streaming_write", fixture["artifact_contract"])
+        self.assertIn("without_full_output_materialization", fixture["bash_contract"]["above_limit_persistence"])
 
         required = set(fixture["result_contract"]["required_fields"])
         optional = set(fixture["result_contract"]["optional_fields"])
@@ -1694,7 +1696,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 286)
+        self.assertEqual(surface_member_count, 287)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})

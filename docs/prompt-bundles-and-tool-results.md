@@ -21,7 +21,7 @@ output remains the model-visible `content` preview even when the exit status is
 non-zero; status, exit code, and error identity remain typed result fields and
 bounded metadata rather than a second JSON output wrapper.
 
-Contract `4.0.6` makes the existing artifact immutability rule enforceable for
+Contract `4.1.0` makes the existing artifact immutability rule enforceable for
 local workspaces. The `.vv-agent/artifacts/` value remains a logical,
 workspace-relative recovery path, but a local adapter maps it to private
 artifact storage outside the agent shell's working directory. The only recovery
@@ -115,6 +115,15 @@ cannot read, replace, delete, or mutate those bytes through a host path. The
 model never selects the artifact path. Recovery uses the existing
 policy-checked `read_file` tool, which resolves the logical path through the
 backend; there is no artifact bypass API.
+
+For terminal output, `WorkspaceBackend.write_text_chunks_exclusive` is the
+current producer boundary. It consumes normalized UTF-8 text chunks, performs
+an atomic exclusive write, and returns the written UTF-8 byte count. A terminal
+producer first derives its bounded preview, then streams the complete capture
+through this boundary only when truncation occurred; it does not materialize
+the complete terminal output in application memory. Local adapters map the
+logical artifact path to private storage, while other backends provide the same
+exclusive streaming semantics in their own storage domain.
 
 A `cursor` is a closed object with `kind`, `offset_chars`, and source
 `sha256`. `read_file` accepts the same cursor together with its required path,
