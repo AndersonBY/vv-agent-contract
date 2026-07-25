@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "4.0.3")
+        self.assertEqual(report["version"], "4.0.4")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -2749,6 +2749,10 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
         self.assertEqual(
+            capabilities["toolset_ref"]["schema_digest"],
+            "d266963bff5d4dc90f4fd4c9897381aa589375078f0c08c23af474e27f6b0269",
+        )
+        self.assertEqual(
             capabilities["after_cycle_hook_refs"],
             [{"id": "lifecycle.policy", "version": "1"}],
         )
@@ -2967,6 +2971,12 @@ class ContractRepositoryTests(unittest.TestCase):
                 "terminal_replay_reconciliation_required_result",
             },
         )
+        unknown_version = next(
+            case["response"]["schema_version"]
+            for case in fixture["invalid_cases"]
+            if case["name"] == "unknown_schema_version"
+        )
+        self.assertNotEqual(unknown_version, fixture["schema_version"])
 
         valid_by_name = {case["name"]: case["response"] for case in fixture["valid_cases"]}
         for case in fixture["invalid_cases"]:

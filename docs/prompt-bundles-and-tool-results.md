@@ -10,6 +10,11 @@ same compact `PromptSection` shape and renderer already required by the prompt
 bundle contract. The obsolete fragment `priority` side channel is not part of
 the current prompt representation.
 
+Contract `4.0.4` corrects two distributed-runtime evidence values without
+changing observable behavior: the canonical default toolset reference now
+uses the digest of the compact current schemas, and the worker-response
+unknown-version case now contains a genuinely unknown discriminator.
+
 ## Prompt Bundle
 
 A `PromptBundle` is the only structured system-prompt value after instruction

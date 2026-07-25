@@ -333,7 +333,7 @@
     {
       "name": "unknown_schema_version",
       "response": {
-        "schema_version": "vv-agent.distributed-worker-response.v2",
+        "schema_version": "vv-agent.distributed-worker-response.v3",
         "type": "pending"
       },
       "error": "unsupported distributed worker response schema_version"

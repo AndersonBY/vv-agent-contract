@@ -91,7 +91,7 @@
         "toolset_ref": {
           "id": "vv-agent.builtin-tools",
           "version": "1",
-          "schema_digest": "24d8f7bde18b11374820f742cfa244c83666626a315e09d4b6e1b69e899a70aa"
+          "schema_digest": "d266963bff5d4dc90f4fd4c9897381aa589375078f0c08c23af474e27f6b0269"
         },
         "tool_policy": {
           "allowed_tools": [
