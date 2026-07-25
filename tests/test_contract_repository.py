@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "4.0.4")
+        self.assertEqual(report["version"], "4.0.5")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -587,6 +587,15 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertNotIn("deferred", fixture["exposure_contract"]["allowed_values"])
         behavior = json.loads(
             (ROOT / "fixtures/builtin_tool_behavior.json").read_text(encoding="utf-8")
+        )
+        bash_non_zero = behavior["tools"]["bash"]["non_zero"]["result"]
+        self.assertEqual(bash_non_zero["content"], "fixture-output\n")
+        self.assertEqual(bash_non_zero["error_code"], "command_failed")
+        self.assertEqual(bash_non_zero["metadata"]["exit_code"], 7)
+        self.assertNotIn("output", bash_non_zero["metadata"])
+        self.assertEqual(
+            behavior["canonical"]["structured_error_content_required_keys"],
+            ["ok", "error", "error_code"],
         )
         exposure_cases = {case["value"]: case for case in behavior["registry"]["exposure_cases"]}
         self.assertEqual(

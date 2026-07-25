@@ -15,6 +15,12 @@ changing observable behavior: the canonical default toolset reference now
 uses the digest of the compact current schemas, and the worker-response
 unknown-version case now contains a genuinely unknown discriminator.
 
+Contract `4.0.5` corrects the foreground bash behavior fixture to match the
+bounded-result contract already implemented by both runtimes. Terminal command
+output remains the model-visible `content` preview even when the exit status is
+non-zero; status, exit code, and error identity remain typed result fields and
+bounded metadata rather than a second JSON output wrapper.
+
 ## Prompt Bundle
 
 A `PromptBundle` is the only structured system-prompt value after instruction

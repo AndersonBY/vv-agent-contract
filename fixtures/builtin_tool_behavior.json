@@ -1,7 +1,7 @@
 {
   "version": 2,
   "canonical": {
-    "error_content_required_keys": [
+    "structured_error_content_required_keys": [
       "ok",
       "error",
       "error_code"
@@ -195,15 +195,7 @@
           "status_code": "ERROR",
           "directive": "continue",
           "error_code": "command_failed",
-          "content": {
-            "ok": false,
-            "error": "command exited with code 7",
-            "error_code": "command_failed",
-            "cwd": ".",
-            "exit_code": 7,
-            "output": "fixture-output\n",
-            "shell": "bash"
-          },
+        "content": "fixture-output\n",
           "metadata": {
             "error_code": "command_failed",
             "cwd": ".",
