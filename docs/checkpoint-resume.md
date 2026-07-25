@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 3.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 4.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -18,8 +18,8 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v3` and
-`run_definition_schema=vv-agent.run-definition.v2`. Missing, stale, unknown,
+suffix. Records require `schema_version=vv-agent.checkpoint.v4` and
+`run_definition_schema=vv-agent.run-definition.v3`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
 
@@ -113,7 +113,7 @@ claims have one CAS winner and increment the counter exactly once.
 
 The framework persists the complete credential-redacted `run_definition` and
 computes `run_definition_digest` using lowercase SHA-256 over its canonical
-JSON. The definition covers root input, compiled prompt,
+JSON. The definition covers root input, the frozen structured prompt bundle,
 model and model settings, model-visible tool schemas, tool idempotency
 declarations and policy, budgets, workspace/session capability references, and
 extension codec versions. It excludes credential values, store location,
@@ -131,7 +131,7 @@ external work. A digest without its current typed definition is insufficient.
 ### Run Definition Digest
 
 `run_definition.json` defines the exact digest input and two golden vectors.
-The framework serializes the complete `vv-agent.run-definition.v2` object with
+The framework serializes the complete `vv-agent.run-definition.v3` object with
 the RFC 8785 JSON Canonicalization Scheme, hashes the resulting UTF-8 bytes with
 SHA-256, and stores lowercase hexadecimal. Implementations must use an RFC 8785
 implementation rather than approximating it with ordinary sorted-key JSON.
@@ -147,7 +147,7 @@ below declares set normalization. Golden numbers lock `1.0` as `1`, `-0.0` as
 
 The canonical definition contains:
 
-- effective Agent name/type, root input, compiled prompt, caller/session-supplied
+- effective Agent name/type, root input, resolved prompt bundle, caller/session-supplied
   initial messages, initial shared state, public behavior-affecting run metadata,
   and a stable context reference when a process-local context is present;
 - resolved backend, model id, and effective model settings;
@@ -195,8 +195,8 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v3`;
-- `run_definition_schema`, exactly `vv-agent.run-definition.v2`;
+- `schema_version`, exactly `vv-agent.checkpoint.v4`;
+- `run_definition_schema`, exactly `vv-agent.run-definition.v3`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
 - `checkpoint_key`, `task_id`, `root_run_id`, `trace_id`, and
@@ -500,7 +500,7 @@ commit and outbox identities.
 ## Distributed Worker Response
 
 The distributed transport returns one closed current response object with
-`schema_version=vv-agent.distributed-worker-response.v1` and a required `type`
+`schema_version=vv-agent.distributed-worker-response.v2` and a required `type`
 discriminator. The only variants are:
 
 - `pending`, with no state fields, reports that this delivery returned no

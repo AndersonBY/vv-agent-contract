@@ -29,3 +29,5 @@ python3 scripts/contractctl.py build --output-dir dist
 `docs/model-call-accounting.md`。
 类型化工具声明、累计元数据策略和执行生命周期遥测规范见
 `docs/tool-metadata-and-telemetry.md`。
+结构化提示词传播、provider 投影、有界工具结果、artifact/cursor 恢复和当前工具面
+规范见 `docs/prompt-bundles-and-tool-results.md`。

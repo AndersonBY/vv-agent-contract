@@ -1,6 +1,6 @@
 # Tool Metadata And Execution Telemetry
 
-Contract `3.0.0` defines one typed, task-neutral declaration for host policy and
+Contract `4.0.0` defines one typed, task-neutral declaration for host policy and
 execution telemetry. The framework does not inspect prompts, infer semantics
 from tool names or arguments, or decide whether a business answer is complete.
 
@@ -91,7 +91,9 @@ code, `execution_started`, nullable `duration_ms`, and optional typed metadata.
 The objects are closed. Missing required fields and unknown fields are rejected.
 
 Status values are `success`, `error`, `wait_response`, `running`, and
-`pending_compress`. Directive values are `continue`, `finish`, and `wait_user`.
+`pending_compress`. The latter is an internal automatic-compaction status and
+does not expose a model tool. Directive values are `continue`, `finish`, and
+`wait_user`.
 Successful results use `error_code=null`; calls that did not cross the started
 boundary use `duration_ms=null`.
 

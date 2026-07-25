@@ -49,3 +49,6 @@ Complete primary and internal model-call usage, budget, event, and replay
 semantics are defined in `docs/model-call-accounting.md`.
 Typed tool declarations, cumulative metadata policy, and executor lifecycle
 telemetry are defined in `docs/tool-metadata-and-telemetry.md`.
+Structured prompt propagation, provider projection, bounded tool results,
+artifact/cursor recovery, and the current tool surface are defined in
+`docs/prompt-bundles-and-tool-results.md`.

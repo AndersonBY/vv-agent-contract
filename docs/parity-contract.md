@@ -185,8 +185,19 @@ defaults.
 
 `ToolExecutionResult` has one status field: the required typed `status_code`.
 The current wire values are `SUCCESS`, `ERROR`, `WAIT_RESPONSE`, `RUNNING`, and
-`PENDING_COMPRESS`. Unknown fields are rejected, and no reader derives another
+`PENDING_COMPRESS`. `PENDING_COMPRESS` is emitted only by framework-owned
+automatic compaction; it is not a tool exposure, tool name, or model-callable
+state transition. Unknown fields are rejected, and no reader derives another
 status vocabulary from `status_code`.
+
+Contract `4.0.0` additionally applies the sparse bounded-result rules in
+`prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
+fields. Truncated results preserve their recovery pointer through model
+projection, results, journals, checkpoints, and distributed execution.
+
+`ToolExposure` has exactly `direct` and `hidden`. The model-visible
+`compress_memory` tool and its unconsumed `memory_notes` state do not exist;
+automatic framework compaction remains internal.
 
 Metadata policy is denial-only. Denials union across Agent, Runner, run,
 configured-child, agent-as-tool, handoff, and distributed layers. They are
@@ -224,10 +235,15 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v3` and embed an exact
-`vv-agent.run-definition.v2` plus its RFC 8785 SHA-256 digest. Top-level records
+Checkpoint records require `vv-agent.checkpoint.v4` and embed an exact
+`vv-agent.run-definition.v3` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
+
+The run definition stores the resolved `PromptBundle`. Its flat system text is
+derived from ordered sections, and resume never reevaluates instruction/context
+producers or the run clock. `AgentTask` and `LlmRequest` carry the same explicit
+bundle; generic message/request metadata is not a prompt-section transport.
 
 Claims, leases, progress CAS, model-call ledgers, operation journals, event outboxes,
 reconciliation, terminal retention, and acknowledgement have the same atomic
@@ -236,14 +252,14 @@ the host defers, retries under policy, supplies a verified receipt, records a
 typed failure, or explicitly aborts.
 
 Distributed workers accept only
-`schema_version=vv-agent.distributed-run.v2`. Capabilities and the frozen run
+`schema_version=vv-agent.distributed-run.v3`. Capabilities and the frozen run
 definition are resolved and compared before claim. Heartbeats update only the
 lease; progress updates preserve the claim; terminal commit precedes scheduler
 acknowledgement. Redelivery replays a durable terminal without executing the
 model or tools again.
 
 The worker response is a separate closed wire with
-`schema_version=vv-agent.distributed-worker-response.v1` and one required
+`schema_version=vv-agent.distributed-worker-response.v2` and one required
 `type` discriminator. Exactly four variants exist:
 
 - `pending` has no state fields and means that no durable cycle progress was
