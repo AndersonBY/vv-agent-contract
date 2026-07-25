@@ -34,7 +34,17 @@
     "task": {
       "task_id": "run-123",
       "model": "model-x",
-      "system_prompt": "system",
+      "prompt_bundle": {
+        "sections": [
+          {
+            "id": "agent_instructions",
+            "text": "system",
+            "stable": true,
+            "source": "agent.instructions"
+          }
+        ],
+        "stable_hash": "b53c6f835e1e07827228c6a4d2774a33315d5d283253271be302c17686575ff5"
+      },
       "user_prompt": "prompt",
       "max_cycles": 8,
       "memory_compact_threshold": 250000,
