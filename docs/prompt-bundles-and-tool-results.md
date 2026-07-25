@@ -5,6 +5,11 @@ bounded-result extension. Both are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's
 context/output limits.
 
+Contract `4.0.3` corrects the configured-sub-agent producer fixture to use the
+same compact `PromptSection` shape and renderer already required by the prompt
+bundle contract. The obsolete fragment `priority` side channel is not part of
+the current prompt representation.
+
 ## Prompt Bundle
 
 A `PromptBundle` is the only structured system-prompt value after instruction
