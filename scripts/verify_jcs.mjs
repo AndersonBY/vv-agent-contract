@@ -106,20 +106,24 @@ function syncCheckpointRunDefinition(runDefinition) {
     fail("run_definition.json: missing minimal golden case");
   }
 
+  const previousSchema = checkpoint.canonical_checkpoint.run_definition_schema;
+  if (typeof previousSchema !== "string") {
+    fail("checkpoint_codec.json: previous run definition schema is not a string");
+  }
   const payloads = [
     checkpoint.canonical_checkpoint,
     ...checkpoint.valid_cases.map((entry) => entry.payload),
     ...checkpoint.invalid_cases.map((entry) => entry.payload),
   ].filter(
     (payload) =>
-      payload?.run_definition_schema === "vv-agent.run-definition.v2" &&
+      payload?.run_definition_schema === previousSchema &&
       payload.run_definition,
   );
   const previousDefinition = checkpoint.canonical_checkpoint.run_definition;
   const previousCanonical = canonicalize(previousDefinition);
   for (const payload of payloads) {
     if (canonicalize(payload.run_definition) !== previousCanonical) {
-      fail("checkpoint_codec.json: embedded v2 run definitions have drifted");
+      fail("checkpoint_codec.json: embedded current run definitions have drifted");
     }
   }
 
@@ -129,6 +133,7 @@ function syncCheckpointRunDefinition(runDefinition) {
   }
   const nextDigest = vectorValues(minimal.definition).sha256;
   for (const payload of payloads) {
+    payload.run_definition_schema = runDefinition.schema_version;
     payload.run_definition = structuredClone(minimal.definition);
   }
 
@@ -151,18 +156,217 @@ function syncCheckpointRunDefinition(runDefinition) {
   fs.writeFileSync(fixturePath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
 }
 
+function promptScenarioSections(scenario) {
+  return scenario.output?.sections ?? [
+      ...(scenario.input?.instruction_bundle?.sections ?? []),
+      ...(scenario.input?.compiler_owned_sections ?? []),
+      ...[...(scenario.input?.provider_fragments ?? [])]
+        .sort((left, right) =>
+          (left.priority ?? 100) - (right.priority ?? 100) ||
+          Number(left.stable === false) - Number(right.stable === false) ||
+          (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+        )
+        .map(({ priority: _priority, ...section }) => section),
+    ];
+}
+
+function writePromptBundleHashes(promptBundle) {
+  const fixturePath = path.join(ROOT, "fixtures", "prompt_bundle.json");
+  const scenarios = new Map(promptBundle.scenarios.map((scenario) => [scenario.id, scenario]));
+  for (const scenario of promptBundle.scenarios) {
+    const sections = promptScenarioSections(scenario);
+    const sectionIds = sections.map((section) => section.id);
+    const flatPrompt = sections.map((section) => section.text).join("\n\n");
+    if (scenario.output.section_ids && canonicalize(scenario.output.section_ids) !== canonicalize(sectionIds)) {
+      fail(`prompt_bundle/${scenario.id}: section_ids mismatch`);
+    }
+    if (scenario.output.flat_prompt !== flatPrompt) {
+      fail(`prompt_bundle/${scenario.id}: flat_prompt mismatch`);
+    }
+    const stableSections = sections.filter((section) => section.stable);
+    const hash = vectorValues(stableSections).sha256;
+    if (WRITE) {
+      scenario.output.stable_hash = hash;
+    } else if (scenario.output.stable_hash !== hash) {
+      fail(`prompt_bundle/${scenario.id}: stable_hash mismatch`);
+    }
+  }
+
+  for (const vector of promptBundle.stable_hash_vectors) {
+    const scenario = scenarios.get(vector.scenario_ref);
+    if (!scenario) {
+      fail(`prompt_bundle: unknown stable-hash scenario ${vector.scenario_ref}`);
+    }
+    const stableSections = promptScenarioSections(scenario).filter((section) => section.stable);
+    const values = vectorValues(stableSections);
+    for (const [field, value] of Object.entries(values)) {
+      if (WRITE) {
+        vector[field] = value;
+      } else if (vector[field] !== value) {
+        fail(`prompt_bundle/${vector.scenario_ref}: ${field} mismatch`);
+      }
+    }
+  }
+
+  for (const projection of promptBundle.provider_projection.projection_cases) {
+    const scenario = scenarios.get(projection.scenario_ref);
+    if (!scenario) {
+      fail(`prompt_bundle: unknown projection scenario ${projection.scenario_ref}`);
+    }
+    const sections = promptScenarioSections(scenario);
+    const flatPrompt = sections.map((section) => section.text).join("\n\n");
+    let expected;
+    if (projection.mode === "flatten_only") {
+      expected = {
+        system_message: { role: "system", content: flatPrompt },
+        cache_control_fields: [],
+      };
+    } else if (projection.mode === "explicit_section_cache") {
+      let leadingStableCount = 0;
+      while (leadingStableCount < sections.length && sections[leadingStableCount].stable) {
+        leadingStableCount += 1;
+      }
+      const boundary = leadingStableCount > 0 ? leadingStableCount - 1 : null;
+      expected = {
+        system_blocks: sections.map((section, index) => ({
+          type: "text",
+          text: `${section.text}${index + 1 < sections.length ? "\n\n" : ""}`,
+          ...(index === boundary ? { cache_control: { type: "ephemeral" } } : {}),
+        })),
+        cache_boundary_block_index: boundary,
+      };
+    } else {
+      fail(`prompt_bundle/${projection.name}: unknown projection mode ${projection.mode}`);
+    }
+    if (WRITE) {
+      projection.expected = expected;
+    } else if (canonicalize(projection.expected) !== canonicalize(expected)) {
+      fail(`prompt_bundle/${projection.name}: provider projection mismatch`);
+    }
+  }
+  if (WRITE) {
+    fs.writeFileSync(fixturePath, `${JSON.stringify(promptBundle, null, 2)}\n`, "utf8");
+  }
+}
+
+function writeRunDefinitionPromptBundleHashes(runDefinition) {
+  for (const vector of runDefinition.golden_cases) {
+    const bundle = vector.definition?.prompt_bundle;
+    if (!bundle || !Array.isArray(bundle.sections) || bundle.sections.length === 0) {
+      fail(`run_definition/${vector.name}: missing non-empty prompt bundle`);
+    }
+    const hash = vectorValues(
+      bundle.sections.filter((section) => section.stable === true),
+    ).sha256;
+    if (WRITE) {
+      bundle.stable_hash = hash;
+    } else if (bundle.stable_hash !== hash) {
+      fail(`run_definition/${vector.name}: prompt bundle stable_hash mismatch`);
+    }
+  }
+  if (WRITE) {
+    fs.writeFileSync(
+      path.join(ROOT, "fixtures", "run_definition.json"),
+      `${JSON.stringify(runDefinition, null, 2)}\n`,
+      "utf8",
+    );
+  }
+}
+
+function writeBoundedToolResultProjections(fixture) {
+  const fixturePath = path.join(ROOT, "fixtures", "bounded_tool_result.json");
+  const recoveryFields = fixture.tool_message_projection.recovery_fields;
+  for (const [name, result] of Object.entries(fixture.canonical_results)) {
+    if (result.truncated === true) {
+      if (Buffer.byteLength(result.content, "utf8") !== result.visible_bytes) {
+        fail(`bounded_tool_result/${name}: visible_bytes mismatch`);
+      }
+      if (result.visible_bytes > result.original_bytes) {
+        fail(`bounded_tool_result/${name}: visible_bytes exceeds original_bytes`);
+      }
+    }
+  }
+  const artifactPattern = new RegExp(fixture.artifact_contract.path.pattern);
+  for (const [name, result] of Object.entries(fixture.canonical_results)) {
+    if (result.artifact && !artifactPattern.test(result.artifact.path)) {
+      fail(`bounded_tool_result/${name}: unsafe canonical artifact path`);
+    }
+  }
+  const markerChars = Array.from(fixture.bash_contract.omission_marker).length;
+  if (
+    fixture.bash_contract.head_chars +
+      markerChars +
+      fixture.bash_contract.tail_chars !==
+    fixture.bash_contract.preview_limit_chars
+  ) {
+    fail("bounded_tool_result: bash preview allocation does not equal limit");
+  }
+  for (const projection of fixture.tool_message_projection.cases) {
+    const result = fixture.canonical_results[projection.result_ref];
+    if (!result) {
+      fail(`bounded_tool_result/${projection.name}: unknown result ref`);
+    }
+    const recovery = Object.fromEntries(
+      recoveryFields.filter((field) => field in result).map((field) => [field, result[field]]),
+    );
+    const expected = result.truncated === true
+      ? `${result.content}\n${canonicalize({ vv_agent_recovery: recovery })}`
+      : result.content;
+    if (WRITE) {
+      projection.expected_message = expected;
+    } else if (projection.expected_message !== expected) {
+      fail(`bounded_tool_result/${projection.name}: tool-message projection mismatch`);
+    }
+  }
+  if (WRITE) {
+    fs.writeFileSync(fixturePath, `${JSON.stringify(fixture, null, 2)}\n`, "utf8");
+  }
+}
+
 const runDefinition = readFixture("run_definition.json");
+writeRunDefinitionPromptBundleHashes(runDefinition);
 for (const vector of runDefinition.golden_cases) {
   verifyVector(`run_definition/${vector.name}`, vector.definition, vector);
 }
+
+const promptBundle = readFixture("prompt_bundle.json");
+writePromptBundleHashes(promptBundle);
+
+const boundedToolResult = readFixture("bounded_tool_result.json");
+writeBoundedToolResultProjections(boundedToolResult);
 
 if (WRITE) {
   syncCheckpointRunDefinition(runDefinition);
 }
 
 const operationJournal = readFixture("operation_journal.json");
+const operationRequestVectors = new Map();
 for (const vector of operationJournal.request_digest.golden_cases) {
-  verifyVector(`operation_request/${vector.name}`, vector.request, vector);
+  const values = vectorValues(vector.request);
+  operationRequestVectors.set(vector.name, values);
+  if (WRITE) {
+    Object.assign(vector, values);
+  } else {
+    verifyVector(`operation_request/${vector.name}`, vector.request, vector);
+  }
+}
+for (const entryCase of operationJournal.valid_entries) {
+  const vector = operationRequestVectors.get(entryCase.request_golden_case);
+  if (!vector) {
+    fail(`operation_journal/${entryCase.name}: unknown request golden case`);
+  }
+  if (WRITE) {
+    entryCase.entry.request_digest = vector.sha256;
+  } else if (entryCase.entry.request_digest !== vector.sha256) {
+    fail(`operation_journal/${entryCase.name}: request_digest mismatch`);
+  }
+}
+if (WRITE) {
+  fs.writeFileSync(
+    path.join(ROOT, "fixtures", "operation_journal.json"),
+    `${JSON.stringify(operationJournal, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 const checkpoint = readFixture("checkpoint_codec.json");
@@ -200,6 +404,29 @@ for (const vector of checkpointStore.event_payload_digest.golden_cases) {
 }
 
 const checkpointResume = readFixture("checkpoint_resume.json");
+const frozenPromptResume = checkpointResume.runner_cases.find(
+  (entry) => entry.name === "frozen_prompt_bundle_resume_does_not_reinvoke_producers",
+);
+if (!frozenPromptResume) {
+  fail("checkpoint_resume.json: missing frozen prompt bundle resume case");
+}
+const frozenPromptBundle = frozenPromptResume.run?.frozen_prompt_bundle;
+if (!frozenPromptBundle || !Array.isArray(frozenPromptBundle.sections)) {
+  fail("checkpoint_resume.json: frozen prompt bundle resume case is malformed");
+}
+const frozenStableHash = vectorValues(
+  frozenPromptBundle.sections.filter((section) => section.stable === true),
+).sha256;
+if (WRITE) {
+  frozenPromptBundle.stable_hash = frozenStableHash;
+  fs.writeFileSync(
+    path.join(ROOT, "fixtures", "checkpoint_resume.json"),
+    `${JSON.stringify(checkpointResume, null, 2)}\n`,
+    "utf8",
+  );
+} else if (frozenPromptBundle.stable_hash !== frozenStableHash) {
+  fail("checkpoint_resume/frozen_prompt_bundle: stable_hash mismatch");
+}
 verifyVector(
   "checkpoint_session_commit/golden_case",
   checkpointResume.session_persistence.golden_case.payload,
@@ -208,11 +435,6 @@ verifyVector(
 
 if (WRITE) {
   writeGeneratedFields("run_definition.json", runDefinition.golden_cases, "definition");
-  writeGeneratedFields(
-    "operation_journal.json",
-    operationJournal.request_digest.golden_cases,
-    "request",
-  );
   writeGeneratedFields(
     "checkpoint_codec.json",
     checkpoint.extension_limits.canonicalization_vectors,

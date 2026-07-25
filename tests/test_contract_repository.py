@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -69,10 +71,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "3.0.0")
+        self.assertEqual(report["version"], "4.0.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 50)
-        self.assertEqual(report["manifest_entries"], 49)
+        self.assertEqual(report["fixture_files"], 51)
+        self.assertEqual(report["manifest_entries"], 50)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
@@ -290,35 +292,364 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads(
             (ROOT / "fixtures/prompt_bundle.json").read_text(encoding="utf-8")
         )
-        gate = fixture["session_memory_gate"]
-        scenarios = {case["id"]: case for case in fixture["scenarios"]}
-
-        self.assertFalse(gate["default"])
-        self.assertTrue(gate["session_memory_section_requires_enabled_true"])
-        self.assertTrue(gate["context_presence_does_not_enable_session_memory"])
+        self.assertEqual(fixture["schema_version"], "vv-agent.prompt-bundle.v2")
         self.assertEqual(
-            {case["name"] for case in gate["probe_cases"]},
+            fixture["run_scope"]["checkpoint_resume"],
+            "restore_frozen_bundle_without_producer_or_clock_access",
+        )
+        self.assertIn(
+            "system_prompt_sections_metadata_transport",
+            fixture["compiler_contract"]["forbidden"],
+        )
+        scenarios = {case["id"]: case for case in fixture["scenarios"]}
+        self.assertTrue({"en-US-full", "zh-CN-full", "en-US-minimal"}.issubset(scenarios))
+        for scenario_id in ("en-US-full", "zh-CN-full", "en-US-minimal"):
+            resolved = scenarios[scenario_id]["output"]
+            self.assertEqual(
+                resolved["flat_prompt"],
+                "\n\n".join(section["text"] for section in resolved["sections"]),
+            )
+            self.assertEqual(len(resolved["stable_hash"]), 64)
+        minimal = scenarios["en-US-minimal"]["output"]
+        self.assertNotIn("session_memory", {section["id"] for section in minimal["sections"]})
+        gate_cases = {case["name"]: case for case in fixture["session_memory_gate"]["probe_cases"]}
+        self.assertEqual(
+            set(gate_cases),
             {
                 "explicit_false_ignores_nonempty_context",
                 "omitted_control_ignores_nonempty_context",
             },
         )
-        for scenario_id in ("en-US-full", "zh-CN-full"):
-            scenario = scenarios[scenario_id]
-            self.assertTrue(scenario["input"]["session_memory_enabled"])
+        for case in gate_cases.values():
+            self.assertEqual(case["expected_session_memory_section_count"], 0)
+            self.assertEqual(case["expected_storage_reads"], 0)
+            self.assertEqual(case["expected_storage_writes"], 0)
+        compiler = scenarios["compiler-preserves-instruction-sections"]["output"]
+        self.assertEqual(
+            compiler["section_ids"][:2],
+            ["identity", "run_data"],
+        )
+        run_scope_cases = {
+            case["name"]: case for case in fixture["run_scope"]["conformance_cases"]
+        }
+        self.assertEqual(run_scope_cases["three_cycles_reuse_one_resolution"]["expected_clock_reads"], 1)
+        resumed = run_scope_cases["checkpoint_resume_uses_frozen_bundle"]
+        self.assertEqual(resumed["expected_resume_instruction_producer_calls"], 0)
+        self.assertEqual(resumed["expected_resume_context_provider_calls"], 0)
+        self.assertEqual(resumed["expected_resume_clock_reads"], 0)
+
+        projections = {
+            case["name"]: case
+            for case in fixture["provider_projection"]["projection_cases"]
+        }
+        cached = projections["section_cache_en_US_full"]["expected"]
+        self.assertEqual(cached["cache_boundary_block_index"], 2)
+        self.assertEqual(
+            "".join(block["text"] for block in cached["system_blocks"]),
+            scenarios["en-US-full"]["output"]["flat_prompt"],
+        )
+        self.assertEqual(
+            [index for index, block in enumerate(cached["system_blocks"]) if "cache_control" in block],
+            [2],
+        )
+        no_prefix = projections["section_cache_no_leading_stable_prefix"]["expected"]
+        self.assertIsNone(no_prefix["cache_boundary_block_index"])
+        self.assertTrue(all("cache_control" not in block for block in no_prefix["system_blocks"]))
+        invalid_names = {case["name"] for case in fixture["invalid_cases"]}
+        self.assertTrue(
+            {
+                "missing_stable_hash",
+                "stable_hash_mismatch",
+                "unknown_bundle_field",
+                "unknown_section_field",
+                "metadata_section_side_channel",
+                "stale_run_definition_schema",
+            }.issubset(invalid_names)
+        )
+
+    def test_bounded_tool_result_is_sparse_and_recoverable(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/bounded_tool_result.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            fixture["schema_version"], "vv-agent.tool-execution-result.v2"
+        )
+        ordinary = fixture["canonical_results"]["ordinary"]
+        self.assertEqual(
+            set(ordinary),
+            {"tool_call_id", "content", "status_code", "directive"},
+        )
+        truncated = fixture["canonical_results"]["truncated_bash"]
+        self.assertTrue(truncated["truncated"])
+        self.assertTrue(truncated["artifact"]["path"].startswith(".vv-agent/artifacts/"))
+        self.assertEqual(fixture["read_file_contract"]["content_null"], False)
+        self.assertEqual(
+            fixture["cursor_contract"]["changed_source_error_code"], "stale_cursor"
+        )
+        self.assertIn("path", fixture["cursor_contract"]["required_fields"])
+        self.assertEqual(
+            len(fixture["bash_contract"]["omission_marker"])
+            + fixture["bash_contract"]["head_chars"]
+            + fixture["bash_contract"]["tail_chars"],
+            fixture["bash_contract"]["preview_limit_chars"],
+        )
+
+        required = set(fixture["result_contract"]["required_fields"])
+        optional = set(fixture["result_contract"]["optional_fields"])
+        truncation_fields = {
+            "truncated",
+            "truncation_reason",
+            "original_bytes",
+            "visible_bytes",
+            "artifact",
+            "cursor",
+        }
+        artifact_pattern = re.compile(fixture["artifact_contract"]["path"]["pattern"])
+
+        def validate_result(result: dict[str, object]) -> None:
+            keys = set(result)
+            if not required.issubset(keys) or not keys.issubset(required | optional):
+                raise ValueError("shape")
+            if any(result[key] is None for key in keys & optional):
+                raise ValueError("null optional")
+            if result.get("truncated") is not True:
+                if keys & truncation_fields:
+                    raise ValueError("ordinary recovery fields")
+                return
+            for key in ("truncation_reason", "original_bytes", "visible_bytes"):
+                if key not in result:
+                    raise ValueError("missing truncation field")
+            if result["visible_bytes"] != len(str(result["content"]).encode("utf-8")):
+                raise ValueError("visible bytes")
+            if int(result["visible_bytes"]) > int(result["original_bytes"]):
+                raise ValueError("size order")
+            reason = result["truncation_reason"]
+            if reason == "output_limit":
+                if "artifact" not in result or "cursor" in result:
+                    raise ValueError("output recovery")
+                artifact = result["artifact"]
+                if not isinstance(artifact, dict) or not artifact_pattern.fullmatch(str(artifact["path"])):
+                    raise ValueError("artifact path")
+            elif reason == "read_limit":
+                if "cursor" not in result or "artifact" in result:
+                    raise ValueError("read recovery")
+                cursor = result["cursor"]
+                if not isinstance(cursor, dict) or set(cursor) != {
+                    "kind",
+                    "path",
+                    "offset_chars",
+                    "sha256",
+                }:
+                    raise ValueError("cursor shape")
+            else:
+                raise ValueError("reason")
+
+        for result in fixture["canonical_results"].values():
+            validate_result(result)
+
+        def mutate(base: dict[str, object], mutation: dict[str, object]) -> dict[str, object]:
+            result = copy.deepcopy(base)
+            for operation in ("remove", "replace", "add"):
+                value = mutation.get(operation)
+                if value is None:
+                    continue
+                entries = [value] if operation == "remove" else list(value.items())
+                for entry in entries:
+                    path, replacement = (entry, None) if operation == "remove" else entry
+                    parts = str(path).split(".")
+                    target = result
+                    for part in parts[:-1]:
+                        target = target[part]  # type: ignore[assignment,index]
+                    if operation == "remove":
+                        target.pop(parts[-1], None)  # type: ignore[union-attr]
+                    else:
+                        target[parts[-1]] = replacement  # type: ignore[index]
+            return result
+
+        static_invalid = [
+            case
+            for case in fixture["invalid_cases"]
+            if "base" in case and "mutation" in case and case["name"] not in {
+                "cursor_path_mismatch",
+                "cursor_source_changed",
+                "cursor_offset_past_end",
+            }
+        ]
+        for case in static_invalid:
+            with self.subTest(case=case["name"]):
+                candidate = mutate(fixture["canonical_results"][case["base"]], case["mutation"])
+                with self.assertRaises(ValueError):
+                    validate_result(candidate)
+
+    def test_truncated_tool_result_is_preserved_across_all_durable_wires(self) -> None:
+        bounded = json.loads(
+            (ROOT / "fixtures/bounded_tool_result.json").read_text(encoding="utf-8")
+        )
+        expected = bounded["canonical_results"]["truncated_bash"]
+        expected_bytes = json.dumps(
+            expected,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        result_required = {"tool_call_id", "content", "status_code", "directive"}
+        optional_fields = set(bounded["result_contract"]["optional_fields"])
+
+        def walk(value: object):
+            yield value
+            if isinstance(value, dict):
+                for nested in value.values():
+                    yield from walk(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    yield from walk(nested)
+
+        for name in (
+            "result_public.json",
+            "operation_journal.json",
+            "checkpoint_codec.json",
+            "checkpoint_resume.json",
+            "distributed_worker_response.json",
+        ):
+            fixture = json.loads((ROOT / "fixtures" / name).read_text(encoding="utf-8"))
+            values = list(walk(fixture))
+            serialized = [
+                json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                for value in values
+                if isinstance(value, dict)
+            ]
+            self.assertIn(expected_bytes, serialized, name)
+            for value in values:
+                if isinstance(value, dict) and result_required.issubset(value):
+                    self.assertFalse(
+                        any(value.get(field) is None for field in optional_fields if field in value),
+                        f"{name}: optional ToolExecutionResult fields must be omitted",
+                    )
+
+        journal = json.loads(
+            (ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8")
+        )
+        recovery = {case["name"]: case for case in journal["recovery_cases"]}
+        replay = recovery["durable_truncated_tool_result_is_replayed"]["expected"]
+        self.assertEqual(replay["tool_calls"], 0)
+        self.assertEqual(replay["artifact_rewrites"], 0)
+        self.assertTrue(replay["result_bytes_preserved"])
+        request_vectors = {
+            case["name"]: case
+            for case in journal["request_digest"]["golden_cases"]
+        }
+        bash_request = request_vectors["tool_bash_large_output"]
+        checkpoint = json.loads(
+            (ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8")
+        )
+        checkpoint_journal = checkpoint["canonical_checkpoint"]["tool_journal"][0]
+        self.assertEqual(checkpoint_journal["request_digest"], bash_request["sha256"])
+        self.assertEqual(checkpoint_journal["tool_call_id"], expected["tool_call_id"])
+        self.assertEqual(checkpoint_journal["arguments"], bash_request["request"]["request"]["arguments"])
+
+    def test_current_builtin_surface_is_compact_and_has_only_real_exposure(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/builtin_tools.json").read_text(encoding="utf-8")
+        )
+        tools = {tool["name"]: tool for tool in fixture["tools"]}
+        self.assertEqual(fixture["schema_version"], 2)
+        self.assertEqual(
+            set(tools),
+            {
+                "task_finish",
+                "ask_user",
+                "activate_skill",
+                "todo_write",
+                "find_files",
+                "file_info",
+                "read_file",
+                "write_file",
+                "edit_file",
+                "search_files",
+                "bash",
+                "check_background_command",
+                "create_sub_task",
+                "sub_task_status",
+                "read_image",
+            },
+        )
+        self.assertNotIn("compress_memory", tools)
+        self.assertEqual({tool["exposure"] for tool in tools.values()}, {"direct"})
+        self.assertEqual(
+            fixture["exposure_contract"]["allowed_values"],
+            ["direct", "hidden"],
+        )
+        self.assertNotIn("deferred", fixture["exposure_contract"]["allowed_values"])
+        behavior = json.loads(
+            (ROOT / "fixtures/builtin_tool_behavior.json").read_text(encoding="utf-8")
+        )
+        exposure_cases = {case["value"]: case for case in behavior["registry"]["exposure_cases"]}
+        self.assertEqual(
+            {value for value, case in exposure_cases.items() if case["valid"]},
+            {"direct", "hidden"},
+        )
+        self.assertFalse(exposure_cases["deferred"]["valid"])
+        self.assertTrue(all(len(tool["description"]) < 500 for tool in tools.values()))
+        self.assertIn("optional", tools["task_finish"]["description"])
+        self.assertIn("cursor", tools["read_file"]["parameters"]["properties"])
+        for path in sorted((ROOT / "fixtures").glob("*.json")):
+            self.assertNotIn("memory_notes", path.read_text(encoding="utf-8"), path.name)
+
+        public_api = json.loads(
+            (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
+        )
+        capabilities = {
+            item["id"]
+            for domain in public_api["domains"]
+            for item in domain["capabilities"]
+        }
+        self.assertTrue(
+            {
+                "agent.prompt_bundle",
+                "agent.prompt_section",
+                "tools.execution_result",
+                "tools.artifact_ref",
+                "tools.result_cursor",
+            }.issubset(capabilities)
+        )
+        surfaces = {surface["id"]: surface for surface in public_api["surfaces"]}
+        expected_tool_members = {
+            "tool_execution_result": {
+                "tool_call_id",
+                "content",
+                "status_code",
+                "directive",
+                "error_code",
+                "metadata",
+                "image_url",
+                "image_path",
+                "truncated",
+                "truncation_reason",
+                "original_bytes",
+                "visible_bytes",
+                "artifact",
+                "cursor",
+            },
+            "tool_artifact_ref": {
+                "path",
+                "media_type",
+                "encoding",
+                "size_bytes",
+                "sha256",
+            },
+            "tool_result_cursor": {"kind", "path", "offset_chars", "sha256"},
+        }
+        for surface_id, members in expected_tool_members.items():
             self.assertEqual(
-                [section["id"] for section in scenario["output"]["sections"]].count(
-                    "session_memory"
-                ),
-                1,
+                {member["id"] for member in surfaces[surface_id]["members"]},
+                members,
             )
-        disabled = scenarios["en-US-minimal"]
-        self.assertFalse(disabled["input"]["session_memory_enabled"])
-        self.assertTrue(disabled["input"]["session_memory_context"])
-        self.assertNotIn("MUST NOT RENDER", disabled["output"]["prompt"])
-        self.assertNotIn(
-            "session_memory",
-            {section["id"] for section in disabled["output"]["sections"]},
+        llm_request = surfaces["llm_request"]
+        self.assertIn("prompt_bundle", {member["id"] for member in llm_request["members"]})
+        llm_client = surfaces["llm_client"]
+        complete = next(member for member in llm_client["members"] if member["id"] == "complete")
+        self.assertEqual(
+            [parameter["name"] for parameter in complete["python"]["signature"]["parameters"]],
+            ["self", "request"],
         )
 
     def test_release_bundle_is_deterministic(self) -> None:
@@ -1310,7 +1641,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 151)
+        self.assertEqual(len(capabilities), 156)
         self.assertNotIn("runtime_backend.cycle_runner", capabilities)
         self.assertIn("agent.sub_agent_config", capabilities)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
@@ -1323,7 +1654,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 249)
+        self.assertEqual(surface_member_count, 286)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
@@ -1548,6 +1879,12 @@ class ContractRepositoryTests(unittest.TestCase):
         ):
             self.assertIn(expected_number, full_canonical)
         self.assertEqual(full["root_input"], "核对 café 订单 42。")
+        self.assertEqual(
+            full["prompt_bundle"]["sections"][0]["text"],
+            "Use tools carefully.\nDo not guess.",
+        )
+        self.assertEqual(len(full["prompt_bundle"]["stable_hash"]), 64)
+        self.assertNotIn("compiled_prompt", full)
         headers = full["model"]["settings"]["extra_headers"]
         self.assertEqual(headers["authorization"], "<credential-redacted>")
         self.assertEqual(headers["x-feature"], "reasoning-v2")
@@ -1592,6 +1929,8 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(
             {
                 "/agent",
+                "/prompt_bundle",
+                "/prompt_bundle/sections/*",
                 "/model",
                 "/model/settings",
                 "/runtime_controls",
@@ -1669,6 +2008,14 @@ class ContractRepositoryTests(unittest.TestCase):
                 "extension_missing_version",
                 "capability_ref_unknown_field",
                 "capability_ref_missing_version",
+                "legacy_compiled_prompt_field",
+                "prompt_bundle_missing_sections",
+                "prompt_bundle_empty_sections",
+                "prompt_bundle_unknown_field",
+                "prompt_section_missing_stable",
+                "prompt_section_unknown_field",
+                "prompt_section_duplicate_id",
+                "prompt_bundle_stable_hash_mismatch",
             }.issubset(invalid_names)
         )
 
@@ -1689,8 +2036,8 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v3")
-        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v2")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v4")
+        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v3")
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
@@ -1698,14 +2045,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v3",
+                "required_value": "vv-agent.checkpoint.v4",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
         self.assertEqual(
             fixture["run_definition_schema_rules"],
             {
-                "required_value": "vv-agent.run-definition.v2",
+                "required_value": "vv-agent.run-definition.v3",
                 "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
                 "failure_boundary": "before_claim_model_or_tool",
             },
@@ -2183,6 +2530,21 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(approval["expected"]["approval_claim_same_key_is_idempotent"])
         self.assertTrue(approval["expected"]["approval_claim_different_key_is_rejected"])
 
+        frozen = cases["frozen_prompt_bundle_resume_does_not_reinvoke_producers"]
+        bundle = frozen["run"]["frozen_prompt_bundle"]
+        self.assertEqual(
+            [section["id"] for section in bundle["sections"]],
+            ["agent_instructions", "session_memory", "current_time", "callback_context"],
+        )
+        self.assertEqual(len(bundle["stable_hash"]), 64)
+        for producer in frozen["run"]["resume_producers"].values():
+            self.assertEqual(producer["behavior"], "poison")
+            self.assertEqual(producer["expected_calls"], 0)
+        self.assertEqual(frozen["expected"]["instruction_callback_calls"], 0)
+        self.assertEqual(frozen["expected"]["context_provider_calls"], 0)
+        self.assertEqual(frozen["expected"]["clock_reads"], 0)
+        self.assertEqual(frozen["expected"]["prompt_bundle_relation"], "byte_equal")
+
         session = fixture["session_persistence"]
         vector = session["golden_case"]
         checkpoint_digest = hashlib.sha256(vector["checkpoint_key"].encode("utf-8")).hexdigest()
@@ -2331,8 +2693,8 @@ class ContractRepositoryTests(unittest.TestCase):
         envelope = fixture["canonical_envelope"]
         capabilities = envelope["recipe"]["capabilities"]
 
-        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v2")
-        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v2")
+        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v3")
+        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v3")
         unsupported_definition_schema = next(
             case
             for case in fixture["invalid_cases"]
@@ -2414,7 +2776,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(
             fixture["schema_version"],
-            "vv-agent.distributed-worker-response.v1",
+            "vv-agent.distributed-worker-response.v2",
         )
         rules = fixture["wire_rules"]
         self.assertEqual(rules["discriminator"], "type")
@@ -2601,8 +2963,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v3",
-                    "vv-agent.run-definition.v2",
+                    "vv-agent.checkpoint.v4",
+                    "vv-agent.run-definition.v3",
                     "{}",
                     "task-1",
                     "run-1",
@@ -2641,7 +3003,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     "SELECT run_definition_schema FROM checkpoints WHERE checkpoint_key = ?",
                     ("checkpoint-key",),
                 ).fetchone(),
-                ("vv-agent.run-definition.v2",),
+                ("vv-agent.run-definition.v3",),
             )
         finally:
             connection.close()
@@ -2670,7 +3032,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 50)
+            self.assertEqual(synced["fixture_files"], 51)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
