@@ -1,6 +1,6 @@
 # Prompt Bundles And Bounded Tool Results
 
-Contract `4.0.1` defines one resolved prompt representation and one sparse
+Contract `4.0.2` defines one resolved prompt representation and one sparse
 bounded-result extension. Both are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's
 context/output limits.

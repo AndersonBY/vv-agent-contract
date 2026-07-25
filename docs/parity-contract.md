@@ -190,7 +190,7 @@ automatic compaction; it is not a tool exposure, tool name, or model-callable
 state transition. Unknown fields are rejected, and no reader derives another
 status vocabulary from `status_code`.
 
-Contract `4.0.1` additionally applies the sparse bounded-result rules in
+Contract `4.0.2` additionally applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -253,7 +253,9 @@ typed failure, or explicitly aborts.
 
 Distributed workers accept only
 `schema_version=vv-agent.distributed-run.v3`. Capabilities and the frozen run
-definition are resolved and compared before claim. Heartbeats update only the
+definition are resolved and compared before claim. The envelope `task` is the
+current `AgentTask` wire and carries `prompt_bundle`; it has no separate
+`system_prompt` field. Heartbeats update only the
 lease; progress updates preserve the claim; terminal commit precedes scheduler
 acknowledgement. Redelivery replays a durable terminal without executing the
 model or tools again.

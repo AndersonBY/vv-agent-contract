@@ -332,6 +332,32 @@ for (const vector of runDefinition.golden_cases) {
 const promptBundle = readFixture("prompt_bundle.json");
 writePromptBundleHashes(promptBundle);
 
+const distributedRun = readFixture("distributed_run_envelope.json");
+const distributedPromptBundle = distributedRun.canonical_envelope?.task?.prompt_bundle;
+if (!distributedPromptBundle || !Array.isArray(distributedPromptBundle.sections) || distributedPromptBundle.sections.length === 0) {
+  fail("distributed_run_envelope: task is missing a non-empty prompt bundle");
+}
+const distributedStableHash = vectorValues(
+  distributedPromptBundle.sections.filter((section) => section.stable === true),
+).sha256;
+if (WRITE) {
+  const fixturePath = path.join(ROOT, "fixtures", "distributed_run_envelope.json");
+  let source = fs.readFileSync(fixturePath, "utf8");
+  const taskStart = source.indexOf('"task": {');
+  const hashStart = source.indexOf('"stable_hash":', taskStart);
+  if (taskStart < 0 || hashStart < 0) {
+    fail("distributed_run_envelope: cannot locate task prompt bundle stable_hash");
+  }
+  const hashEnd = source.indexOf("\n", hashStart);
+  const oldLine = source.slice(hashStart, hashEnd);
+  const comma = oldLine.endsWith(",") ? "," : "";
+  const nextLine = `"stable_hash": ${JSON.stringify(distributedStableHash)}${comma}`;
+  source = `${source.slice(0, hashStart)}${nextLine}${source.slice(hashEnd)}`;
+  fs.writeFileSync(fixturePath, source, "utf8");
+} else if (distributedPromptBundle.stable_hash !== distributedStableHash) {
+  fail("distributed_run_envelope: task prompt bundle stable_hash mismatch");
+}
+
 const boundedToolResult = readFixture("bounded_tool_result.json");
 writeBoundedToolResultProjections(boundedToolResult);
 

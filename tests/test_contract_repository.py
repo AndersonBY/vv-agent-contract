@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "4.0.1")
+        self.assertEqual(report["version"], "4.0.2")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -1485,11 +1485,15 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(records[2]["budget_usage"], records[1]["budget_usage"])
 
     def test_distributed_contract_carries_limits_meter_reference_and_budget_state(self) -> None:
-        envelope = json.loads(
+        distributed = json.loads(
             (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
-        )["canonical_envelope"]
+        )
+        envelope = distributed["canonical_envelope"]
         checkpoint = json.loads(
             (ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8")
+        )
+        public_api = json.loads(
+            (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
 
         self.assertEqual(envelope["budget_limits"]["max_total_tokens"], 5000)
@@ -1498,6 +1502,27 @@ class ContractRepositoryTests(unittest.TestCase):
             {"id": "cost.tenant-run", "version": "1"},
         )
         self.assertEqual(checkpoint["canonical_checkpoint"]["budget_usage"]["elapsed_ms"], 125)
+        task = envelope["task"]
+        self.assertIn("prompt_bundle", task)
+        self.assertNotIn("system_prompt", task)
+        agent_task_surface = next(
+            surface for surface in public_api["surfaces"] if surface["id"] == "agent_task"
+        )
+        self.assertTrue(
+            {member["id"] for member in agent_task_surface["members"]}.issubset(task)
+        )
+        self.assertEqual(
+            task["prompt_bundle"]["sections"],
+            [
+                {
+                    "id": "agent_instructions",
+                    "text": "system",
+                    "stable": True,
+                    "source": "agent.instructions",
+                }
+            ],
+        )
+        self.assertEqual(len(task["prompt_bundle"]["stable_hash"]), 64)
 
     def test_completion_policy_is_task_agnostic(self) -> None:
         fixture = json.loads((ROOT / "fixtures/completion_policy.json").read_text(encoding="utf-8"))
