@@ -1,6 +1,6 @@
 # Model Call Accounting And Recovery
 
-Contract `4.0.0` makes every framework-issued model attempt observable and
+Contract `4.0.1` makes every framework-issued model attempt observable and
 budgeted. The contract is task-neutral: it records which runtime mechanism
 requested inference, but never infers a task category, semantic progress, or
 answer quality.
