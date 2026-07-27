@@ -13,6 +13,10 @@ typed sequence, and `RunEventStore` provides replay under its declared failure
 policy. There is no public runtime-log callback and no public provider-payload
 callback.
 
+The only current event discriminator is `version=v2`. Missing, stale `v1`,
+unknown, malformed, and future versions are rejected without a compatibility
+decoder.
+
 Observer failure is isolated from execution. A configured event store remains
 separate: fail-open stores report and continue, while an explicitly selected
 fail-closed store may stop the run according to the storage contract.

@@ -145,7 +145,7 @@ and other provider field names remain inside adapter input and
 
 ## Events And Streaming
 
-RunEvent v1 is a closed, typed wire. Every event requires `version=v1`,
+RunEvent v2 is a closed, typed wire. Every event requires `version=v2`,
 identity, and a finite non-negative `created_at` in Unix seconds. Approval
 resolution carries exactly one `action` value.
 
@@ -188,9 +188,14 @@ emergency compaction.
 
 `MicrocompactionPolicy` is a public closed value with `trigger_ratio`,
 `target_ratio`, `keep_recent_cycles`, and `min_result_chars`. `RunConfig`
-selects it, `AgentTask` carries it explicitly, and run-definition schema v4
+selects it, `AgentTask` carries it explicitly, and run-definition schema v5
 freezes it under `runtime_controls.microcompaction_policy`. Implementations
 must not encode this policy in generic task or run metadata.
+Both ratios are finite numbers in `(0, 1]`, with
+`target_ratio < trigger_ratio`. `keep_recent_cycles` is an integer in
+`0..4294967295`; `min_result_chars` is an integer in `1..4294967295`.
+Booleans, null, float-encoded integers, missing fields, unknown fields,
+non-finite host values, and out-of-range values are rejected.
 
 `ToolExecutionResult` has one status field: the required typed `status_code`.
 The current wire values are `SUCCESS`, `ERROR`, `WAIT_RESPONSE`, `RUNNING`, and
@@ -199,7 +204,7 @@ automatic compaction; it is not a tool exposure, tool name, or model-callable
 state transition. Unknown fields are rejected, and no reader derives another
 status vocabulary from `status_code`.
 
-Contract `5.0.0` additionally applies the sparse bounded-result rules in
+Contract `6.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -210,6 +215,14 @@ cycle. Every replaced result is first persisted under
 model-visible marker contains only tool name, artifact path, retrieval hint,
 and a bounded excerpt. Byte counts, character counts, and hashes remain
 outside model context.
+An existing artifact may be reused only after reading its persisted content
+through the effective workspace backend and verifying both the UTF-8 byte
+length against `size_bytes` and lowercase SHA-256 against `sha256`. Any read,
+size, or digest failure preserves the original message. The application pass
+measures each successful replacement using the actual original-message token
+count minus the actual replacement-message token count and stops only when
+actual post-replacement usage reaches the target or candidates are exhausted;
+planner estimates never satisfy the target by themselves.
 
 `ToolExposure` has exactly `direct` and `hidden`. The model-visible
 `compress_memory` tool and its unconsumed `memory_notes` state do not exist;
@@ -244,6 +257,14 @@ Session items use one canonical current wire and one current SQLite schema.
 Stores reject any other schema. Message roles, tool-call structure, metadata
 types, and session item variants are validated strictly.
 
+`Message` has an optional typed `artifact_ref: ToolArtifactRef`. It is omitted
+when absent and preserved by host APIs, sessions, results, journals,
+checkpoints, run definitions, and distributed wires. Its object is closed and
+uses the same normalized artifact path, UTF-8 byte size, and lowercase SHA-256
+contract as tool results. Provider/model projection always removes
+`artifact_ref`; recovery remains available through the marker's
+`artifact_path` and the policy-checked `read_file` tool.
+
 Continuation sanitization keeps only complete assistant tool-call/result
 blocks in matching order. Orphan, duplicate, empty-id, or mismatched blocks are
 excluded before a resumed request. Reasoning-only assistant messages remain
@@ -251,8 +272,8 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v4` and embed an exact
-`vv-agent.run-definition.v4` plus its RFC 8785 SHA-256 digest. Top-level records
+Checkpoint records require `vv-agent.checkpoint.v5` and embed an exact
+`vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
 
@@ -268,7 +289,7 @@ the host defers, retries under policy, supplies a verified receipt, records a
 typed failure, or explicitly aborts.
 
 Distributed workers accept only
-`schema_version=vv-agent.distributed-run.v4`. Capabilities and the frozen run
+`schema_version=vv-agent.distributed-run.v5`. Capabilities and the frozen run
 definition are resolved and compared before claim. The envelope `task` is the
 current `AgentTask` wire and carries `prompt_bundle`; it has no separate
 `system_prompt` field. Heartbeats update only the
@@ -277,7 +298,7 @@ acknowledgement. Redelivery replays a durable terminal without executing the
 model or tools again.
 
 The worker response is a separate closed wire with
-`schema_version=vv-agent.distributed-worker-response.v2` and one required
+`schema_version=vv-agent.distributed-worker-response.v3` and one required
 `type` discriminator. Exactly four variants exist:
 
 - `pending` has no state fields and means that no durable cycle progress was

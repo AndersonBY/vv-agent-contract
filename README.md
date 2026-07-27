@@ -54,4 +54,5 @@ artifact/cursor recovery, archive-backed microcompaction, and the current tool
 surface are defined in `docs/prompt-bundles-and-tool-results.md`. Tool-result
 recovery metadata stays in typed host records; model-visible compact markers
 contain only the tool name, artifact path, retrieval hint, and a bounded
-excerpt.
+excerpt. Canonical `Message.artifact_ref` survives host persistence and
+distributed round-trips but is always removed from provider/model projection.

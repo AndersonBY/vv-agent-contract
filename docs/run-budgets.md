@@ -174,7 +174,8 @@ events carry the final snapshot when a budget was configured.
 
 `budget_snapshot` events are emitted only for configured budgets and only when
 accounting state changes at an enforcement boundary. Runs without limits emit
-no budget events and preserve the prior event order.
+no budget events and preserve the prior event order. These are current
+`RunEvent` records and therefore require `version=v2`.
 
 For a configured budget, `run_started` remains first. A non-terminal
 `run_start` observation emits the initial snapshot, each completed LLM

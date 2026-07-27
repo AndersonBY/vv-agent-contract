@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 4.0.2. It is a task-neutral persistence and recovery
+`vv-agent-contract` 6.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -18,8 +18,8 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v4` and
-`run_definition_schema=vv-agent.run-definition.v4`. Missing, stale, unknown,
+suffix. Records require `schema_version=vv-agent.checkpoint.v5` and
+`run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
 
@@ -131,7 +131,7 @@ external work. A digest without its current typed definition is insufficient.
 ### Run Definition Digest
 
 `run_definition.json` defines the exact digest input and two golden vectors.
-The framework serializes the complete `vv-agent.run-definition.v4` object with
+The framework serializes the complete `vv-agent.run-definition.v5` object with
 the RFC 8785 JSON Canonicalization Scheme, hashes the resulting UTF-8 bytes with
 SHA-256, and stores lowercase hexadecimal. Implementations must use an RFC 8785
 implementation rather than approximating it with ordinary sorted-key JSON.
@@ -195,8 +195,8 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v4`;
-- `run_definition_schema`, exactly `vv-agent.run-definition.v4`;
+- `schema_version`, exactly `vv-agent.checkpoint.v5`;
+- `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
 - `checkpoint_key`, `task_id`, `root_run_id`, `trace_id`, and
@@ -268,7 +268,7 @@ identity and an idempotent consumer does not consume it twice.
 
 The checkpoint contains a bounded `event_outbox`. Every entry has exactly
 `event_id`, `payload_digest`, `state`, `event`, and `cursor`, and contains one
-complete canonical event accepted by the current RunEvent v1 decoder. A
+complete canonical event accepted by the current RunEvent v2 decoder. A
 type-only placeholder, partial payload, non-current event spelling, missing or
 unknown event field, or wrong event version is invalid. The embedded RunEvent
 `event_id` must exactly equal the enclosing outbox `event_id`, and the payload
@@ -500,7 +500,7 @@ commit and outbox identities.
 ## Distributed Worker Response
 
 The distributed transport returns one closed current response object with
-`schema_version=vv-agent.distributed-worker-response.v2` and a required `type`
+`schema_version=vv-agent.distributed-worker-response.v3` and a required `type`
 discriminator. The only variants are:
 
 - `pending`, with no state fields, reports that this delivery returned no

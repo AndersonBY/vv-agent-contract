@@ -121,6 +121,18 @@
     "initial_messages": [],
     "initial_shared_state": {}
   },
+  "task_projection_validation": {
+    "wire_type": "AgentTask",
+    "invalid_cases": [
+      {
+        "name": "agent_task_missing_microcompaction_policy",
+        "mutation": {
+          "remove": "microcompaction_policy"
+        },
+        "error_code": "agent_task_invalid"
+      }
+    ]
+  },
   "metadata_projection": {
     "is_sub_task": true,
     "parent_task_id": "parent-task",

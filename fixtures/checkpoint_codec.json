@@ -1,15 +1,21 @@
 {
   "contract": "checkpoint_codec",
-  "version": 4,
+  "version": 5,
   "discriminator": {
-    "required_value": "vv-agent.checkpoint.v4",
+    "required_value": "vv-agent.checkpoint.v5",
     "missing_or_unknown_error": "checkpoint_schema_unsupported"
   },
+  "message_wire": {
+    "type": "Message",
+    "artifact_ref_preserved": true,
+    "artifact_ref_omitted_when_absent": true,
+    "model_projection_strips_artifact_ref": true
+  },
   "canonical_checkpoint": {
-    "schema_version": "vv-agent.checkpoint.v4",
-    "run_definition_schema": "vv-agent.run-definition.v4",
+    "schema_version": "vv-agent.checkpoint.v5",
+    "run_definition_schema": "vv-agent.run-definition.v5",
     "run_definition": {
-      "schema_version": "vv-agent.run-definition.v4",
+      "schema_version": "vv-agent.run-definition.v5",
       "agent": {
         "name": "checkpoint-agent",
         "type": null
@@ -83,7 +89,7 @@
     "task_id": "research_8a4c21fe",
     "root_run_id": "run_01JZCHECKPOINT",
     "trace_id": "trace_01JZCHECKPOINT",
-    "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+    "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
     "resume_attempt": 2,
     "cycle_index": 1,
     "status": "running",
@@ -98,7 +104,30 @@
       },
       {
         "role": "assistant",
-        "content": "I will inspect it."
+        "content": "I will inspect it.",
+        "tool_calls": [
+          {
+            "id": "call-bash",
+            "type": "function",
+            "function": {
+              "name": "bash",
+              "arguments": "{\"command\":\"python generate_large_output.py\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "<Tool Result Compact>\ntool_name: bash\nartifact_path: .vv-agent/artifacts/task-7/call-bash-0123456789abcdef.txt\nretrieval_hint: use read_file on artifact_path if needed\nexcerpt:\nfirst output\n...<snip>...\nlast output\n</Tool Result Compact>",
+        "name": "bash",
+        "tool_call_id": "call-bash",
+        "artifact_ref": {
+          "path": ".vv-agent/artifacts/task-7/call-bash-0123456789abcdef.txt",
+          "media_type": "text/plain",
+          "encoding": "utf-8",
+          "size_bytes": 100000,
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
       }
     ],
     "cycles": [
@@ -175,10 +204,10 @@
     "event_outbox": [
       {
         "event_id": "evt_model_call_started_2",
-        "payload_digest": "69f95efd8d394a48518c1681301ac7fa7ec1f70a244fdd9fdb4e2b965872e342",
+        "payload_digest": "dc31a9f274d5f52963b667bc5dd6006245beb226e8c10c96951438ddbef470b1",
         "state": "pending",
         "event": {
-          "version": "v1",
+          "version": "v2",
           "type": "model_call_started",
           "event_id": "evt_model_call_started_2",
           "run_id": "run_01JZCHECKPOINT",
@@ -371,7 +400,7 @@
     }
   ],
   "run_definition_schema_rules": {
-    "required_value": "vv-agent.run-definition.v4",
+    "required_value": "vv-agent.run-definition.v5",
     "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
     "failure_boundary": "before_claim_model_or_tool"
   },
@@ -418,7 +447,7 @@
     {
       "name": "embedded_minimal_definition_matches_digest",
       "valid_case": "minimal_running",
-      "expected_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+      "expected_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
       "valid": true
     },
     {
@@ -551,10 +580,10 @@
     {
       "name": "minimal_running",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -628,7 +657,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -653,10 +682,10 @@
     {
       "name": "reconciliation_required_retains_ambiguous_journal",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -730,7 +759,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 2,
         "cycle_index": 1,
         "status": "reconciliation_required",
@@ -774,10 +803,10 @@
     {
       "name": "claimed_active_cycle",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -851,7 +880,7 @@
         "task_id": "research_8a4c21fe",
         "root_run_id": "run_01JZCHECKPOINT",
         "trace_id": "trace_01JZCHECKPOINT",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 2,
         "cycle_index": 1,
         "status": "running",
@@ -911,10 +940,10 @@
         "event_outbox": [
           {
             "event_id": "evt_model_call_started_2",
-            "payload_digest": "69f95efd8d394a48518c1681301ac7fa7ec1f70a244fdd9fdb4e2b965872e342",
+            "payload_digest": "dc31a9f274d5f52963b667bc5dd6006245beb226e8c10c96951438ddbef470b1",
             "state": "pending",
             "event": {
-              "version": "v1",
+              "version": "v2",
               "type": "model_call_started",
               "event_id": "evt_model_call_started_2",
               "run_id": "run_01JZCHECKPOINT",
@@ -1032,10 +1061,10 @@
     {
       "name": "acknowledged_terminal_is_retained",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1109,7 +1138,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "completed",
@@ -1167,10 +1196,10 @@
     {
       "name": "unknown_optional_extension_is_preserved",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1244,7 +1273,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -1284,7 +1313,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -1310,10 +1339,10 @@
     {
       "name": "blank_checkpoint_key",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1387,7 +1416,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -1413,10 +1442,10 @@
     {
       "name": "bad_definition_digest",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1516,10 +1545,10 @@
     {
       "name": "zero_resume_attempt",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1593,7 +1622,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 0,
         "cycle_index": 0,
         "status": "running",
@@ -1619,10 +1648,10 @@
     {
       "name": "partial_claim",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1696,7 +1725,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -1722,10 +1751,10 @@
     {
       "name": "claimed_cycle_not_next",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1799,7 +1828,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -1825,10 +1854,10 @@
     {
       "name": "terminal_with_claim",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -1902,7 +1931,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "completed",
@@ -1961,10 +1990,10 @@
     {
       "name": "journal_cycle_not_active",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -2038,7 +2067,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -2080,10 +2109,10 @@
     {
       "name": "unknown_required_extension",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -2157,7 +2186,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -2192,10 +2221,10 @@
     {
       "name": "invalid_extension_namespace",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -2269,7 +2298,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",
@@ -2301,10 +2330,10 @@
     {
       "name": "unknown_top_level_is_rejected",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v4",
-        "run_definition_schema": "vv-agent.run-definition.v4",
+        "schema_version": "vv-agent.checkpoint.v5",
+        "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
-          "schema_version": "vv-agent.run-definition.v4",
+          "schema_version": "vv-agent.run-definition.v5",
           "agent": {
             "name": "checkpoint-agent",
             "type": null
@@ -2378,7 +2407,7 @@
         "task_id": "task-1",
         "root_run_id": "run-1",
         "trace_id": "trace-1",
-        "run_definition_digest": "3846ecd041815a22f8a770231c4f8a4cbb8ca50fafabd25408a1d7b790633ce6",
+        "run_definition_digest": "69bd7dbe501dbadd9b5326e71bb288dd5498aed2b427ed4d413d730baf7b4c3f",
         "resume_attempt": 1,
         "cycle_index": 0,
         "status": "running",

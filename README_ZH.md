@@ -33,4 +33,5 @@ python3 scripts/contractctl.py build --output-dir dist
 microcompaction 和当前工具面规范见
 `docs/prompt-bundles-and-tool-results.md`。大小与哈希等恢复元数据只保留在宿主侧
 类型化记录中；模型可见的 compact marker 仅包含工具名、artifact 路径、取回提示和
-少量预览。
+少量预览。canonical `Message.artifact_ref` 会在宿主持久化和分布式 round-trip 中
+保留，但 provider/model 投影必须始终剔除该字段。

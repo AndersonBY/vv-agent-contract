@@ -1,31 +1,12 @@
 # Prompt Bundles And Bounded Tool Results
 
-Contract `4.0.2` defines one resolved prompt representation and one sparse
-bounded-result extension. Both are task-neutral runtime capabilities. They do
+Contract `6.0.0` defines one resolved prompt representation, one sparse
+bounded-result extension, and the current artifact-backed Message and
+microcompaction behavior. These are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's
-context/output limits.
-
-Contract `4.0.3` corrects the configured-sub-agent producer fixture to use the
-same compact `PromptSection` shape and renderer already required by the prompt
-bundle contract. The obsolete fragment `priority` side channel is not part of
-the current prompt representation.
-
-Contract `4.0.4` corrects two distributed-runtime evidence values without
-changing observable behavior: the canonical default toolset reference now
-uses the digest of the compact current schemas, and the worker-response
-unknown-version case now contains a genuinely unknown discriminator.
-
-Contract `4.0.5` corrects the foreground bash behavior fixture to match the
-bounded-result contract already implemented by both runtimes. Terminal command
-output remains the model-visible `content` preview even when the exit status is
-non-zero; status, exit code, and error identity remain typed result fields and
-bounded metadata rather than a second JSON output wrapper.
-
-Contract `5.0.0` makes the existing artifact immutability rule enforceable for
-local workspaces. The `.vv-agent/artifacts/` value remains a logical,
-workspace-relative recovery path, but a local adapter maps it to private
-artifact storage outside the agent shell's working directory. The only recovery
-path remains the policy-checked `read_file` tool through the effective
+context/output limits. `.vv-agent/artifacts/` remains a logical,
+workspace-relative recovery namespace, and the only model-facing recovery path
+is the policy-checked `read_file` tool through the effective
 `WorkspaceBackend`.
 
 ## Prompt Bundle
@@ -84,7 +65,7 @@ distributed execution, and resume reconstruct the task from that frozen bundle
 and must neither invoke instruction/context producers nor read the clock again.
 
 The current durable definition discriminator is
-`vv-agent.run-definition.v4`. Readers reject every other run-definition
+`vv-agent.run-definition.v5`. Readers reject every other run-definition
 version. `compiled_prompt`, metadata section side channels, and their readers
 are not current shapes.
 
@@ -115,6 +96,12 @@ cannot read, replace, delete, or mutate those bytes through a host path. The
 model never selects the artifact path. Recovery uses the existing
 policy-checked `read_file` tool, which resolves the logical path through the
 backend; there is no artifact bypass API.
+
+The canonical host `Message` may carry the same object as optional
+`artifact_ref: ToolArtifactRef`. The field is omitted when absent and survives
+session, result, checkpoint, run-definition, journal, and distributed
+round-trips. It is host-only: every provider/model message projection removes
+`artifact_ref` without changing `content`.
 
 For terminal output, `WorkspaceBackend.write_text_chunks_exclusive` is the
 current producer boundary. It consumes normalized UTF-8 text chunks, performs
@@ -152,14 +139,20 @@ compaction.
 `AgentTask`, and frozen as `runtime_controls.microcompaction_policy` in the
 current run definition. Generic metadata is not a policy transport. The default
 policy is `0.75`, `0.60`, `3`, and `500`; `0 < target_ratio < trigger_ratio <=
-1`.
+1`. Ratios must be finite numbers. `keep_recent_cycles` is an integer in
+`0..4294967295`, while `min_result_chars` is an integer in
+`1..4294967295`. Booleans, null, float-encoded integers, missing or unknown
+fields, non-finite host values, and out-of-range values are invalid.
 
 Microcompaction is planned before it mutates messages. For a
 `micro_threshold` trigger, it starts only when effective prompt usage crosses
 the configured trigger and at least one old result passes the age,
 minimum-size, and retention controls. The planner processes oldest candidates
-as one ordered eligibility pool; the application pass stops when estimated
-usage reaches the configured target ratio or eligible candidates are
+as one ordered eligibility pool. Planner estimates select work but never
+satisfy the target. After each successful replacement, the application pass
+subtracts the actual replacement-message token count from the actual original
+message token count, recalculates post-replacement usage, and stops only when
+that usage is at or below the configured target or eligible candidates are
 exhausted. Keeping later eligible candidates in the same plan lets persistence
 failure fall through to another candidate without planning twice. A cycle
 performs one planning/application pass. A
@@ -172,7 +165,11 @@ Before replacement, complete result text is persisted through the effective
 namespace. Persistence failure leaves the original message unchanged and does
 not prevent later selected candidates from being attempted.
 Already-truncated results reuse their existing artifact when one is available.
-The replacement is intentionally small and model-visible:
+Reuse first reads the persisted content through the effective workspace
+backend and verifies its UTF-8 byte length against `size_bytes` and lowercase
+SHA-256 against `sha256`. A read, size, or hash mismatch leaves the original
+message unchanged, as does a new persistence failure. The replacement is
+intentionally small and model-visible:
 
 ```text
 <Tool Result Compact>
@@ -213,7 +210,8 @@ Both implementations must prove real producer paths for:
 4. bounded foreground/background bash recovery, read-file cursor recovery,
    stale-cursor rejection, and checkpoint/distributed serialization;
 5. candidate-aware archive-backed microcompaction for built-in and custom
-   tools, `preserve` retention, persistence-failure safety, compact marker
-   shape, and one pass per cycle;
+   tools, `preserve` retention, persistence and artifact-integrity failure
+   safety, actual-token target application, compact marker shape, and one pass
+   per cycle;
 6. no model-visible `compress_memory`, no `memory_notes`, and no `deferred`
    exposure value while internal compaction remains covered.

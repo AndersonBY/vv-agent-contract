@@ -273,9 +273,14 @@
       "micro_threshold_without_candidate_event_count": 0,
       "full_or_prompt_too_long_trigger_may_start_without_micro_candidate": true,
       "candidate_order": "oldest_first",
-      "stop_condition": "usage_at_or_below_microcompact_target_or_candidates_exhausted",
+      "stop_condition": "actual_post_replacement_usage_at_or_below_microcompact_target_or_candidates_exhausted",
+      "planned_estimates_do_not_satisfy_target": true,
+      "reclaimed_tokens_per_candidate": "actual_original_message_tokens_minus_actual_replacement_message_tokens",
+      "recalculate_actual_usage_after_each_successful_replacement": true,
       "archive_before_replace": true,
       "archive_failure_preserves_original": true,
+      "existing_artifact_requires_utf8_size_and_sha256_validation": true,
+      "existing_artifact_validation_failure_preserves_original": true,
       "archive_failure_does_not_stop_later_candidates": true
     },
     "simultaneous_warning_and_microcompact": {

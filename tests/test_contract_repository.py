@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "5.0.0")
+        self.assertEqual(report["version"], "6.0.0")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -106,13 +106,23 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/session_codec.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(set(fixture), {"version", "canonical_cases", "invalid_cases"})
-        self.assertEqual(fixture["version"], 1)
+        self.assertEqual(
+            set(fixture),
+            {
+                "version",
+                "message_contract",
+                "model_projection",
+                "canonical_cases",
+                "invalid_cases",
+            },
+        )
+        self.assertEqual(fixture["version"], 2)
         self.assertEqual(
             {case["name"] for case in fixture["canonical_cases"]},
             {
                 "plain_message_uses_current_wire",
                 "openai_function_tool_call_is_canonicalized",
+                "microcompacted_tool_message_round_trips",
             },
         )
 
@@ -125,6 +135,7 @@ class ContractRepositoryTests(unittest.TestCase):
             "reasoning_content",
             "image_url",
             "metadata",
+            "artifact_ref",
         }
         for case in fixture["canonical_cases"]:
             for key in ("input", "canonical"):
@@ -145,6 +156,27 @@ class ContractRepositoryTests(unittest.TestCase):
                     arguments = tool_call["function"]["arguments"]
                     self.assertIsInstance(arguments, str)
                     self.assertIsInstance(json.loads(arguments), dict)
+                artifact_ref = message.get("artifact_ref")
+                if artifact_ref is not None:
+                    self.assertEqual(
+                        set(artifact_ref),
+                        {"path", "media_type", "encoding", "size_bytes", "sha256"},
+                    )
+
+        compacted = next(
+            case
+            for case in fixture["canonical_cases"]
+            if case["name"] == "microcompacted_tool_message_round_trips"
+        )
+        self.assertEqual(compacted["input"], compacted["canonical"])
+        self.assertIn("artifact_ref", compacted["canonical"])
+        self.assertNotIn("artifact_ref", compacted["model_projection"])
+        self.assertEqual(
+            compacted["model_projection"]["content"],
+            compacted["canonical"]["content"],
+        )
+        self.assertEqual(fixture["model_projection"]["strip_host_only_fields"], ["artifact_ref"])
+        self.assertTrue(fixture["message_contract"]["artifact_ref_omitted_when_absent"])
 
         invalid_names = {case["name"] for case in fixture["invalid_cases"]}
         self.assertTrue(
@@ -157,6 +189,10 @@ class ContractRepositoryTests(unittest.TestCase):
                 "tool_arguments_must_be_a_json_string",
                 "tool_call_requires_function_envelope",
                 "message_requires_role_field",
+                "artifact_ref_bad_path_is_rejected",
+                "artifact_ref_bad_hash_is_rejected",
+                "artifact_ref_missing_field_is_rejected",
+                "artifact_ref_unknown_field_is_rejected",
             }.issubset(invalid_names)
         )
 
@@ -172,12 +208,37 @@ class ContractRepositoryTests(unittest.TestCase):
             {"event_id", "payload_digest", "state", "event", "cursor"},
         )
         self.assertEqual(entry["event_id"], event["event_id"])
-        self.assertEqual(event["version"], "v1")
+        self.assertEqual(event["version"], "v2")
         self.assertTrue(
             {"version", "type", "event_id", "run_id", "trace_id", "created_at"}.issubset(
                 event
             )
         )
+
+    def test_all_current_run_event_fixtures_use_v2_only(self) -> None:
+        for name in (
+            "run_events.jsonl",
+            "budget_events.jsonl",
+            "configured_sub_agent_events.jsonl",
+            "resume_events.jsonl",
+            "runner_events.jsonl",
+        ):
+            records = [
+                json.loads(line)
+                for line in (ROOT / "fixtures" / name)
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertTrue(records, name)
+            self.assertEqual({record["version"] for record in records}, {"v2"}, name)
+
+        invalid = json.loads(
+            (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(invalid["rules"]["version"], "v2")
+        rejected = {case["id"]: case["input"] for case in invalid["reject"]}
+        self.assertEqual(rejected["stale_version"]["version"], "v1")
+        self.assertEqual(rejected["unknown_version"]["version"], "v3")
 
     def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
         fixture = json.loads(
@@ -369,7 +430,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures" / "memory_local.json").read_text(encoding="utf-8")
         )["microcompact"]
 
-        self.assertEqual(fixture["schema_version"], "vv-agent.microcompaction.v2")
+        self.assertEqual(fixture["schema_version"], "vv-agent.microcompaction.v3")
         self.assertEqual(fixture["trigger_ratio_default"], 0.75)
         self.assertEqual(fixture["target_ratio_default"], 0.6)
         self.assertEqual(fixture["keep_recent_cycles_default"], 3)
@@ -383,6 +444,48 @@ class ContractRepositoryTests(unittest.TestCase):
             ],
         )
         self.assertFalse(fixture["policy_wire"]["generic_metadata_transport"])
+        contracts = fixture["policy_wire"]["field_contracts"]
+        self.assertEqual(contracts["trigger_ratio"]["type"], "finite_number")
+        self.assertEqual(contracts["target_ratio"]["must_be_less_than"], "trigger_ratio")
+        self.assertEqual(contracts["keep_recent_cycles"]["minimum"], 0)
+        self.assertEqual(contracts["keep_recent_cycles"]["maximum"], 4_294_967_295)
+        self.assertEqual(contracts["min_result_chars"]["minimum"], 1)
+        self.assertEqual(contracts["min_result_chars"]["maximum"], 4_294_967_295)
+        self.assertFalse(contracts["keep_recent_cycles"]["boolean_is_integer"])
+        self.assertFalse(contracts["keep_recent_cycles"]["float_integer_is_integer"])
+        invalid_policy_names = {
+            case["name"] for case in fixture["policy_wire"]["invalid_cases"]
+        }
+        self.assertTrue(
+            {
+                "missing_trigger_ratio",
+                "missing_target_ratio",
+                "missing_keep_recent_cycles",
+                "missing_min_result_chars",
+                "unknown_field",
+                "trigger_ratio_is_null",
+                "trigger_ratio_is_boolean",
+                "trigger_ratio_is_non_finite",
+                "trigger_ratio_is_zero",
+                "trigger_ratio_exceeds_one",
+                "target_ratio_is_null",
+                "target_ratio_is_boolean",
+                "target_ratio_is_non_finite",
+                "target_ratio_is_zero",
+                "target_ratio_exceeds_one",
+                "target_ratio_not_below_trigger",
+                "keep_recent_cycles_is_null",
+                "keep_recent_cycles_is_boolean",
+                "keep_recent_cycles_is_float_integer",
+                "keep_recent_cycles_is_negative",
+                "keep_recent_cycles_exceeds_u32",
+                "min_result_chars_is_null",
+                "min_result_chars_is_boolean",
+                "min_result_chars_is_float_integer",
+                "min_result_chars_is_zero",
+                "min_result_chars_exceeds_u32",
+            }.issubset(invalid_policy_names)
+        )
         self.assertFalse(fixture["tool_name_allowlist"])
         self.assertEqual(fixture["result_retention"]["default"], "archive")
         self.assertTrue(fixture["archive"]["required_before_replacement"])
@@ -390,6 +493,14 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["archive"]["logical_path_prefix"],
             ".vv-agent/artifacts/",
         )
+        reuse = fixture["archive"]["existing_artifact"]
+        self.assertTrue(reuse["reuse_only_after_validation"])
+        self.assertIn("UTF8", reuse["size_check"])
+        self.assertIn("sha256", reuse["digest_check"])
+        self.assertEqual(reuse["validation_failure"], "preserve_original_message")
+        application = fixture["application"]
+        self.assertTrue(application["planned_estimates_do_not_satisfy_target"])
+        self.assertTrue(application["recalculate_after_each_successful_replacement"])
 
         marker = fixture["model_visible_marker"]
         self.assertEqual(
@@ -413,6 +524,37 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(
             cases["archive_failure_remains_inline"]["replaced_with_compact_marker"]
         )
+        self.assertTrue(
+            cases["validated_existing_artifact_is_reused"]["replaced_with_compact_marker"]
+        )
+        for name in (
+            "existing_artifact_size_mismatch_remains_inline",
+            "existing_artifact_sha256_mismatch_remains_inline",
+        ):
+            self.assertFalse(cases[name]["replaced_with_compact_marker"])
+            self.assertTrue(cases[name]["original_message_preserved"])
+        actual_target = cases["actual_replacement_delta_reaches_target"]
+        self.assertGreater(
+            sum(actual_target["planned_candidate_reclaim_tokens"]),
+            actual_target["tokens_before_application"] - actual_target["target_tokens"],
+        )
+        self.assertLessEqual(
+            actual_target["tokens_after_application"],
+            actual_target["target_tokens"],
+        )
+        configured = json.loads(
+            (ROOT / "fixtures/configured_sub_agent.json").read_text(encoding="utf-8")
+        )
+        configured_invalid = {
+            case["name"]
+            for case in configured["task_projection_validation"]["invalid_cases"]
+        }
+        self.assertIn("agent_task_missing_microcompaction_policy", configured_invalid)
+        distributed = json.loads(
+            (ROOT / "fixtures/distributed_run_envelope.json").read_text(encoding="utf-8")
+        )
+        distributed_invalid = {case["name"] for case in distributed["invalid_cases"]}
+        self.assertIn("task_missing_microcompaction_policy", distributed_invalid)
 
     def test_prompt_bundle_requires_explicit_session_memory_enablement(self) -> None:
         fixture = json.loads(
@@ -1814,7 +1956,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 158)
+        self.assertEqual(len(capabilities), 159)
+        self.assertIn("tools.message", capabilities)
         self.assertNotIn("runtime_backend.cycle_runner", capabilities)
         self.assertIn("agent.sub_agent_config", capabilities)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
@@ -1827,7 +1970,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 294)
+        self.assertEqual(surface_member_count, 303)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
@@ -1846,6 +1989,20 @@ class ContractRepositoryTests(unittest.TestCase):
                 "target_ratio",
                 "keep_recent_cycles",
                 "min_result_chars",
+            },
+        )
+        self.assertEqual(
+            {member["id"] for member in surfaces["message"]["members"]},
+            {
+                "role",
+                "content",
+                "name",
+                "tool_call_id",
+                "tool_calls",
+                "reasoning_content",
+                "image_url",
+                "metadata",
+                "artifact_ref",
             },
         )
         self.assertIn(
@@ -2249,8 +2406,8 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v4")
-        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v4")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v5")
+        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v5")
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
@@ -2261,14 +2418,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v4",
+                "required_value": "vv-agent.checkpoint.v5",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
         self.assertEqual(
             fixture["run_definition_schema_rules"],
             {
-                "required_value": "vv-agent.run-definition.v4",
+                "required_value": "vv-agent.run-definition.v5",
                 "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
                 "failure_boundary": "before_claim_model_or_tool",
             },
@@ -2918,8 +3075,8 @@ class ContractRepositoryTests(unittest.TestCase):
         envelope = fixture["canonical_envelope"]
         capabilities = envelope["recipe"]["capabilities"]
 
-        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v4")
-        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v4")
+        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v5")
+        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v5")
         unsupported_definition_schema = next(
             case
             for case in fixture["invalid_cases"]
@@ -3005,7 +3162,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(
             fixture["schema_version"],
-            "vv-agent.distributed-worker-response.v2",
+            "vv-agent.distributed-worker-response.v3",
         )
         rules = fixture["wire_rules"]
         self.assertEqual(rules["discriminator"], "type")
@@ -3198,8 +3355,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v4",
-                    "vv-agent.run-definition.v4",
+                    "vv-agent.checkpoint.v5",
+                    "vv-agent.run-definition.v5",
                     "{}",
                     "task-1",
                     "run-1",
@@ -3238,7 +3395,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     "SELECT run_definition_schema FROM checkpoints WHERE checkpoint_key = ?",
                     ("checkpoint-key",),
                 ).fetchone(),
-                ("vv-agent.run-definition.v4",),
+                ("vv-agent.run-definition.v5",),
             )
         finally:
             connection.close()
