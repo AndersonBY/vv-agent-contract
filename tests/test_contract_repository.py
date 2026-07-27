@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "6.0.0")
+        self.assertEqual(report["version"], "6.0.1")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -239,6 +239,18 @@ class ContractRepositoryTests(unittest.TestCase):
         rejected = {case["id"]: case["input"] for case in invalid["reject"]}
         self.assertEqual(rejected["stale_version"]["version"], "v1")
         self.assertEqual(rejected["unknown_version"]["version"], "v3")
+
+        configured = json.loads(
+            (ROOT / "fixtures/configured_sub_agent.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(configured["version"], "v2")
+        configured_events = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/configured_sub_agent_events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual({event["version"] for event in configured_events}, {"v2"})
 
     def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
         fixture = json.loads(

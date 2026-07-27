@@ -204,7 +204,7 @@ automatic compaction; it is not a tool exposure, tool name, or model-callable
 state transition. Unknown fields are rejected, and no reader derives another
 status vocabulary from `status_code`.
 
-Contract `6.0.0` applies the sparse bounded-result rules in
+Contract `6.0.1` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
