@@ -50,5 +50,8 @@ semantics are defined in `docs/model-call-accounting.md`.
 Typed tool declarations, cumulative metadata policy, and executor lifecycle
 telemetry are defined in `docs/tool-metadata-and-telemetry.md`.
 Structured prompt propagation, provider projection, bounded tool results,
-artifact/cursor recovery, and the current tool surface are defined in
-`docs/prompt-bundles-and-tool-results.md`.
+artifact/cursor recovery, archive-backed microcompaction, and the current tool
+surface are defined in `docs/prompt-bundles-and-tool-results.md`. Tool-result
+recovery metadata stays in typed host records; model-visible compact markers
+contain only the tool name, artifact path, retrieval hint, and a bounded
+excerpt.

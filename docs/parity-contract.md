@@ -180,8 +180,17 @@ and App Server projection.
 ## Tool Metadata And Policy
 
 `ToolMetadata` contains side effect, idempotency, terminal capability,
-capability tags, and cost dimensions. Omitted metadata has neutral effective
-defaults.
+tool-result retention, capability tags, and cost dimensions. Omitted metadata
+uses `result_retention=archive`, so custom and built-in tools are equally
+eligible for archive-backed microcompaction. `result_retention=preserve`
+excludes a result from proactive microcompaction without preventing full or
+emergency compaction.
+
+`MicrocompactionPolicy` is a public closed value with `trigger_ratio`,
+`target_ratio`, `keep_recent_cycles`, and `min_result_chars`. `RunConfig`
+selects it, `AgentTask` carries it explicitly, and run-definition schema v4
+freezes it under `runtime_controls.microcompaction_policy`. Implementations
+must not encode this policy in generic task or run metadata.
 
 `ToolExecutionResult` has one status field: the required typed `status_code`.
 The current wire values are `SUCCESS`, `ERROR`, `WAIT_RESPONSE`, `RUNNING`, and
@@ -190,10 +199,17 @@ automatic compaction; it is not a tool exposure, tool name, or model-callable
 state transition. Unknown fields are rejected, and no reader derives another
 status vocabulary from `status_code`.
 
-Contract `4.0.2` additionally applies the sparse bounded-result rules in
+Contract `5.0.0` additionally applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
+
+Microcompaction is candidate-aware and performs one plan/application pass per
+cycle. Every replaced result is first persisted under
+`.vv-agent/artifacts/`; persistence failure preserves the inline result. The
+model-visible marker contains only tool name, artifact path, retrieval hint,
+and a bounded excerpt. Byte counts, character counts, and hashes remain
+outside model context.
 
 `ToolExposure` has exactly `direct` and `hidden`. The model-visible
 `compress_memory` tool and its unconsumed `memory_notes` state do not exist;
@@ -236,7 +252,7 @@ valid history; completely empty assistant messages are removed.
 ## Durable Checkpoint And Distributed Runtime
 
 Checkpoint records require `vv-agent.checkpoint.v4` and embed an exact
-`vv-agent.run-definition.v3` plus its RFC 8785 SHA-256 digest. Top-level records
+`vv-agent.run-definition.v4` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
 
@@ -252,7 +268,7 @@ the host defers, retries under policy, supplies a verified receipt, records a
 typed failure, or explicitly aborts.
 
 Distributed workers accept only
-`schema_version=vv-agent.distributed-run.v3`. Capabilities and the frozen run
+`schema_version=vv-agent.distributed-run.v4`. Capabilities and the frozen run
 definition are resolved and compared before claim. The envelope `task` is the
 current `AgentTask` wire and carries `prompt_bundle`; it has no separate
 `system_prompt` field. Heartbeats update only the

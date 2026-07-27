@@ -94,6 +94,16 @@
         "framework_fallback_capped_by_model_capability"
       ],
       "capacity_counters": "non_negative_json_safe_integer_or_null",
+      "microcompact_plan_counters": [
+        "microcompact_target",
+        "candidate_count",
+        "estimated_reclaimable_tokens"
+      ],
+      "microcompact_result_counters": [
+        "archived_count",
+        "reclaimed_tokens",
+        "artifact_failure_count"
+      ],
       "changed": "boolean",
       "missing_required_fields": "reject"
     },
@@ -869,6 +879,180 @@
         "before_count": 3,
         "after_count": 2,
         "changed": 1
+      }
+    },
+    {
+      "id": "memory_compact_target_is_negative",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_started",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "message_count": 3,
+        "estimated_tokens": 200000,
+        "trigger": "micro_threshold",
+        "configured_threshold": 250000,
+        "effective_threshold": 250000,
+        "microcompact_threshold": 187500,
+        "microcompact_target": -1,
+        "candidate_count": 1,
+        "estimated_reclaimable_tokens": 50000,
+        "model_context_window": 1000000,
+        "model_max_output_tokens": 384000,
+        "reserved_output_tokens": 16000,
+        "reserved_output_source": "framework_fallback",
+        "autocompact_buffer_tokens": 13000
+      }
+    },
+    {
+      "id": "memory_compact_candidate_count_is_negative",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_started",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "message_count": 3,
+        "estimated_tokens": 200000,
+        "trigger": "micro_threshold",
+        "configured_threshold": 250000,
+        "effective_threshold": 250000,
+        "microcompact_threshold": 187500,
+        "microcompact_target": 150000,
+        "candidate_count": -1,
+        "estimated_reclaimable_tokens": 50000,
+        "model_context_window": 1000000,
+        "model_max_output_tokens": 384000,
+        "reserved_output_tokens": 16000,
+        "reserved_output_source": "framework_fallback",
+        "autocompact_buffer_tokens": 13000
+      }
+    },
+    {
+      "id": "memory_compact_estimated_reclaimable_tokens_is_negative",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_started",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "message_count": 3,
+        "estimated_tokens": 200000,
+        "trigger": "micro_threshold",
+        "configured_threshold": 250000,
+        "effective_threshold": 250000,
+        "microcompact_threshold": 187500,
+        "microcompact_target": 150000,
+        "candidate_count": 1,
+        "estimated_reclaimable_tokens": -1,
+        "model_context_window": 1000000,
+        "model_max_output_tokens": 384000,
+        "reserved_output_tokens": 16000,
+        "reserved_output_source": "framework_fallback",
+        "autocompact_buffer_tokens": 13000
+      }
+    },
+    {
+      "id": "memory_compact_archived_count_is_negative",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_completed",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "before_count": 3,
+        "after_count": 3,
+        "summary_tokens": 100,
+        "mode": "micro",
+        "changed": true,
+        "archived_count": -1,
+        "reclaimed_tokens": 50000,
+        "artifact_failure_count": 0
+      }
+    },
+    {
+      "id": "memory_compact_reclaimed_tokens_is_negative",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_completed",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "before_count": 3,
+        "after_count": 3,
+        "summary_tokens": 100,
+        "mode": "micro",
+        "changed": true,
+        "archived_count": 1,
+        "reclaimed_tokens": -1,
+        "artifact_failure_count": 0
+      }
+    },
+    {
+      "id": "memory_compact_artifact_failure_count_is_negative",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_completed",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "before_count": 3,
+        "after_count": 3,
+        "summary_tokens": 100,
+        "mode": "micro",
+        "changed": true,
+        "archived_count": 1,
+        "reclaimed_tokens": 50000,
+        "artifact_failure_count": -1
+      }
+    },
+    {
+      "id": "memory_compact_started_missing_plan_counter",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_started",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "message_count": 3,
+        "estimated_tokens": 200000,
+        "trigger": "micro_threshold",
+        "configured_threshold": 250000,
+        "effective_threshold": 250000,
+        "microcompact_threshold": 187500,
+        "candidate_count": 1,
+        "estimated_reclaimable_tokens": 50000,
+        "model_context_window": 1000000,
+        "model_max_output_tokens": 384000,
+        "reserved_output_tokens": 16000,
+        "reserved_output_source": "framework_fallback",
+        "autocompact_buffer_tokens": 13000
+      }
+    },
+    {
+      "id": "memory_compact_completed_missing_result_counter",
+      "input": {
+        "version": "v1",
+        "type": "memory_compact_completed",
+        "event_id": "evt_invalid_memory",
+        "run_id": "run_invalid",
+        "trace_id": "trace_invalid",
+        "created_at": 1,
+        "before_count": 3,
+        "after_count": 3,
+        "summary_tokens": 100,
+        "mode": "micro",
+        "changed": true,
+        "archived_count": 1,
+        "reclaimed_tokens": 50000
       }
     },
     {

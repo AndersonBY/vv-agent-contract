@@ -2,7 +2,7 @@
   "contract": "checkpoint_resume",
   "version": 3,
   "checkpoint_schema": "vv-agent.checkpoint.v4",
-  "run_definition_schema": "vv-agent.run-definition.v3",
+  "run_definition_schema": "vv-agent.run-definition.v4",
   "public_entrypoints": {
     "run": "Runner.run with RunConfig.checkpoint_config",
     "start": "Runner.start with RunConfig.checkpoint_config",

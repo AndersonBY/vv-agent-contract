@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "4.1.0")
+        self.assertEqual(report["version"], "5.0.0")
         self.assertEqual(report["domains"], 19)
         self.assertEqual(report["fixture_files"], 51)
         self.assertEqual(report["manifest_entries"], 50)
@@ -186,6 +186,8 @@ class ContractRepositoryTests(unittest.TestCase):
         capacity = fixture["capacity_contract"]
 
         self.assertEqual(capacity["configured_default_threshold"], 250_000)
+        self.assertEqual(capacity["microcompact_trigger_ratio_default"], 0.75)
+        self.assertEqual(capacity["microcompact_target_ratio_default"], 0.6)
         self.assertEqual(
             capacity["reserved_output_precedence"],
             [
@@ -252,6 +254,41 @@ class ContractRepositoryTests(unittest.TestCase):
             ["none", "micro", "structural", "summary", "emergency"],
         )
         self.assertEqual(
+            lifecycle["started"]["producer_fields"],
+            [
+                "trigger",
+                "configured_threshold",
+                "effective_threshold",
+                "microcompact_threshold",
+                "microcompact_target",
+                "candidate_count",
+                "estimated_reclaimable_tokens",
+                "model_context_window",
+                "model_max_output_tokens",
+                "reserved_output_tokens",
+                "reserved_output_source",
+                "autocompact_buffer_tokens",
+            ],
+        )
+        self.assertEqual(
+            lifecycle["completed"]["producer_fields"],
+            [
+                "mode",
+                "changed",
+                "archived_count",
+                "reclaimed_tokens",
+                "artifact_failure_count",
+            ],
+        )
+        planning = lifecycle["microcompact_planning"]
+        self.assertTrue(planning["single_plan_and_apply_pass_per_cycle"])
+        self.assertTrue(planning["candidate_required_for_micro_threshold_trigger"])
+        self.assertEqual(planning["micro_threshold_without_candidate_event_count"], 0)
+        self.assertTrue(
+            planning["full_or_prompt_too_long_trigger_may_start_without_micro_candidate"]
+        )
+        self.assertTrue(planning["archive_failure_does_not_stop_later_candidates"])
+        self.assertEqual(
             lifecycle["simultaneous_warning_and_microcompact"]["order"],
             [
                 "microcompact_eligible_old_tool_results",
@@ -264,6 +301,45 @@ class ContractRepositoryTests(unittest.TestCase):
             ["event_id", "created_at"],
         )
         self.assertTrue(lifecycle["missing_or_unknown_fields_are_rejected"])
+
+        events = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/run_events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        started = next(event for event in events if event["type"] == "memory_compact_started")
+        completed = next(event for event in events if event["type"] == "memory_compact_completed")
+        self.assertTrue(
+            {
+                "microcompact_target",
+                "candidate_count",
+                "estimated_reclaimable_tokens",
+            }.issubset(started)
+        )
+        self.assertTrue(
+            {
+                "archived_count",
+                "reclaimed_tokens",
+                "artifact_failure_count",
+            }.issubset(completed)
+        )
+        invalid_events = json.loads(
+            (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
+        )
+        rejected = {case["id"] for case in invalid_events["reject"]}
+        self.assertTrue(
+            {
+                "memory_compact_target_is_negative",
+                "memory_compact_candidate_count_is_negative",
+                "memory_compact_estimated_reclaimable_tokens_is_negative",
+                "memory_compact_archived_count_is_negative",
+                "memory_compact_reclaimed_tokens_is_negative",
+                "memory_compact_artifact_failure_count_is_negative",
+                "memory_compact_started_missing_plan_counter",
+                "memory_compact_completed_missing_result_counter",
+            }.issubset(rejected)
+        )
 
         session_memory = fixture["session_memory"]
         self.assertFalse(session_memory["enabled_by_default"])
@@ -287,6 +363,56 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(replay["new_model_dispatches"], 0)
         self.assertEqual(replay["new_model_call_records"], 0)
         self.assertTrue(replay["replay_is_idempotent"])
+
+    def test_microcompaction_is_archive_backed_and_model_marker_is_minimal(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures" / "memory_local.json").read_text(encoding="utf-8")
+        )["microcompact"]
+
+        self.assertEqual(fixture["schema_version"], "vv-agent.microcompaction.v2")
+        self.assertEqual(fixture["trigger_ratio_default"], 0.75)
+        self.assertEqual(fixture["target_ratio_default"], 0.6)
+        self.assertEqual(fixture["keep_recent_cycles_default"], 3)
+        self.assertEqual(fixture["min_result_chars_default"], 500)
+        self.assertEqual(
+            fixture["policy_wire"]["transport"],
+            [
+                "RunConfig.microcompaction_policy",
+                "AgentTask.microcompaction_policy",
+                "run_definition.runtime_controls.microcompaction_policy",
+            ],
+        )
+        self.assertFalse(fixture["policy_wire"]["generic_metadata_transport"])
+        self.assertFalse(fixture["tool_name_allowlist"])
+        self.assertEqual(fixture["result_retention"]["default"], "archive")
+        self.assertTrue(fixture["archive"]["required_before_replacement"])
+        self.assertEqual(
+            fixture["archive"]["logical_path_prefix"],
+            ".vv-agent/artifacts/",
+        )
+
+        marker = fixture["model_visible_marker"]
+        self.assertEqual(
+            marker["field_order"],
+            ["tool_name", "artifact_path", "retrieval_hint", "excerpt"],
+        )
+        self.assertEqual(
+            marker["retrieval_hint"],
+            "use read_file on artifact_path if needed",
+        )
+        for forbidden in marker["forbidden_fields"]:
+            self.assertNotIn(f"{forbidden}:", marker["example"])
+
+        cases = {case["name"]: case for case in fixture["cases"]}
+        self.assertTrue(
+            cases["custom_tool_archived"]["replaced_with_compact_marker"]
+        )
+        self.assertFalse(
+            cases["preserved_tool_remains_inline"]["replaced_with_compact_marker"]
+        )
+        self.assertFalse(
+            cases["archive_failure_remains_inline"]["replaced_with_compact_marker"]
+        )
 
     def test_prompt_bundle_requires_explicit_session_memory_enablement(self) -> None:
         fixture = json.loads(
@@ -1198,7 +1324,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/tool_metadata.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(fixture["schema_version"], "vv-agent.tool-metadata.v1")
+        self.assertEqual(fixture["schema_version"], "vv-agent.tool-metadata.v2")
         metadata = fixture["metadata_contract"]
         self.assertEqual(
             metadata["closed_fields"],
@@ -1206,10 +1332,14 @@ class ContractRepositoryTests(unittest.TestCase):
                 "side_effect",
                 "idempotency",
                 "terminal",
+                "result_retention",
                 "capability_tags",
                 "cost_dimensions",
             ],
         )
+        self.assertEqual(metadata["defaults"]["result_retention"], "archive")
+        self.assertEqual(metadata["result_retention_values"], ["archive", "preserve"])
+        self.assertTrue(metadata["result_retention_is_not_inferred"])
         self.assertFalse(metadata["model_visible"])
         self.assertTrue(metadata["generic_metadata_is_not_a_declaration"])
         self.assertTrue(metadata["absent_metadata_uses_neutral_defaults"])
@@ -1226,6 +1356,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         invalid_names = {case["name"] for case in fixture["invalid_cases"]}
         self.assertIn("unknown_field", invalid_names)
+        self.assertIn("unknown_result_retention", invalid_names)
         self.assertTrue(
             fixture["telemetry_contract"]["missing_required_completed_fields_are_rejected"]
         )
@@ -1683,7 +1814,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 156)
+        self.assertEqual(len(capabilities), 158)
         self.assertNotIn("runtime_backend.cycle_runner", capabilities)
         self.assertIn("agent.sub_agent_config", capabilities)
         self.assertIn("checkpoint_config.capability_refs", capabilities)
@@ -1696,10 +1827,27 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 287)
+        self.assertEqual(surface_member_count, 294)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
+        self.assertIn(
+            "microcompaction_policy",
+            {member["id"] for member in surfaces["run_config"]["members"]},
+        )
+        self.assertIn(
+            "microcompaction_policy",
+            {member["id"] for member in surfaces["agent_task"]["members"]},
+        )
+        self.assertEqual(
+            {member["id"] for member in surfaces["microcompaction_policy"]["members"]},
+            {
+                "trigger_ratio",
+                "target_ratio",
+                "keep_recent_cycles",
+                "min_result_chars",
+            },
+        )
         self.assertIn(
             "session_memory_enabled",
             {member["id"] for member in surfaces["sub_agent_config"]["members"]},
@@ -1732,7 +1880,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("tool_metadata", {member["id"] for member in surfaces["tool"]["members"]})
         self.assertEqual(
             {member["id"] for member in surfaces["tool_metadata"]["members"]},
-            {"side_effect", "idempotency", "terminal", "capability_tags", "cost_dimensions"},
+            {
+                "side_effect",
+                "idempotency",
+                "terminal",
+                "result_retention",
+                "capability_tags",
+                "cost_dimensions",
+            },
         )
         self.assertEqual(
             {member["id"] for member in surfaces["tool_policy"]["members"]},
@@ -1957,6 +2112,17 @@ class ContractRepositoryTests(unittest.TestCase):
             ],
             [],
         )
+        self.assertEqual(
+            fixture["golden_cases"][0]["definition"]["runtime_controls"][
+                "microcompaction_policy"
+            ],
+            {
+                "trigger_ratio": 0.75,
+                "target_ratio": 0.6,
+                "keep_recent_cycles": 3,
+                "min_result_chars": 500,
+            },
+        )
         self.assertTrue(
             all(field in fixture["golden_cases"][0]["definition"] for field in fixture["required_fields"])
         )
@@ -1976,6 +2142,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "/model",
                 "/model/settings",
                 "/runtime_controls",
+                "/runtime_controls/microcompaction_policy",
                 "/tools/*",
                 "/tools/*/schema",
                 "/tools/*/schema/function",
@@ -2032,6 +2199,10 @@ class ContractRepositoryTests(unittest.TestCase):
                 "model_retry_unknown_field",
                 "runtime_controls_unknown_field",
                 "runtime_controls_missing_max_cycles",
+                "runtime_controls_missing_microcompaction_policy",
+                "microcompaction_policy_unknown_field",
+                "microcompaction_policy_target_not_below_trigger",
+                "microcompaction_policy_zero_min_result_chars",
                 "tool_unknown_field",
                 "tool_missing_approval",
                 "tool_schema_unknown_field",
@@ -2079,7 +2250,7 @@ class ContractRepositoryTests(unittest.TestCase):
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
         self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v4")
-        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v3")
+        self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v4")
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertEqual(canonical["claimed_cycle"], canonical["cycle_index"] + 1)
@@ -2097,7 +2268,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["run_definition_schema_rules"],
             {
-                "required_value": "vv-agent.run-definition.v3",
+                "required_value": "vv-agent.run-definition.v4",
                 "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
                 "failure_boundary": "before_claim_model_or_tool",
             },
@@ -2747,8 +2918,8 @@ class ContractRepositoryTests(unittest.TestCase):
         envelope = fixture["canonical_envelope"]
         capabilities = envelope["recipe"]["capabilities"]
 
-        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v3")
-        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v3")
+        self.assertEqual(envelope["schema_version"], "vv-agent.distributed-run.v4")
+        self.assertEqual(envelope["run_definition_schema"], "vv-agent.run-definition.v4")
         unsupported_definition_schema = next(
             case
             for case in fixture["invalid_cases"]
@@ -3028,7 +3199,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 (
                     "checkpoint-key",
                     "vv-agent.checkpoint.v4",
-                    "vv-agent.run-definition.v3",
+                    "vv-agent.run-definition.v4",
                     "{}",
                     "task-1",
                     "run-1",
@@ -3067,7 +3238,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     "SELECT run_definition_schema FROM checkpoints WHERE checkpoint_key = ?",
                     ("checkpoint-key",),
                 ).fetchone(),
-                ("vv-agent.run-definition.v3",),
+                ("vv-agent.run-definition.v4",),
             )
         finally:
             connection.close()

@@ -29,5 +29,8 @@ python3 scripts/contractctl.py build --output-dir dist
 `docs/model-call-accounting.md`。
 类型化工具声明、累计元数据策略和执行生命周期遥测规范见
 `docs/tool-metadata-and-telemetry.md`。
-结构化提示词传播、provider 投影、有界工具结果、artifact/cursor 恢复和当前工具面
-规范见 `docs/prompt-bundles-and-tool-results.md`。
+结构化提示词传播、provider 投影、有界工具结果、artifact/cursor 恢复、归档式
+microcompaction 和当前工具面规范见
+`docs/prompt-bundles-and-tool-results.md`。大小与哈希等恢复元数据只保留在宿主侧
+类型化记录中；模型可见的 compact marker 仅包含工具名、artifact 路径、取回提示和
+少量预览。

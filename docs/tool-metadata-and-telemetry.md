@@ -1,23 +1,34 @@
 # Tool Metadata And Execution Telemetry
 
-Contract `4.0.2` defines one typed, task-neutral declaration for host policy and
+Contract `5.0.0` defines one typed, task-neutral declaration for host policy,
+tool-result retention, and
 execution telemetry. The framework does not inspect prompts, infer semantics
 from tool names or arguments, or decide whether a business answer is complete.
 
 ## Typed Declaration
 
-`ToolMetadata` is a closed object with five fields:
+`ToolMetadata` is a closed object with six fields:
 
 - `side_effect`: `unknown`, `none`, `read`, `write`, `execute`, `network`, or
   `external`;
 - `idempotency`: `unknown`, `supported`, or `unsupported`;
 - `terminal`: whether the tool may return `finish` or `wait_user`;
+- `result_retention`: `archive` allows archive-backed microcompaction and
+  `preserve` keeps results inline during proactive microcompaction;
 - `capability_tags`: opaque exact-match host labels;
 - `cost_dimensions`: opaque exact-match resource names.
 
+`result_retention` is task-neutral. The runtime never infers it from a tool
+name, arguments, response format, or task description. Missing metadata uses
+`archive`, so built-in and custom tools participate uniformly unless the tool
+explicitly declares `preserve`. Preservation applies only to proactive
+microcompaction; full summary and emergency recovery may still reduce history
+when required to fit the model context.
+
 This declaration is the only source of typed idempotency. There is no separate
 tool-level idempotency input or run-definition field. An omitted declaration
-has neutral effective values: `unknown`, `unknown`, `false`, and empty lists.
+has neutral effective values: `unknown`, `unknown`, `false`, `archive`, and
+empty lists.
 The declaration may remain omitted on event and persistence projections; its
 effective behavior is still the neutral default.
 

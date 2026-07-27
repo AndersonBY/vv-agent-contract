@@ -1,7 +1,7 @@
 {
-  "schema_version": "vv-agent.distributed-run.v3",
+  "schema_version": "vv-agent.distributed-run.v4",
   "run_definition_schema_rules": {
-    "writer_value": "vv-agent.run-definition.v3",
+    "writer_value": "vv-agent.run-definition.v4",
     "complete_definition_source": "embedded_run_definition_in_checkpoint",
     "envelope_digest_must_match_checkpoint_digest": true,
     "missing_or_unknown_error": "checkpoint_definition_schema_unsupported",
@@ -28,7 +28,7 @@
     "missing_or_unknown_error": "checkpoint_claim_mode_invalid"
   },
   "canonical_envelope": {
-    "schema_version": "vv-agent.distributed-run.v3",
+    "schema_version": "vv-agent.distributed-run.v4",
     "job_id": "run-123:cycle:2",
     "run_id": "run-123",
     "task": {
@@ -49,6 +49,12 @@
       "max_cycles": 8,
       "memory_compact_threshold": 250000,
       "memory_threshold_percentage": 90,
+      "microcompaction_policy": {
+        "trigger_ratio": 0.75,
+        "target_ratio": 0.6,
+        "keep_recent_cycles": 3,
+        "min_result_chars": 500
+      },
       "no_tool_policy": "continue",
       "allow_interruption": true,
       "use_workspace": true,
@@ -209,7 +215,7 @@
     "lease_duration_ms": 120000,
     "root_run_id": "run-123",
     "trace_id": "trace-run-123",
-    "run_definition_schema": "vv-agent.run-definition.v3",
+    "run_definition_schema": "vv-agent.run-definition.v4",
     "run_definition_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "claim_mode": "recovery",
     "resume_attempt": 2,
@@ -233,7 +239,7 @@
       "path": [
         "schema_version"
       ],
-      "value": "vv-agent.distributed-run.v4",
+      "value": "vv-agent.distributed-run.v5",
       "error": "unsupported distributed schema_version"
     },
     {
@@ -349,6 +355,7 @@
           "side_effect": "read",
           "idempotency": "supported",
           "terminal": false,
+          "result_retention": "archive",
           "capability_tags": [
             "record.read"
           ],
@@ -361,6 +368,7 @@
           "side_effect": "write",
           "idempotency": "supported",
           "terminal": false,
+          "result_retention": "archive",
           "capability_tags": [
             "record.read"
           ],

@@ -19,7 +19,7 @@ model or tool operation.
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
 suffix. Records require `schema_version=vv-agent.checkpoint.v4` and
-`run_definition_schema=vv-agent.run-definition.v3`. Missing, stale, unknown,
+`run_definition_schema=vv-agent.run-definition.v4`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
 
@@ -131,7 +131,7 @@ external work. A digest without its current typed definition is insufficient.
 ### Run Definition Digest
 
 `run_definition.json` defines the exact digest input and two golden vectors.
-The framework serializes the complete `vv-agent.run-definition.v3` object with
+The framework serializes the complete `vv-agent.run-definition.v4` object with
 the RFC 8785 JSON Canonicalization Scheme, hashes the resulting UTF-8 bytes with
 SHA-256, and stores lowercase hexadecimal. Implementations must use an RFC 8785
 implementation rather than approximating it with ordinary sorted-key JSON.
@@ -196,7 +196,7 @@ event cursor remain excluded.
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
 - `schema_version`, exactly `vv-agent.checkpoint.v4`;
-- `run_definition_schema`, exactly `vv-agent.run-definition.v3`;
+- `run_definition_schema`, exactly `vv-agent.run-definition.v4`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
 - `checkpoint_key`, `task_id`, `root_run_id`, `trace_id`, and

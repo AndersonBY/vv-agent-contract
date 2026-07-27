@@ -21,7 +21,7 @@ output remains the model-visible `content` preview even when the exit status is
 non-zero; status, exit code, and error identity remain typed result fields and
 bounded metadata rather than a second JSON output wrapper.
 
-Contract `4.1.0` makes the existing artifact immutability rule enforceable for
+Contract `5.0.0` makes the existing artifact immutability rule enforceable for
 local workspaces. The `.vv-agent/artifacts/` value remains a logical,
 workspace-relative recovery path, but a local adapter maps it to private
 artifact storage outside the agent shell's working directory. The only recovery
@@ -84,7 +84,7 @@ distributed execution, and resume reconstruct the task from that frozen bundle
 and must neither invoke instruction/context producers nor read the clock again.
 
 The current durable definition discriminator is
-`vv-agent.run-definition.v3`. Readers reject every other run-definition
+`vv-agent.run-definition.v4`. Readers reject every other run-definition
 version. `compiled_prompt`, metadata section side channels, and their readers
 are not current shapes.
 
@@ -138,6 +138,57 @@ instead of `content: null`; a single oversized line is therefore recoverable.
 All sparse result fields survive tool messages, cycle records, AgentResult,
 operation journals, checkpoints, distributed responses, and strict readers.
 
+## Archive-Backed Microcompaction
+
+Proactive microcompaction operates on old tool-result messages without
+inspecting the task or parsing the result body. Every built-in and custom tool
+uses the same default `result_retention=archive`; a tool may explicitly declare
+`preserve` when its result must remain inline until full or emergency
+compaction.
+
+`MicrocompactionPolicy` is a public, closed value with
+`trigger_ratio`, `target_ratio`, `keep_recent_cycles`, and
+`min_result_chars`. It is configured through `RunConfig`, copied explicitly to
+`AgentTask`, and frozen as `runtime_controls.microcompaction_policy` in the
+current run definition. Generic metadata is not a policy transport. The default
+policy is `0.75`, `0.60`, `3`, and `500`; `0 < target_ratio < trigger_ratio <=
+1`.
+
+Microcompaction is planned before it mutates messages. For a
+`micro_threshold` trigger, it starts only when effective prompt usage crosses
+the configured trigger and at least one old result passes the age,
+minimum-size, and retention controls. The planner processes oldest candidates
+as one ordered eligibility pool; the application pass stops when estimated
+usage reaches the configured target ratio or eligible candidates are
+exhausted. Keeping later eligible candidates in the same plan lets persistence
+failure fall through to another candidate without planning twice. A cycle
+performs one planning/application pass. A
+micro-threshold crossing with no eligible candidate does not emit
+`memory_compact_started` or `memory_compact_completed`; full-threshold and
+prompt-too-long compaction may still start without a micro candidate.
+
+Before replacement, complete result text is persisted through the effective
+`WorkspaceBackend` under the immutable logical `.vv-agent/artifacts/`
+namespace. Persistence failure leaves the original message unchanged and does
+not prevent later selected candidates from being attempted.
+Already-truncated results reuse their existing artifact when one is available.
+The replacement is intentionally small and model-visible:
+
+```text
+<Tool Result Compact>
+tool_name: web_search
+artifact_path: .vv-agent/artifacts/run/call.txt
+retrieval_hint: use read_file on artifact_path if needed
+excerpt:
+...
+</Tool Result Compact>
+```
+
+The marker must not expose byte counts, character counts, hashes, storage
+metadata, or other bookkeeping. Integrity metadata remains on the typed
+artifact reference outside the model projection. `read_file` is the only
+model-facing recovery path.
+
 ## Tool Surface
 
 Only `direct` and `hidden` are current `ToolExposure` values. `direct` is
@@ -161,5 +212,8 @@ Both implementations must prove real producer paths for:
    section side channel;
 4. bounded foreground/background bash recovery, read-file cursor recovery,
    stale-cursor rejection, and checkpoint/distributed serialization;
-5. no model-visible `compress_memory`, no `memory_notes`, and no `deferred`
+5. candidate-aware archive-backed microcompaction for built-in and custom
+   tools, `preserve` retention, persistence-failure safety, compact marker
+   shape, and one pass per cycle;
+6. no model-visible `compress_memory`, no `memory_notes`, and no `deferred`
    exposure value while internal compaction remains covered.

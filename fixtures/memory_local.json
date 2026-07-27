@@ -39,22 +39,103 @@
     "tokens": 6
   },
   "microcompact": {
+    "schema_version": "vv-agent.microcompaction.v2",
     "content_unit": "你",
-    "minimum_chars": 500,
-    "keep_recent_cycles": 1,
+    "trigger_ratio_default": 0.75,
+    "target_ratio_default": 0.6,
+    "min_result_chars_default": 500,
+    "keep_recent_cycles_default": 3,
+    "fixture_keep_recent_cycles": 1,
+    "policy_wire": {
+      "closed": true,
+      "transport": [
+        "RunConfig.microcompaction_policy",
+        "AgentTask.microcompaction_policy",
+        "run_definition.runtime_controls.microcompaction_policy"
+      ],
+      "generic_metadata_transport": false,
+      "required_fields": [
+        "trigger_ratio",
+        "target_ratio",
+        "keep_recent_cycles",
+        "min_result_chars"
+      ]
+    },
+    "single_plan_and_apply_pass_per_cycle": true,
+    "candidate_required_for_micro_lifecycle_event": true,
+    "task_semantics_are_not_inspected": true,
+    "tool_name_allowlist": false,
+    "result_retention": {
+      "default": "archive",
+      "values": [
+        "archive",
+        "preserve"
+      ],
+      "preserve_applies_to": "proactive_microcompaction_only"
+    },
+    "archive": {
+      "required_before_replacement": true,
+      "logical_path_prefix": ".vv-agent/artifacts/",
+      "persistence_failure": "preserve_original_message",
+      "existing_artifact": "reuse"
+    },
+    "model_visible_marker": {
+      "opening": "<Tool Result Compact>",
+      "closing": "</Tool Result Compact>",
+      "field_order": [
+        "tool_name",
+        "artifact_path",
+        "retrieval_hint",
+        "excerpt"
+      ],
+      "retrieval_hint": "use read_file on artifact_path if needed",
+      "forbidden_fields": [
+        "original_bytes",
+        "visible_bytes",
+        "size_bytes",
+        "sha256",
+        "total_chars",
+        "truncated_chars"
+      ],
+      "example": "<Tool Result Compact>\ntool_name: web_search\nartifact_path: .vv-agent/artifacts/run-7/call-search.txt\nretrieval_hint: use read_file on artifact_path if needed\nexcerpt:\nfirst result\n...<snip>...\nlast result\n</Tool Result Compact>"
+    },
     "cases": [
       {
+        "name": "below_minimum",
+        "tool_name": "custom_search",
+        "result_retention": "archive",
         "repeat": 300,
-        "cleared": false
+        "replaced_with_compact_marker": false
       },
       {
+        "name": "at_minimum",
+        "tool_name": "custom_search",
+        "result_retention": "archive",
         "repeat": 500,
-        "cleared": false
+        "replaced_with_compact_marker": false
       },
       {
+        "name": "custom_tool_archived",
+        "tool_name": "custom_search",
+        "result_retention": "archive",
         "repeat": 501,
-        "cleared": true,
-        "original_chars": 501
+        "replaced_with_compact_marker": true,
+        "artifact_required": true
+      },
+      {
+        "name": "preserved_tool_remains_inline",
+        "tool_name": "custom_control",
+        "result_retention": "preserve",
+        "repeat": 501,
+        "replaced_with_compact_marker": false
+      },
+      {
+        "name": "archive_failure_remains_inline",
+        "tool_name": "custom_search",
+        "result_retention": "archive",
+        "repeat": 501,
+        "artifact_write_succeeds": false,
+        "replaced_with_compact_marker": false
       }
     ]
   },
