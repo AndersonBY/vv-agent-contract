@@ -87,6 +87,14 @@ Stateful hooks additionally use the existing `checkpoint_extension_refs`
 descriptor. Missing behavior or required state capabilities fail before a
 worker can acquire the run.
 
+The hook completes inside the claimed cycle before that cycle is committed.
+After a non-terminal commit, the nonblocking distributed driver reloads the
+authoritative checkpoint and enqueues at most one next-cycle envelope. Neither
+the hook nor the worker waits for that child delivery. A hook decision that
+produces a terminal candidate is routed to the framework terminal controller;
+it is not finalized by the transport callback. These scheduler rules are
+defined in `distributed-run-driver.md`.
+
 Python may express hooks as protocols and immutable dataclasses. Rust may use
 traits and enums/builders. These are allowed adaptations only when the closed
 snapshot, decision, ordering, limits, permission monotonicity, terminal

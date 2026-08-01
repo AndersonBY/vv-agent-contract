@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 6.0.1. It is a task-neutral persistence and recovery
+`vv-agent-contract` 6.1.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -535,6 +535,17 @@ variant. The replaced object containing `finished`, `terminal_candidate`, or
 stale, future, null, Boolean, or numeric discriminators; unknown or cross-variant
 fields; non-JSON-safe revisions; and incomplete or non-canonical results are
 rejected rather than normalized.
+
+## Nonblocking Driver
+
+The nonblocking distributed driver is specified in
+`distributed-run-driver.md`. It replaces scheduler-side cycle loops with
+enqueue-only `start` and one-step `advance` operations while preserving this
+checkpoint and worker-response protocol unchanged. A worker task must never
+wait for a child task result. A separate bounded
+`Runner.finalize_distributed` operation consumes a verified terminal decision;
+the advance callback does not run terminal work. Duplicate or out-of-order
+callbacks return `superseded_delivery` without mutating authoritative state.
 
 ## Terminal And Observable Projection
 

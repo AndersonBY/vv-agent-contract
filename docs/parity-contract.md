@@ -324,6 +324,17 @@ is out of band and is not a fifth response type. The replaced `finished`,
 `terminal_candidate`, and `terminal_replay` boolean combination is not a
 compatibility input and must be rejected rather than inferred.
 
+The public nonblocking driver uses the same envelope and response wires. Its
+`start` and `advance` operations enqueue at most one cycle and return without
+polling, sleeping, or waiting on a transport result. Every advance decision is
+derived from one fresh authoritative checkpoint read. A verified terminal
+candidate routes to framework-owned terminal finalization; it is never treated
+as a durable terminal by the callback. `Runner.finalize_distributed` consumes
+the verified decision in a separate bounded finalizer, including the unclaimed
+`max_cycles` candidate produced after the last committed cycle. Duplicate or
+out-of-order callbacks stop with `superseded_delivery`. See
+`distributed-run-driver.md`.
+
 ## Configured And Background Agents
 
 Configured and dynamic children receive explicit model, prompt, tool policy,

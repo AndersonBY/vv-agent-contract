@@ -71,10 +71,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "6.0.1")
+        self.assertEqual(report["version"], "6.1.0")
         self.assertEqual(report["domains"], 19)
-        self.assertEqual(report["fixture_files"], 51)
-        self.assertEqual(report["manifest_entries"], 50)
+        self.assertEqual(report["fixture_files"], 52)
+        self.assertEqual(report["manifest_entries"], 51)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
@@ -1968,7 +1968,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 159)
+        self.assertEqual(len(capabilities), 164)
         self.assertIn("tools.message", capabilities)
         self.assertNotIn("runtime_backend.cycle_runner", capabilities)
         self.assertIn("agent.sub_agent_config", capabilities)
@@ -1982,7 +1982,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 303)
+        self.assertEqual(surface_member_count, 305)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
@@ -3343,6 +3343,131 @@ class ContractRepositoryTests(unittest.TestCase):
             else:
                 self.assertIn("value", mutation)
 
+    def test_distributed_run_driver_is_enqueue_only_and_checkpoint_authoritative(self) -> None:
+        fixture = json.loads(
+            (ROOT / "fixtures/distributed_run_driver.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            fixture["schema_version"],
+            "vv-agent.distributed-run-driver.v1",
+        )
+        self.assertTrue(fixture["handle"]["passive"])
+        self.assertEqual(
+            fixture["handle"]["fields"],
+            ["checkpoint_key", "run_id", "trace_id"],
+        )
+        self.assertEqual(
+            fixture["handle"]["status_source"],
+            "authoritative_checkpoint_store",
+        )
+        self.assertFalse(fixture["operations"]["start"]["waits_for_completion"])
+        self.assertEqual(fixture["operations"]["start"]["maximum_envelopes_enqueued"], 1)
+        self.assertEqual(fixture["operations"]["advance"]["authoritative_checkpoint_reads"], 1)
+        self.assertEqual(fixture["operations"]["advance"]["maximum_envelopes_enqueued"], 1)
+        self.assertFalse(fixture["operations"]["advance"]["polls"])
+        self.assertFalse(fixture["operations"]["advance"]["sleeps"])
+        self.assertFalse(fixture["operations"]["advance"]["waits_for_completion"])
+        self.assertEqual(
+            fixture["operations"]["finalize"]["consumes_decision"],
+            "finalize_required",
+        )
+        self.assertTrue(fixture["operations"]["finalize"]["bounded_task"])
+        self.assertTrue(fixture["operations"]["finalize"]["accepts_claimed_worker_candidate"])
+        self.assertTrue(fixture["operations"]["finalize"]["accepts_unclaimed_max_cycles_candidate"])
+        self.assertFalse(fixture["operations"]["finalize"]["waits_for_child_task"])
+        self.assertEqual(
+            set(fixture["decisions"]),
+            {"dispatch", "retry_at", "wait", "finalize_required", "terminal_replay"},
+        )
+        self.assertEqual(set(fixture["decision_fields"]), set(fixture["decisions"]))
+        self.assertTrue(fixture["rules"]["worker_response_is_observation"])
+        self.assertTrue(fixture["rules"]["cycle_callback_is_bounded_advance"])
+        self.assertFalse(fixture["rules"]["advance_executes_terminal_work"])
+        self.assertTrue(fixture["rules"]["terminal_finalizer_is_separate_bounded_task"])
+        self.assertTrue(fixture["rules"]["terminal_candidate_requires_controller_finalization"])
+        self.assertTrue(fixture["rules"]["celery_async_result_get_forbidden"])
+        self.assertTrue(fixture["rules"]["apalis_wait_for_completion_forbidden"])
+        self.assertTrue(fixture["rules"]["lost_callback_recovered_by_late_ack_or_reconciler"])
+        transitions = {case["name"]: case for case in fixture["transition_cases"]}
+        self.assertEqual(transitions["start"]["cycle_index"], 1)
+        self.assertEqual(transitions["committed_cycle"]["claim_mode"], "continue")
+        self.assertEqual(transitions["expired_claim"]["claim_mode"], "recovery")
+        self.assertEqual(transitions["terminal_candidate"]["decision"], "finalize_required")
+        self.assertEqual(transitions["max_cycles_after_commit"]["result_status"], "max_cycles")
+        self.assertEqual(transitions["superseded_delivery"]["reason"], "superseded_delivery")
+        self.assertEqual(transitions["reconciliation"]["decision"], "wait")
+
+        public_api = json.loads(
+            (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
+        )
+        runtime_capabilities = {
+            capability["id"]: capability
+            for domain in public_api["domains"]
+            if domain["id"] == "runtime_backend"
+            for capability in domain["capabilities"]
+        }
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_run_handle"],
+            {
+                "id": "runtime_backend.distributed_run_handle",
+                "python": "vv_agent.runtime.backends.distributed.DistributedRunHandle",
+                "rust": "vv_agent::DistributedRunHandle",
+            },
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_delivery_outcome"]["python"],
+            "vv_agent.runtime.backends.distributed.DistributedDeliveryOutcome",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_delivery_outcome"]["rust"],
+            "vv_agent::DistributedDeliveryOutcome",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_advance_decision"]["python"],
+            "vv_agent.runtime.backends.distributed.DistributedAdvanceDecision",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_advance_decision"]["rust"],
+            "vv_agent::DistributedAdvanceDecision",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_start"]["python"],
+            "vv_agent.runtime.backends.celery.CeleryBackend.start",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_start"]["rust"],
+            "vv_agent::DistributedBackend::start",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_advance"]["python"],
+            "vv_agent.runtime.backends.celery.CeleryBackend.advance",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.distributed_advance"]["rust"],
+            "vv_agent::DistributedBackend::advance",
+        )
+        runner_surface = next(
+            surface for surface in public_api["surfaces"] if surface["id"] == "runner"
+        )
+        runner_members = {member["id"]: member for member in runner_surface["members"]}
+        self.assertEqual(
+            runner_members["start_distributed"]["python"]["name"],
+            "start_distributed",
+        )
+        self.assertEqual(
+            runner_members["start_distributed"]["rust"]["name"],
+            "start_distributed",
+        )
+        self.assertEqual(
+            runner_members["finalize_distributed"]["python"]["name"],
+            "finalize_distributed",
+        )
+        self.assertEqual(
+            runner_members["finalize_distributed"]["rust"]["name"],
+            "finalize_distributed",
+        )
+
     def test_checkpoint_sqlite_has_one_strict_current_table(self) -> None:
         sql = (ROOT / "fixtures/checkpoint_sqlite_canonical.sql").read_text(encoding="utf-8")
 
@@ -3436,7 +3561,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 51)
+            self.assertEqual(synced["fixture_files"], 52)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
