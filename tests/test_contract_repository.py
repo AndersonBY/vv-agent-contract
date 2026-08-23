@@ -71,7 +71,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "7.0.0")
+        self.assertEqual(report["version"], "7.0.1")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 53)
         self.assertEqual(report["manifest_entries"], 52)
@@ -774,7 +774,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "7.0.0")
+        self.assertEqual(fixture["contract_version"], "7.0.1")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -886,6 +886,20 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(decision_variants["reconciliation_required"]["receipt_forbidden"])
         self.assertNotIn("deferred_resolution_stale", resolve["decision_type"]["variants"])
         self.assertNotIn("deferred_resolution_conflict", resolve["decision_type"]["variants"])
+        self.assertNotIn("deferred_checkpoint_claimed", resolve["decision_type"]["variants"])
+        self.assertEqual(
+            resolve["decision_type"]["error_results_are_not_variants"],
+            resolve["errors"],
+        )
+        self.assertEqual(
+            resolve["errors"],
+            [
+                "deferred_resolution_conflict",
+                "deferred_resolution_stale",
+                "deferred_resolution_result_invalid",
+                "deferred_checkpoint_claimed",
+            ],
+        )
         decision_invalids = {
             case["name"]
             for case in fixture["invalid_cases"]
@@ -900,6 +914,15 @@ class ContractRepositoryTests(unittest.TestCase):
             },
         )
         self.assertTrue(resolve["cas"]["claim_must_be_null"])
+        self.assertEqual(
+            resolve["cas"]["claimed_checkpoint"],
+            {
+                "condition": "exact active deferred handle matches and checkpoint claim_token is non-null",
+                "error": "deferred_checkpoint_claimed",
+                "writes": [],
+                "decision_variant": False,
+            },
+        )
         self.assertTrue(resolve["cas"]["external_tool_is_never_called"])
         self.assertEqual(resolve["same_replay"]["different_result_after_resolution"], "reject_deferred_resolution_conflict")
         self.assertIn(
@@ -950,11 +973,53 @@ class ContractRepositoryTests(unittest.TestCase):
                 "deferred_resolution_result_invalid",
                 "deferred_resolution_stale",
                 "deferred_resolution_conflict",
+                "deferred_checkpoint_claimed",
                 "checkpoint_status_invalid",
             }.issubset(invalid_errors)
         )
         self.assertEqual(fixture["producer_evidence"]["python"]["status"], "pending-adoption")
         self.assertEqual(fixture["producer_evidence"]["rust"]["status"], "pending-adoption")
+        producer_evidence = fixture["producer_evidence"]
+        claimed_case = producer_evidence["claimed_checkpoint_resolution_case"]
+        self.assertEqual(claimed_case["scenario_id"], "deferred_resolution_call_b_then_call_a.v1")
+        self.assertEqual(
+            claimed_case["source"],
+            "fixtures/deferred_tool.json#resolution.cas.claimed_checkpoint",
+        )
+        self.assertEqual(
+            claimed_case["trigger"],
+            {
+                "active_journal_state": "deferred",
+                "checkpoint_claim_token": "non-null",
+                "handle": "exact matching handle",
+                "result": "definitive SUCCESS",
+            },
+        )
+        self.assertEqual(
+            claimed_case["required_assertions"],
+            {
+                "exact_typed_error": True,
+                "error_code": "deferred_checkpoint_claimed",
+                "writes": [],
+                "decision_variant": False,
+            },
+        )
+        required_claimed_evidence = (
+            "real producer claimed checkpoint resolution raises deferred_checkpoint_claimed "
+            "with zero writes and no decision variant"
+        )
+        for language, producer_call in (
+            ("python", "CheckpointStore.resolve_deferred(handle, result)"),
+            ("rust", "CheckpointStore::resolve_deferred(handle, result)"),
+        ):
+            language_evidence = producer_evidence[language]
+            self.assertIn(required_claimed_evidence, language_evidence["required"])
+            claimed = language_evidence["claimed_checkpoint_resolution"]
+            self.assertEqual(claimed["producer_call"], producer_call)
+            self.assertTrue(claimed["real_execution_required"])
+            self.assertEqual(claimed["scenario_id"], claimed_case["scenario_id"])
+            self.assertEqual(claimed["source"], claimed_case["source"])
+            self.assertEqual(claimed["assertions"], claimed_case["required_assertions"])
 
     def test_durable_deferred_wire_and_state_machine_are_strict(self) -> None:
         """Exercise the current central wire/state rules, not just fixture labels."""
@@ -2652,6 +2717,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "deferred_resolution_conflict",
                 "deferred_resolution_stale",
                 "deferred_resolution_result_invalid",
+                "deferred_checkpoint_claimed",
             ],
         )
 
@@ -3159,6 +3225,7 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["enums"]["states"],
             ["planned", "started", "deferred", "succeeded", "failed", "ambiguous"],
         )
+        self.assertEqual(fixture["deferred_rules"]["claimed_checkpoint_error"], "deferred_checkpoint_claimed")
         self.assertEqual(
             recovery["started_unknown_tool_is_not_retried"]["expected"]["status"],
             "reconciliation_required",
@@ -3289,6 +3356,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["revision_rules"]["outbox_bounded_by_lifecycle_not_fixed_cardinality_or_bytes"])
         self.assertTrue(fixture["revision_rules"]["outbox_preflight_before_first_external_tool_effect"])
         self.assertTrue(fixture["revision_rules"]["outbox_no_post_effect_capacity_failure"])
+        self.assertEqual(
+            fixture["revision_rules"]["resolve_deferred_claimed_error"],
+            "deferred_checkpoint_claimed",
+        )
+        claimed = deferred_cases["resolve_deferred_claimed_checkpoint_is_typed_error"]
+        self.assertEqual(claimed["expected"]["error"], "deferred_checkpoint_claimed")
+        self.assertEqual(claimed["expected"]["writes"], [])
+        self.assertFalse(claimed["expected"]["decision_variant"])
         self.assertEqual(cases["progress_keeps_claim"]["expected"]["claim_token"], "owner-b")
         self.assertEqual(
             cases["progress_keeps_claim"]["expected"]["outbox_event_types"],

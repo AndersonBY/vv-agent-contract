@@ -216,8 +216,11 @@ Tool calls use the closed `ToolCallOutcome` with exactly `completed` or
 never produces a model-visible tool result. The
 durable admission, resolution CAS, batch barrier, recovery decision, and
 distributed wait semantics are defined in `docs/durable-deferred-tools.md`.
+The resolver's closed typed errors are `deferred_resolution_conflict`,
+`deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
+`deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `7.0.0` applies the sparse bounded-result rules in
+Contract `7.0.1` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.

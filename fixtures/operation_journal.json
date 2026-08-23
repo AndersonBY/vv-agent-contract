@@ -366,6 +366,7 @@
     "caller_does_not_pass_revision_argument": true,
     "conflicting_replay_error": "deferred_resolution_conflict",
     "stale_resolution_error": "deferred_resolution_stale",
+    "claimed_checkpoint_error": "deferred_checkpoint_claimed",
     "stale_only_when": [
       "no_retained_receipt",
       "no_active_matching_journal"

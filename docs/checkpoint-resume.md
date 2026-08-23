@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 7.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 7.0.1. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -523,6 +523,10 @@ entries, reconciliation audit/deferred outbox events, barrier/status, and one
 claim release. Any comparison failure writes nothing. The normal resolver uses
 the same store transaction/Lua/CAS boundary for its journal, receipt-index
 tombstone, completion event, barrier/status, and revision.
+If the exact active deferred handle is presented while the checkpoint has a
+non-null claim, the resolver raises typed error
+`deferred_checkpoint_claimed` without writing state; this error is not a
+`DeferredResolveDecision` variant.
 The public result is `DeferredResolveDecision.AppliedReady(receipt)` when the
 last receipt clears the barrier, otherwise
 `DeferredResolveDecision.AppliedWaiting(receipt)`; `AppliedReady` does not poll

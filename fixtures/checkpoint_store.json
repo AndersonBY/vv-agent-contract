@@ -136,6 +136,7 @@
     "resolve_deferred_ambiguous_uses_reconciliation": true,
     "resolve_deferred_conflict_error": "deferred_resolution_conflict",
     "resolve_deferred_stale_error": "deferred_resolution_stale",
+    "resolve_deferred_claimed_error": "deferred_checkpoint_claimed",
     "resolve_deferred_not_admitted_error": "deferred_resolution_not_admitted",
     "resolve_deferred_does_not_claim_or_invoke_tool": true,
     "deferred_batch_barrier_blocks_cycle_commit_and_model_call": true,
@@ -417,6 +418,24 @@
         "decision_kind": "reconciliation_required",
         "writes": [],
         "stale": false
+      }
+    },
+    {
+      "name": "resolve_deferred_claimed_checkpoint_is_typed_error",
+      "scenario_id": "deferred_resolution_call_b_then_call_a.v1",
+      "source": "fixtures/deferred_tool.json#resolution.cas.claimed_checkpoint",
+      "operation": {
+        "kind": "resolve_deferred",
+        "active_journal_state": "deferred",
+        "checkpoint_claim_token": "owner-b",
+        "handle_ref": "exact_matching_handle",
+        "result": "definitive SUCCESS"
+      },
+      "expected": {
+        "updated": false,
+        "error": "deferred_checkpoint_claimed",
+        "writes": [],
+        "decision_variant": false
       }
     },
     {

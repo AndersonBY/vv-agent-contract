@@ -963,7 +963,8 @@
           "errors": [
             "deferred_resolution_conflict",
             "deferred_resolution_stale",
-            "deferred_resolution_result_invalid"
+            "deferred_resolution_result_invalid",
+            "deferred_checkpoint_claimed"
           ],
           "decision_error_codes": [
             "deferred_resolution_not_admitted"

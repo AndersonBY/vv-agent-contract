@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `7.0.0` defines one task-neutral boundary for a tool whose external
+Contract `7.0.1` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -118,8 +118,9 @@ It returns the closed `DeferredResolveDecision` type with exactly one variant:
 first three variants require the exact receipt; the last two forbid one.
 `NotAdmitted` carries retryable code `deferred_resolution_not_admitted`.
 Callers never pass an expected revision. The typed public errors are
-`deferred_resolution_conflict`, `deferred_resolution_stale`, and
-`deferred_resolution_result_invalid`; they are errors, not decision variants.
+`deferred_resolution_conflict`, `deferred_resolution_stale`,
+`deferred_resolution_result_invalid`, and `deferred_checkpoint_claimed`; they
+are errors, not decision variants.
 
 Callers do not pass an expected revision. The store reloads the authoritative
 checkpoint and uses an internal revision-CAS retry loop. It first searches the
@@ -133,7 +134,10 @@ retryable `deferred_resolution_not_admitted` decision without writing anything;
 the host must durably retain the result and retry after admission. An
 `ambiguous` entry remains `reconciliation_required`. Only a true identity
 mismatch or an active entry with no retained receipt is
-`deferred_resolution_stale`.
+`deferred_resolution_stale`. If the exact active deferred handle matches but the
+checkpoint has a non-null claim, the resolver raises
+`deferred_checkpoint_claimed` without writing a journal, receipt, barrier,
+outbox, or revision; this invariant error is not a decision variant.
 
 Only `SUCCESS` and `ERROR` results are definitive. Both are valid transitions:
 `deferred -> succeeded` and `deferred -> failed`. `WAIT_RESPONSE`, `RUNNING`,
@@ -231,3 +235,9 @@ turn merely because the worker returned `pending`.
 
 The canonical shape, invalid cases, receipt vectors, batch state transitions,
 and producer evidence are frozen in `fixtures/deferred_tool.json`.
+For `claimed_checkpoint_resolution_case`, each language must run its real
+resolver producer against the exact active deferred handle while the
+checkpoint claim is non-null. The producer evidence must show the exact typed
+error `deferred_checkpoint_claimed`, zero journal/receipt/barrier/outbox/revision
+writes, and no `DeferredResolveDecision` variant; fixture labels alone do not
+satisfy this requirement.

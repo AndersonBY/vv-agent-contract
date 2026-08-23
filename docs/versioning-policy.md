@@ -92,6 +92,20 @@ The support matrix for this release stays `pending-adoption` until both
 implementations pin the same revision and pass real producer and cross-
 repository gates.
 
+## Release Note: 7.0.1
+
+`7.0.1` is a patch release. It closes the existing v7 resolver error set by
+recording `deferred_checkpoint_claimed` wherever the canonical contract lists
+typed deferred-resolution errors. When an exact active deferred handle is
+presented while its checkpoint has a non-null claim, the resolver raises this
+typed error without a journal, receipt, barrier, outbox, or revision write. It
+is not a `DeferredResolveDecision` variant and does not add a wire field,
+public argument, or decision shape. The support matrix remains
+`pending-adoption` until both implementations adopt and pass the paired gates.
+Adoption evidence must include a real Python and Rust producer trigger for this
+case with the exact error, zero-write, and non-variant assertions recorded in
+the canonical fixture.
+
 ## Completion Evidence
 
 A forward-only contract change is complete only when:

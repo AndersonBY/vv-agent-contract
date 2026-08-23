@@ -1,7 +1,7 @@
 {
   "contract": "durable_deferred_tool",
   "schema_version": "vv-agent.durable-deferred-tool.v2",
-  "contract_version": "7.0.0",
+  "contract_version": "7.0.1",
   "scope": "framework_host_boundary_only",
   "versioning": {
     "forward_only": true,
@@ -509,7 +509,8 @@
       "error_results_are_not_variants": [
         "deferred_resolution_conflict",
         "deferred_resolution_stale",
-        "deferred_resolution_result_invalid"
+        "deferred_resolution_result_invalid",
+        "deferred_checkpoint_claimed"
       ]
     },
     "internal_algorithm": "reload the authoritative checkpoint and independent receipt index, check the exact handle key first, then retry a revision CAS loop on conflict",
@@ -713,6 +714,12 @@
       "atomic": true,
       "claim_required": false,
       "claim_must_be_null": true,
+      "claimed_checkpoint": {
+        "condition": "exact active deferred handle matches and checkpoint claim_token is non-null",
+        "error": "deferred_checkpoint_claimed",
+        "writes": [],
+        "decision_variant": false
+      },
       "external_tool_is_never_called": true,
       "success_and_error_release_barrier": true,
       "directive_processing": "finish and wait_user are persisted in the result and processed by the ordinary resumed cycle directive path; resolver never creates a terminal checkpoint"
@@ -722,6 +729,7 @@
       "receipt index same handle with different canonical result raises deferred_resolution_conflict",
       "matching active started handle returns not_admitted without a write",
       "matching active ambiguous handle returns reconciliation_required without a write",
+      "matching active deferred handle with a non-null checkpoint claim raises deferred_checkpoint_claimed without a write",
       "otherwise validate active deferred handle and resolve",
       "only no-retained-receipt/no-active-matching-journal identity mismatch raises deferred_resolution_stale"
     ],
@@ -730,6 +738,7 @@
       "different_result_after_resolution": "reject_deferred_resolution_conflict",
       "different_handle": "reject_deferred_resolution_stale_only_if_no_retained_receipt_and_no_active_matching_journal",
       "already_committed_or_failed": "reject_deferred_resolution_stale",
+      "claimed_checkpoint": "reject_deferred_checkpoint_claimed_without_state_write",
       "started": "return_not_admitted_retryable_without_state_write",
       "ambiguous": "return_reconciliation_required_without_state_write"
     },
@@ -746,7 +755,8 @@
     "errors": [
       "deferred_resolution_conflict",
       "deferred_resolution_stale",
-      "deferred_resolution_result_invalid"
+      "deferred_resolution_result_invalid",
+      "deferred_checkpoint_claimed"
     ],
     "decision_error_codes": [
       "deferred_resolution_not_admitted"
@@ -1153,7 +1163,9 @@
     },
     {
       "name": "resolve_claimed_checkpoint_is_invalid",
-      "expected_error": "deferred_checkpoint_claimed"
+      "expected_error": "deferred_checkpoint_claimed",
+      "condition": "exact active deferred handle matches and checkpoint claim_token is non-null",
+      "writes": []
     },
     {
       "name": "accept_without_recovery_authority_is_ambiguous",
@@ -1228,6 +1240,23 @@
     }
   ],
   "producer_evidence": {
+    "claimed_checkpoint_resolution_case": {
+      "scenario_id": "deferred_resolution_call_b_then_call_a.v1",
+      "source": "fixtures/deferred_tool.json#resolution.cas.claimed_checkpoint",
+      "trigger": {
+        "active_journal_state": "deferred",
+        "checkpoint_claim_token": "non-null",
+        "handle": "exact matching handle",
+        "result": "definitive SUCCESS"
+      },
+      "required_assertions": {
+        "exact_typed_error": true,
+        "error_code": "deferred_checkpoint_claimed",
+        "writes": [],
+        "decision_variant": false
+      },
+      "evidence": "real producer test output plus before/after authoritative store state; fixture-only labels are insufficient"
+    },
     "python": {
       "required": [
         "ToolContext.defer factory",
@@ -1242,8 +1271,21 @@
         "deferred success and failed transitions",
         "accept_deferred recovery batch decision",
         "claimable statuses reject deferred",
-        "App Server deferred_pending projection"
+        "App Server deferred_pending projection",
+        "real producer claimed checkpoint resolution raises deferred_checkpoint_claimed with zero writes and no decision variant"
       ],
+      "claimed_checkpoint_resolution": {
+        "producer_call": "CheckpointStore.resolve_deferred(handle, result)",
+        "real_execution_required": true,
+        "scenario_id": "deferred_resolution_call_b_then_call_a.v1",
+        "source": "fixtures/deferred_tool.json#resolution.cas.claimed_checkpoint",
+        "assertions": {
+          "exact_typed_error": true,
+          "error_code": "deferred_checkpoint_claimed",
+          "writes": [],
+          "decision_variant": false
+        }
+      },
       "status": "pending-adoption"
     },
     "rust": {
@@ -1260,8 +1302,21 @@
         "deferred success and failed transitions",
         "accept_deferred recovery batch decision",
         "claimable statuses reject deferred",
-        "App Server deferred_pending projection"
+        "App Server deferred_pending projection",
+        "real producer claimed checkpoint resolution raises deferred_checkpoint_claimed with zero writes and no decision variant"
       ],
+      "claimed_checkpoint_resolution": {
+        "producer_call": "CheckpointStore::resolve_deferred(handle, result)",
+        "real_execution_required": true,
+        "scenario_id": "deferred_resolution_call_b_then_call_a.v1",
+        "source": "fixtures/deferred_tool.json#resolution.cas.claimed_checkpoint",
+        "assertions": {
+          "exact_typed_error": true,
+          "error_code": "deferred_checkpoint_claimed",
+          "writes": [],
+          "decision_variant": false
+        }
+      },
       "status": "pending-adoption"
     }
   }
