@@ -27,6 +27,8 @@ python3 scripts/contractctl.py build --output-dir dist
 `docs/checkpoint-resume.md`。
 只入队的 Cycle 调度器与终态 controller 边界见
 `docs/distributed-run-driver.md`。
+可持久化 deferred tool 的 admission、resolution、批次 barrier 与恢复规则见
+`docs/durable-deferred-tools.md`。
 主循环与内部模型调用的完整计量、预算、事件和恢复规范见
 `docs/model-call-accounting.md`。
 类型化工具声明、累计元数据策略和执行生命周期遥测规范见

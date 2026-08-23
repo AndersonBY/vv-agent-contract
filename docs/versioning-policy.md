@@ -56,6 +56,42 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 7.0.0
+
+`7.0.0` is a major forward-only release. It adds the durable deferred-tool
+boundary and intentionally replaces the earlier deferred representation:
+
+- `ToolCallOutcome.Deferred(DeferredToolHandle)` is the only deferred tool
+  outcome; completed tool results have no deferred status member;
+- the handle wire requires its schema discriminator plus four identity fields;
+- model-tool batches use one all-or-none admission CAS, one claim release, and
+  a durable batch barrier;
+- the event outbox is lifecycle-bounded rather than fixed-cardinality/byte
+  bounded; framework preflight reserves started, completed, deferred, and
+  resolution events before the first external tool effect;
+- `ToolContext.defer()` is the framework construction seam and fails with
+  `deferred_requires_checkpoint` before side effects without durable storage;
+- resolution uses a receipt-index-first internal revision CAS loop and an
+  independent, exact-handle tombstone index with no contract cardinality cap;
+  the index is retained across cycle commits and terminal replay, cleaned up
+  with its checkpoint, and supports both definitive success and failure;
+  early callbacks return retryable `deferred_resolution_not_admitted` without
+  writing state, while the closed public result uses
+  `AppliedReady(receipt)`, `AppliedWaiting(receipt)`, `Replayed(receipt)`,
+  `NotAdmitted`, or `ReconciliationRequired`;
+- trusted `accept_deferred` recovery decisions are exact-handle authority
+  evidence and are aggregated into one recovery CAS;
+- affected current wires are checkpoint/resume/store v7, operation journal v4,
+  tool metadata v3, tool execution result v4, durable deferred v2, handle v2,
+  tool-call outcome v2, result public v5, App Server observable v2, public API
+  v4, and distributed run driver v2. Run events are v4 because deferred
+  lifecycle fields are closed and required; the distributed worker response
+  remains v3 because no new worker variant is introduced.
+
+The support matrix for this release stays `pending-adoption` until both
+implementations pin the same revision and pass real producer and cross-
+repository gates.
+
 ## Completion Evidence
 
 A forward-only contract change is complete only when:

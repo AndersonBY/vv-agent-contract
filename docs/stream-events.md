@@ -13,7 +13,7 @@ typed sequence, and `RunEventStore` provides replay under its declared failure
 policy. There is no public runtime-log callback and no public provider-payload
 callback.
 
-The only current event discriminator is `version=v2`. Missing, stale `v1`,
+The only current event discriminator is `version=v4`. Missing, stale `v3`,
 unknown, malformed, and future versions are rejected without a compatibility
 decoder.
 
@@ -84,6 +84,14 @@ optional observer. Local order is preserved, but only event ids provide
 identity. Durable replay and deduplication require `RunEventStore` and, where
 configured, the checkpoint event outbox.
 
+`tool_call_deferred` records an admitted durable handle without a tool result;
+its cross-process form has `execution_started=true` and `duration_ms=null`.
+Normal resolution records only the ordinary `tool_call_completed` event after a
+definitive receipt is committed; it never emits `reconciliation_resolved`.
+Recovery `accept_deferred` may emit a `reconciliation_resolved` audit together
+with `tool_call_deferred` in the same batch CAS. All lifecycle transitions are
+in the checkpoint outbox CAS and preserve operation identity.
+
 Disabling an observer does not disable the internal typed journal and does not
 add prompts, messages, tools, denials, retries, or completion rules.
 
@@ -92,8 +100,8 @@ add prompts, messages, tools, denials, retries, or completion rules.
 Reasoning deltas and diagnostics are private telemetry by default and are not
 projected as visible assistant messages. Model tool-call progress may be
 projected as a tool-call delta. Actual execution continues to use
-`tool_call_started` and `tool_call_completed`. Hosts may suppress telemetry
-notifications without changing the underlying run.
+`tool_call_started`, `tool_call_deferred`, and `tool_call_completed`. Hosts may
+suppress telemetry notifications without changing the underlying run.
 
 ## Executable Evidence
 

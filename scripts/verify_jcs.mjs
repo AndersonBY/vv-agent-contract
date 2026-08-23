@@ -429,6 +429,62 @@ for (const vector of checkpointStore.event_payload_digest.golden_cases) {
   verifyVector(`checkpoint_event/${vector.name}`, vector.event, vector);
 }
 
+const deferredTool = readFixture("deferred_tool.json");
+const deferredDigestVectors = deferredTool.resolution?.receipt_index?.golden_digest_vectors;
+if (!Array.isArray(deferredDigestVectors) || deferredDigestVectors.length === 0) {
+  fail("deferred_tool.json: missing receipt golden digest vectors");
+}
+for (const vector of deferredDigestVectors) {
+  const actual = vectorValues(vector.value);
+  if (WRITE) {
+    vector.rfc8785_sha256 = actual.sha256;
+  } else if (vector.rfc8785_sha256 !== actual.sha256) {
+    fail(`deferred_tool/${vector.name}: receipt digest mismatch`);
+  }
+}
+const requestProvenance = deferredTool.handle?.request_digest_provenance;
+if (!requestProvenance || requestProvenance.source_fixture !== "operation_journal.json#request_digest.golden_cases") {
+  fail("deferred_tool: missing operation-request digest provenance");
+}
+const provenanceByOperation = new Map();
+for (const provenance of requestProvenance.cases ?? []) {
+  const source = operationRequestVectors.get(provenance.request_golden_case);
+  if (!source) {
+    fail(`deferred_tool/${provenance.operation_id}: unknown request golden case`);
+  }
+  if (WRITE) {
+    provenance.request_digest = source.sha256;
+  } else if (provenance.request_digest !== source.sha256) {
+    fail(`deferred_tool/${provenance.operation_id}: request digest provenance mismatch`);
+  }
+  provenanceByOperation.set(provenance.operation_id, provenance);
+}
+function verifyDeferredHandleProvenance(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) verifyDeferredHandleProvenance(item);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  if (value.schema_version === "vv-agent.deferred-tool-handle.v2" && value.operation_id) {
+    const provenance = provenanceByOperation.get(value.operation_id);
+    if (!provenance) {
+      fail(`deferred_tool/${value.operation_id}: missing request digest provenance`);
+    }
+    if (value.request_digest !== provenance.request_digest) {
+      fail(`deferred_tool/${value.operation_id}: handle request digest mismatch`);
+    }
+  }
+  for (const item of Object.values(value)) verifyDeferredHandleProvenance(item);
+}
+verifyDeferredHandleProvenance(deferredTool);
+if (WRITE) {
+  fs.writeFileSync(
+    path.join(ROOT, "fixtures", "deferred_tool.json"),
+    `${JSON.stringify(deferredTool, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 const checkpointResume = readFixture("checkpoint_resume.json");
 const frozenPromptResume = checkpointResume.runner_cases.find(
   (entry) => entry.name === "frozen_prompt_bundle_resume_does_not_reinvoke_producers",

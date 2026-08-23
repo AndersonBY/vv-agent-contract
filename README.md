@@ -47,6 +47,8 @@ The opt-in durable-resume and explicit-ambiguity semantics are defined in
 `docs/checkpoint-resume.md`.
 The enqueue-only cycle scheduler and terminal-controller boundary are defined
 in `docs/distributed-run-driver.md`.
+Durable deferred tool admission, resolution, batch barriers, and recovery are
+defined in `docs/durable-deferred-tools.md`.
 Complete primary and internal model-call usage, budget, event, and replay
 semantics are defined in `docs/model-call-accounting.md`.
 Typed tool declarations, cumulative metadata policy, and executor lifecycle

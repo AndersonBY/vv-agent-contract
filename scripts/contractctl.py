@@ -156,8 +156,8 @@ def validate_contract(root: Path) -> dict[str, Any]:
         )
 
     domains = contract.get("domains")
-    if not isinstance(domains, list) or len(domains) != 19 or len(set(domains)) != len(domains):
-        raise ContractError("contract.json must list 19 unique domain ids")
+    if not isinstance(domains, list) or len(domains) != 20 or len(set(domains)) != len(domains):
+        raise ContractError("contract.json must list 20 unique domain ids")
     if not all(isinstance(domain, str) and domain for domain in domains):
         raise ContractError("contract domain ids must be non-empty strings")
 
@@ -199,6 +199,7 @@ def validate_contract(root: Path) -> dict[str, Any]:
         root / "docs" / "checkpoint-resume.md",
         root / "docs" / "model-call-accounting.md",
         root / "docs" / "prompt-bundles-and-tool-results.md",
+        root / "docs" / "durable-deferred-tools.md",
     ]
     missing_docs = [str(path.relative_to(root)) for path in required_docs if not path.is_file()]
     if missing_docs:

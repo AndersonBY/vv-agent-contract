@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 6.1.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 7.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -18,7 +18,7 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v5` and
+suffix. Records require `schema_version=vv-agent.checkpoint.v7` and
 `run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
@@ -195,7 +195,7 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v5`;
+- `schema_version`, exactly `vv-agent.checkpoint.v7`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
@@ -207,7 +207,9 @@ event cursor remain excluded.
 - nullable `budget_usage`;
 - `event_cursor` and `event_outbox`;
 - `extension_state`;
-- `model_call_journal` and `tool_journal`.
+- `model_call_journal` and `tool_journal`. Deferred resolution receipts live in
+  the independent durable receipt index, keyed by the exact deferred handle;
+  they are not embedded in the checkpoint record.
 
 `revision`, the claim tuple, lease, `terminal_result`, and
 `terminal_acknowledged` are required current fields. A claim tuple is
@@ -216,6 +218,23 @@ all-or-none, and a terminal record cannot have an active claim.
 claim. A running checkpoint may retain an ambiguous entry only while a recovery
 claim is actively resolving it. Terminal records have no active journals except
 an explicit operator-abort terminal, which retains its ambiguous evidence.
+
+`deferred` requires at least one current-batch deferred tool journal entry and
+an empty claim tuple. It is not a generic claimable status. The only
+transition from `deferred` to
+unclaimed `running` is the last definitive deferred resolution; that CAS also
+empties the batch barrier. `deferred -> succeeded` and `deferred -> failed`
+are both valid journal transitions. A resolution never claims the checkpoint
+or directly finalizes it.
+
+Each independent deferred-receipt index entry is a closed tombstone containing
+the exact handle key, handle, canonical definitive result, result digest,
+completion event ID, event payload digest, and `succeeded`/`failed` receipt
+status. The index has no fixed cardinality cap. It survives cycle commits and
+retained terminal checkpoints and is deleted only with explicit checkpoint
+cleanup. It is updated atomically with the journal, outbox event,
+barrier/status, and revision in the same SQLite transaction or Redis Lua/CAS;
+the checkpoint record itself never grows with receipt count.
 
 A missing, stale, future, unknown, or malformed checkpoint discriminator returns
 `checkpoint_schema_unsupported`. The same invalid forms of the run-definition
@@ -237,6 +256,17 @@ from an interrupted cycle. This bounds active journal growth without
 discarding cost evidence needed to resume or explain the run.
 When `terminal_result` is present, its TaskTokenUsage `model_calls` array is
 exactly the same ledger and its aggregate fields are derived from that array.
+
+The current tool journal states are `planned`, `started`, `deferred`,
+`succeeded`, `failed`, and `ambiguous`. Admission may transition
+`started -> deferred` in `admit_deferred_batch`; a pre-admission crash instead
+persists `started -> ambiguous`. Definitive resolution transitions
+`deferred -> succeeded` for `SUCCESS` or `deferred -> failed` for `ERROR`.
+`WAIT_RESPONSE`, `RUNNING`, and `PENDING_COMPRESS` cannot resolve a deferred
+entry. An early callback against an exact `started` entry is
+`deferred_resolution_not_admitted`: it creates no journal transition and no
+receipt until admission has durably completed. An `ambiguous` entry remains
+under reconciliation and never takes the early-callback path.
 
 Journal progress preserves the active claim. A resumable interruption uses the
 separate atomic `suspend` operation: it writes
@@ -266,9 +296,17 @@ the original cursor for an identical duplicate and rejects the same event id
 with a different digest. Re-emission after recovery therefore uses the same
 identity and an idempotent consumer does not consume it twice.
 
-The checkpoint contains a bounded `event_outbox`. Every entry has exactly
-`event_id`, `payload_digest`, `state`, `event`, and `cursor`, and contains one
-complete canonical event accepted by the current RunEvent v2 decoder. A
+The checkpoint contains a lifecycle-bounded `event_outbox`: “bounded” means
+bounded by the finite current checkpoint lifecycle, not by a fixed entry/byte
+cardinality cap. The model-tool batch size is known before the first external
+tool effect, so the framework preflights and durably reserves storage for
+every possible started, completed (`SUCCESS` or `ERROR`), deferred-admission,
+and later deferred-resolution event in that lifecycle. Ordinary and deferred
+tools use the same preflight. There is no `outbox_full` rejection after an
+external effect; an equivalent independent outbox store is valid only when it
+also has no fixed capacity cap. Every entry has exactly `event_id`,
+`payload_digest`, `state`, `event`, and `cursor`, and contains one
+complete canonical event accepted by the current RunEvent v4 decoder. A
 type-only placeholder, partial payload, non-current event spelling, missing or
 unknown event field, or wrong event version is invalid. The embedded RunEvent
 `event_id` must exactly equal the enclosing outbox `event_id`, and the payload
@@ -325,7 +363,8 @@ process-local object is never serialized into the distributed envelope.
 
 ## Operation Journal
 
-`operation_journal.json` defines model and tool entries. Every entry has a
+`operation_journal.json` defines the current `vv-agent.operation-journal.v4`
+model and tool entries. Every entry has a
 stable `operation_id`, positive `cycle_index`, `attempt`, `state`, and lowercase
 SHA-256 `request_digest`. States are:
 
@@ -333,7 +372,9 @@ SHA-256 `request_digest`. States are:
 2. `started`: invocation may have reached the external provider or tool;
 3. `succeeded`: a complete effective response or result is durable;
 4. `failed`: a complete typed error receipt is durable;
-5. `ambiguous`: recovery observed `started` without a durable receipt.
+5. `deferred`: the framework durably admitted an external acceptance without a
+   definitive result, and the current batch barrier remains unresolved;
+6. `ambiguous`: recovery observed `started` without a durable receipt.
 
 Invalid journal entries fail with the stable error code recorded beside each
 invalid case in `operation_journal.json`; a parser message alone is not the
@@ -344,6 +385,12 @@ external operation. It writes `succeeded` or `failed` before downstream cycle
 commit. Progress writes keep the active claim and do not release its lease.
 Store implementations must prevent a heartbeat update from overwriting a
 concurrent journal progress write.
+
+For deferred tools, `admit_deferred_batch` atomically transitions
+`started -> deferred` while releasing the batch claim once; a pre-admission
+crash instead records `started -> ambiguous`. Definitive resolution then
+transitions `deferred -> succeeded` for `SUCCESS` or `deferred -> failed` for
+`ERROR`, releasing one barrier item in either case.
 
 For a model operation, the journal stores `model_operation`, non-empty actual
 `backend`, non-empty actual `model`, and `call_id`. The `started` transition and pending
@@ -460,6 +507,30 @@ The reconciliation provider is optional. Without one, the runtime applies
 untouched. A distributed envelope resolves a reconciliation capability only
 when a reference is present.
 
+Deferred tool admission and resolution are a separate current checkpoint
+state. The core collects every current model-tool outcome while holding its
+claim and commits a mixed completed/deferred batch with one all-or-none
+`admit_deferred_batch` CAS and one claim release. A proven lost admission may
+use the `accept_deferred` reconciliation decision only under an active
+recovery claim; the controller aggregates the current-batch exact handles and
+commits audit/deferred events in one CAS. Otherwise a pre-admission crash
+remains ambiguous. `resolve_deferred(handle, result)` has no expected-revision
+argument; the store performs a receipt-index-first revision CAS retry loop.
+The store exposes `accept_deferred_batch` as a low-level all-or-none CAS: it
+compares the expected checkpoint revision, active recovery claim token and
+cycle, and exact current-batch decisions before writing accepted journal
+entries, reconciliation audit/deferred outbox events, barrier/status, and one
+claim release. Any comparison failure writes nothing. The normal resolver uses
+the same store transaction/Lua/CAS boundary for its journal, receipt-index
+tombstone, completion event, barrier/status, and revision.
+The public result is `DeferredResolveDecision.AppliedReady(receipt)` when the
+last receipt clears the barrier, otherwise
+`DeferredResolveDecision.AppliedWaiting(receipt)`; `AppliedReady` does not poll
+or enqueue a worker itself. The host reuses the retained previous envelope/pending
+observation with the existing driver `advance`, or lets the running-checkpoint
+reconciler perform that existing dispatch. See `durable-deferred-tools.md` for
+the closed handle, batch barrier, early-callback, and replay rules.
+
 ## Budget And Time Resume
 
 The complete `BudgetUsageSnapshot` is persisted at every journal progress
@@ -503,8 +574,8 @@ The distributed transport returns one closed current response object with
 `schema_version=vv-agent.distributed-worker-response.v3` and a required `type`
 discriminator. The only variants are:
 
-- `pending`, with no state fields, reports that this delivery returned no
-  durable cycle progress;
+- `pending`, with no state fields, reports that no cycle commit and no response
+  result were returned by this delivery attempt;
 - `committed`, with exactly `checkpoint_revision` and `committed_cycle`, reports
   one durable non-terminal cycle commit;
 - `terminal_candidate`, with exactly `checkpoint_revision` and a complete
@@ -571,7 +642,10 @@ current schema marks optional.
 App Server `checkpoint.status` is the persisted `AgentStatus`; it is distinct
 from App Server `TurnStatus`. For example, durable
 `reconciliation_required` projects to turn status `interrupted`, while a live
-checkpoint `running` claim projects to turn status `running`.
+checkpoint `running` claim projects to turn status `running`. Durable
+`deferred` projects to the non-terminal `interrupted` view with
+`waitReason=deferred_pending`, no completion reason, and no error; `turn/resume`
+remains available after the last receipt releases the barrier.
 `app_server_observable.json` contains complete JSON-RPC request, immediate
 response, and notification sequences. A newly claimed resume responds
 `running` before `turn/started`; reconciliation later ends with
@@ -616,7 +690,7 @@ background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
 closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
-part of the v2 wire. This restriction is explicit rather than silently
+part of the current checkpoint.v7 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence

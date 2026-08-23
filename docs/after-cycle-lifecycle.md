@@ -1,7 +1,7 @@
 # After-Cycle Lifecycle Hooks
 
-Contract `0.6.x` adds an optional, task-neutral host control point after a
-complete Agent cycle. It exists so a host can observe a committed unit of work,
+Contract `7.0.0` includes an optional, task-neutral host control point after a
+complete Agent cycle. It lets a host observe a committed unit of work,
 add a bounded user steering message for the next cycle, narrow tool access, or
 stop with a non-success result. It does not classify tasks or decide whether a
 research, coding, browsing, or other domain-specific milestone is complete.

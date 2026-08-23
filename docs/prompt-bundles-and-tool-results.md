@@ -1,6 +1,6 @@
 # Prompt Bundles And Bounded Tool Results
 
-Contract `6.0.1` defines one resolved prompt representation, one sparse
+Contract `7.0.0` defines one resolved prompt representation, one sparse
 bounded-result extension, and the current artifact-backed Message and
 microcompaction behavior. These are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's
@@ -71,9 +71,14 @@ are not current shapes.
 
 ## Bounded Tool Results
 
-An ordinary `ToolExecutionResult` remains the minimal result with required
+The current `vv-agent.tool-execution-result.v4` `ToolExecutionResult` remains
+the minimal result with required
 `tool_call_id`, `content`, `status_code`, and `directive`. Optional fields are
 omitted when absent. A truncated result additionally has:
+
+`status_code` accepts only the current completed-result values. Deferred is a
+closed `ToolCallOutcome.Deferred(DeferredToolHandle)` variant and never a
+`ToolExecutionResult` status; a completed result carrying deferred is rejected.
 
 - `truncated: true`;
 - `truncation_reason` (`output_limit` or `read_limit`);

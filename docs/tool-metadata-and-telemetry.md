@@ -1,6 +1,6 @@
 # Tool Metadata And Execution Telemetry
 
-Contract `6.0.1` defines one typed, task-neutral declaration for host policy,
+Contract `7.0.0` defines one typed, task-neutral declaration for host policy,
 tool-result retention, and
 execution telemetry. The framework does not inspect prompts, infer semantics
 from tool names or arguments, or decide whether a business answer is complete.
@@ -88,23 +88,29 @@ The event order for a normalized model tool call is:
 1. `tool_call_planned`
 2. zero or more approval events
 3. `tool_call_started`, immediately before effects may occur
-4. `tool_call_completed`, after a `ToolExecutionResult` exists
+4. `tool_call_deferred`, when durable admission returns a handle without a
+   result
+5. `tool_call_completed`, after a definitive `ToolExecutionResult` exists
 
 Invalid serialized arguments fail before planning. An unknown tool, policy
 denial, or approval short-circuit emits planned plus completed without a
-started event. Cancellation, process loss, or another exception after started
-may leave no completed event; the checkpoint operation journal is authoritative
-for ambiguity and recovery.
+started event. A durable deferred admission emits `tool_call_deferred` and no
+model-visible tool result; resolution later emits the ordinary completed event.
+Cancellation, process loss, or another exception after started may leave no
+completed event; the checkpoint operation journal is authoritative for
+ambiguity and recovery.
 
 Planned and started events contain normalized arguments and optional typed
 metadata. Completed events always contain status, directive, nullable error
 code, `execution_started`, nullable `duration_ms`, and optional typed metadata.
 The objects are closed. Missing required fields and unknown fields are rejected.
 
-Status values are `success`, `error`, `wait_response`, `running`, and
-`pending_compress`. The latter is an internal automatic-compaction status and
-does not expose a model tool. Directive values are `continue`, `finish`, and
-`wait_user`.
+Completed status values are `success`, `error`, `wait_response`, `running`,
+and `pending_compress`. Deferred is represented by `tool_call_deferred` with a
+durable handle and is not a completed result; `pending_compress` remains an
+internal automatic-compaction status and does not expose a model tool.
+Cross-process deferred events have `execution_started=true` and
+`duration_ms=null`. Directive values are `continue`, `finish`, and `wait_user`.
 Successful results use `error_code=null`; calls that did not cross the started
 boundary use `duration_ms=null`.
 

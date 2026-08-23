@@ -103,6 +103,9 @@ reasons are `tool_finish`, `no_tool_finish`, `stop_on_first_tool`,
 `budget_exhausted`. `partial_output` carries the last completed assistant
 output for non-success terminal states. `completion_tool_name` is present only
 for a tool-driven terminal.
+`AgentStatus.deferred` is non-terminal checkpoint state; distributed and App
+Server projections expose `deferred_pending` as an interrupted, resumable view
+without completion reason or error.
 
 ## Token And Cache Usage
 
@@ -145,7 +148,7 @@ and other provider field names remain inside adapter input and
 
 ## Events And Streaming
 
-RunEvent v2 is a closed, typed wire. Every event requires `version=v2`,
+RunEvent v4 is a closed, typed wire. Every event requires `version=v4`,
 identity, and a finite non-negative `created_at` in Unix seconds. Approval
 resolution carries exactly one `action` value.
 
@@ -197,14 +200,24 @@ Both ratios are finite numbers in `(0, 1]`, with
 Booleans, null, float-encoded integers, missing fields, unknown fields,
 non-finite host values, and out-of-range values are rejected.
 
-`ToolExecutionResult` has one status field: the required typed `status_code`.
-The current wire values are `SUCCESS`, `ERROR`, `WAIT_RESPONSE`, `RUNNING`, and
-`PENDING_COMPRESS`. `PENDING_COMPRESS` is emitted only by framework-owned
+`ToolExecutionResult` uses the closed `vv-agent.tool-execution-result.v4` wire
+and has one status field: the required typed `status_code`.
+The current wire values are `SUCCESS`, `ERROR`, `WAIT_RESPONSE`, `RUNNING`,
+and `PENDING_COMPRESS`. `PENDING_COMPRESS` is emitted only by framework-owned
 automatic compaction; it is not a tool exposure, tool name, or model-callable
-state transition. Unknown fields are rejected, and no reader derives another
-status vocabulary from `status_code`.
+state transition. Deferred is represented only by
+`ToolCallOutcome.Deferred(DeferredToolHandle)` and never by a completed result.
+Unknown fields are rejected, and no reader derives another status vocabulary
+from `status_code`.
 
-Contract `6.0.1` applies the sparse bounded-result rules in
+Tool calls use the closed `ToolCallOutcome` with exactly `completed` or
+`deferred` variants. `deferred` carries only the closed
+`DeferredToolHandle` (required discriminator plus four identity fields); it
+never produces a model-visible tool result. The
+durable admission, resolution CAS, batch barrier, recovery decision, and
+distributed wait semantics are defined in `docs/durable-deferred-tools.md`.
+
+Contract `7.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -272,7 +285,7 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v5` and embed an exact
+Checkpoint records require `vv-agent.checkpoint.v7` and embed an exact
 `vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
@@ -301,8 +314,8 @@ The worker response is a separate closed wire with
 `schema_version=vv-agent.distributed-worker-response.v3` and one required
 `type` discriminator. Exactly four variants exist:
 
-- `pending` has no state fields and means that no durable cycle progress was
-  returned by this delivery attempt;
+- `pending` has no state fields and means that no cycle commit and no response
+  result were returned by this delivery attempt;
 - `committed` has exactly `checkpoint_revision` and `committed_cycle`;
 - `terminal_candidate` has exactly `checkpoint_revision` and a complete
   current `AgentResult` wire object that still requires controller-side durable
@@ -334,6 +347,15 @@ the verified decision in a separate bounded finalizer, including the unclaimed
 `max_cycles` candidate produced after the last committed cycle. Duplicate or
 out-of-order callbacks stop with `superseded_delivery`. See
 `distributed-run-driver.md`.
+
+Deferred admission reuses the `pending` worker response because no cycle
+commit and no response result were returned by this delivery attempt. While any current-batch deferred
+journal entry lacks a definitive receipt, the driver returns
+`wait(reason=deferred_pending)`; this is a non-terminal interrupted projection.
+After the batch barrier is released it dispatches the resumed cycle through
+the existing recovery claim path. This adds no worker response variant or
+polling loop. The complete admission, resolution, and ordering contract is in
+`durable-deferred-tools.md`.
 
 ## Configured And Background Agents
 

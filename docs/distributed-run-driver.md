@@ -18,8 +18,8 @@ The driver reloads the checkpoint exactly once and returns one decision:
 - `dispatch`: enqueue the enclosed next-cycle envelope immediately;
 - `retry_at`: enqueue the enclosed recovery envelope no earlier than the given
   Unix-millisecond deadline;
-- `wait`: do not enqueue work while reconciliation or a host-owned interaction
-  remains unresolved;
+- `wait`: do not enqueue work while reconciliation, a deferred batch barrier,
+  or a host-owned interaction remains unresolved;
 - `finalize_required`: run the framework terminal controller for the verified
   candidate while retaining the worker claim;
 - `terminal_replay`: return the exact retained durable terminal without running
@@ -55,7 +55,21 @@ observation, the driver compares the observation with the authoritative
 checkpoint before deciding. Duplicate and out-of-order callbacks therefore
 cannot advance the checkpoint twice. An unexpired claim produces `retry_at`;
 an expired claim produces a recovery envelope, while
-`reconciliation_required` stops dispatch with `wait`.
+`reconciliation_required` stops dispatch with `wait`; a deferred tool batch
+stops dispatch with `wait(reason=deferred_pending)` until every current-batch
+deferred journal entry has a definitive receipt. `deferred` is not claimable;
+only the last resolution CAS returns the checkpoint to unclaimed `running` and
+returns `DeferredResolveDecision.AppliedReady(receipt)`.
+
+Admission of a model-tool batch uses one `admit_deferred_batch` CAS for all
+completed and deferred outcomes and releases the claim once. A worker response
+of `pending` means no cycle commit and no response result were returned by this
+delivery attempt, not a terminal result. A
+`DeferredResolveDecision.AppliedReady(receipt)` resolution does not poll or
+wait for a worker:
+the host reuses the retained previous envelope and pending observation in the
+existing `advance` operation, or the running-checkpoint reconciler performs
+that existing dispatch through the ordinary recovery claim path.
 
 Cycle, advance, and terminal-finalizer transport tasks use late acknowledgement
 and reject-on-worker-loss semantics. A delivery that commits and then dies before
