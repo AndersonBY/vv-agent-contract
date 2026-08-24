@@ -124,6 +124,17 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 8.0.1
+
+`8.0.1` is a patch release with no wire or runtime behavior change. It removes
+an accidental top-level `vendor_future` member from the `claimed_active_cycle`
+checkpoint valid fixture. Checkpoint objects remain closed: unknown top-level
+fields are rejected, while vendor extension data is valid only in the explicit
+`extension_state` map. The current checkpoint/controller valid and invalid cases
+and all controller-command digest vectors were audited; their semantics remain
+unchanged. The support matrix remains `pending-adoption` until both
+implementations adopt and pass the paired gates.
+
 ## Completion Evidence
 
 A forward-only contract change is complete only when:

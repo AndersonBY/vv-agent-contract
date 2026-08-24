@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 8.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 8.0.1. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 

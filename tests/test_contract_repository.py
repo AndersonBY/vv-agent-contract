@@ -92,7 +92,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "8.0.0")
+        self.assertEqual(report["version"], "8.0.1")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -795,7 +795,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "8.0.0")
+        self.assertEqual(fixture["contract_version"], "8.0.1")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -3271,11 +3271,45 @@ class ContractRepositoryTests(unittest.TestCase):
             {case["name"] for case in fixture["invalid_cases"]},
         )
         valid_cases = {case["name"]: case["payload"] for case in fixture["valid_cases"]}
+        allowed_checkpoint_fields = set(fixture["required_fields"])
         for payload in valid_cases.values():
             self.assertEqual(payload["run_definition"], minimal_definition["definition"])
             self.assertEqual(payload["run_definition_digest"], minimal_definition["sha256"])
             self.assertIn("active_host_interaction", payload)
             self.assertIn("suspended_origin", payload)
+        for case_name, payload in valid_cases.items():
+            self.assertEqual(set(payload), allowed_checkpoint_fields, case_name)
+            self.assertEqual(payload["schema_version"], fixture["discriminator"]["required_value"], case_name)
+            claim_fields = {
+                payload["claim_token"],
+                payload["claimed_cycle"],
+                payload["lease_expires_at_ms"],
+            }
+            self.assertTrue(
+                (claim_fields == {None}) or (None not in claim_fields),
+                case_name,
+            )
+            if None not in claim_fields:
+                self.assertEqual(payload["claimed_cycle"], payload["cycle_index"] + 1, case_name)
+            status = payload["status"]
+            if status == "host_interaction":
+                self.assertIsNotNone(payload["active_host_interaction"], case_name)
+                self.assertIsNone(payload["suspended_origin"], case_name)
+                self.assertIsNone(payload["terminal_result"], case_name)
+            elif status == "suspended":
+                self.assertIsNone(payload["active_host_interaction"], case_name)
+                self.assertIsNotNone(payload["suspended_origin"], case_name)
+                self.assertIsNone(payload["terminal_result"], case_name)
+            else:
+                self.assertIsNone(payload["active_host_interaction"], case_name)
+                self.assertIsNone(payload["suspended_origin"], case_name)
+        unknown_top_level = next(
+            case for case in fixture["invalid_cases"] if case["name"] == "unknown_top_level_is_rejected"
+        )
+        self.assertEqual(
+            set(unknown_top_level["payload"]) - allowed_checkpoint_fields,
+            {"vendor_future"},
+        )
         self.assertTrue(
             all(
                 "run_definition" in case["payload"]
@@ -4360,7 +4394,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "8.0.0")
+        self.assertEqual(fixture["contract_version"], "8.0.1")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -4697,6 +4731,46 @@ class ContractRepositoryTests(unittest.TestCase):
             ).encode("utf-8")
             self.assertEqual(len(canonical_bytes), vector["canonical_json_utf8_bytes"])
             self.assertEqual(hashlib.sha256(canonical_bytes).hexdigest(), vector["sha256"])
+
+        requests = {
+            case["name"]: case["request"]
+            for case in fixture["canonical_cases"]
+            if "request" in case
+        }
+
+        def set_path(payload: dict[str, object], path: str, value: object) -> None:
+            target: dict[str, object] = payload
+            parts = path.split(".")
+            for part in parts[:-1]:
+                target = target[part]  # type: ignore[assignment]
+            target[parts[-1]] = value
+
+        for case in fixture["invalid_cases"]:
+            mutation = case.get("mutation", {})
+            expected_digest = mutation.get("recompute_command_digest")
+            if expected_digest is None:
+                continue
+            base_name = case["base_valid_case"]
+            candidate = copy.deepcopy(requests[base_name])
+            for path, value in mutation.get("replace", {}).items():
+                if path != "command_digest":
+                    set_path(candidate, path, value)
+            for path, value in mutation.get("add", {}).items():
+                set_path(candidate, path, value)
+            if "replace_command" in case:
+                candidate["command"] = copy.deepcopy(case["replace_command"])
+            candidate.pop("command_digest", None)
+            canonical_bytes = json.dumps(
+                candidate,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.assertEqual(
+                hashlib.sha256(canonical_bytes).hexdigest(),
+                expected_digest,
+                case["name"],
+            )
 
         states = fixture["state_machine"]
         self.assertTrue({"host_interaction", "suspended"}.issubset(states["non_terminal"]))

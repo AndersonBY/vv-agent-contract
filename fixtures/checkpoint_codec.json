@@ -1414,9 +1414,6 @@
         "lease_expires_at_ms": 2000000000000,
         "terminal_result": null,
         "terminal_acknowledged": false,
-        "vendor_future": {
-          "preserve": true
-        },
         "model_calls": [
           {
             "call_id": "op_model_cycle_1_main:attempt:1",

@@ -1,5 +1,17 @@
 # Changelog
 
+## 8.0.1 — pending adoption
+
+- Corrected the `claimed_active_cycle` checkpoint fixture by removing an
+  accidental top-level `vendor_future` member. Current checkpoint objects stay
+  closed; vendor extension data remains valid only under `extension_state`.
+- Audited all current checkpoint valid/invalid cases and controller-command
+  digest vectors; no digest or state-metadata changes are introduced by this
+  patch.
+
+This patch remains `pending-adoption` until both language implementations pin
+the same revision and pass their real producer and cross-language quality gates.
+
 ## 8.0.0 — pending adoption
 
 - Added the task-neutral `vv-agent.controller-command.v1` closed command wire

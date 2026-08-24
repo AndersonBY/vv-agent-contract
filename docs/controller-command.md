@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `8.0.0` defines one task-neutral, closed admission seam for durable
+Contract `8.0.1` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
