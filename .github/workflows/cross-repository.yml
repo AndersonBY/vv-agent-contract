@@ -110,20 +110,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          database="$RUNNER_TEMP/vv-agent-cross-runtime.sqlite3"
-          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+          python_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-python.XXXXXX.sqlite3")"
+          rust_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-rust.XXXXXX.sqlite3")"
+          VV_AGENT_CROSS_RUNTIME_DB="$python_database" \
             VV_AGENT_CROSS_RUNTIME_MODE=write_python \
             uv run --directory vv-agent pytest \
               tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
-          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+          VV_AGENT_CROSS_RUNTIME_DB="$python_database" \
             VV_AGENT_CROSS_RUNTIME_MODE=read_python \
             cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
               --test checkpoint_core cross_runtime_sqlite_probe_from_environment -- --exact
-          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+          VV_AGENT_CROSS_RUNTIME_DB="$rust_database" \
             VV_AGENT_CROSS_RUNTIME_MODE=write_rust \
             cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
               --test checkpoint_core cross_runtime_sqlite_probe_from_environment -- --exact
-          VV_AGENT_CROSS_RUNTIME_DB="$database" \
+          VV_AGENT_CROSS_RUNTIME_DB="$rust_database" \
             VV_AGENT_CROSS_RUNTIME_MODE=read_rust \
             uv run --directory vv-agent pytest \
               tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment

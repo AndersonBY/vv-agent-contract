@@ -47,11 +47,32 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_cross_repository_gate_runs_bidirectional_sqlite_probe(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+        sqlite_probe = workflow.split("- name: Verify cross-language SQLite checkpoint", maxsplit=1)[1].split(
+            "- name: Record evidence", maxsplit=1
+        )[0]
+        normalized_probe = " ".join(sqlite_probe.replace("\\\n", " ").split())
 
         self.assertIn("Verify cross-language SQLite checkpoint", workflow)
-        self.assertEqual(workflow.count("VV_AGENT_CROSS_RUNTIME_MODE="), 4)
-        for mode in ("write_python", "read_python", "write_rust", "read_rust"):
-            self.assertIn(f"VV_AGENT_CROSS_RUNTIME_MODE={mode}", workflow)
+        self.assertIn(
+            'python_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-python.XXXXXX.sqlite3")"',
+            sqlite_probe,
+        )
+        self.assertIn(
+            'rust_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-rust.XXXXXX.sqlite3")"',
+            sqlite_probe,
+        )
+        self.assertNotIn('database="$RUNNER_TEMP/vv-agent-cross-runtime.sqlite3"', sqlite_probe)
+        self.assertEqual(sqlite_probe.count("VV_AGENT_CROSS_RUNTIME_MODE="), 4)
+        for mode, database in (
+            ("write_python", "python_database"),
+            ("read_python", "python_database"),
+            ("write_rust", "rust_database"),
+            ("read_rust", "rust_database"),
+        ):
+            self.assertIn(
+                f'VV_AGENT_CROSS_RUNTIME_DB="${database}" VV_AGENT_CROSS_RUNTIME_MODE={mode}',
+                normalized_probe,
+            )
 
     def test_record_verified_requires_all_default_branches(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
