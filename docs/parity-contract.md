@@ -220,7 +220,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `7.0.1` applies the sparse bounded-result rules in
+Contract `8.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -288,7 +288,7 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v7` and embed an exact
+Checkpoint records require `vv-agent.checkpoint.v8` and embed an exact
 `vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
@@ -303,6 +303,22 @@ reconciliation, terminal retention, and acknowledgement have the same atomic
 semantics in both languages. Unknown operation outcomes remain ambiguous until
 the host defers, retries under policy, supplies a verified receipt, records a
 typed failure, or explicitly aborts.
+
+The v8 `ControllerCommand` admission is also one task-neutral seam in both
+languages. Its closed command and receipt wires use the same handle,
+resume-attempt, and revision fences; `host_interaction` and `suspended` remain
+non-terminal and recover the same logical cycle while preserving the last
+committed cycle index. The framework-only producer persists a complete strict
+host request (including a redacted prompt) and writes only the v4
+`host_interaction_requested` event/UI notification outbox. A response command
+persists the complete response in the independent interaction record before a
+recovery worker injects it once and records
+`host_interaction_response_consumed`; response replay is zero-write. Resume of
+a running suspended origin wakes, while resume of a host-interaction origin
+without a pending response only restores the wait. The controller
+receipt/outbox CAS is separate from deferred resolution, while terminal
+continuation remains a successor-run operation. `ask_user` continues to
+produce terminal `wait_user`.
 
 Distributed workers accept only
 `schema_version=vv-agent.distributed-run.v5`. Capabilities and the frozen run

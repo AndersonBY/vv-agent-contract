@@ -56,55 +56,73 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
-## Release Note: 7.0.0
+## Release Note: 8.0.0
 
-`7.0.0` is a major forward-only release. It adds the durable deferred-tool
-boundary and intentionally replaces the earlier deferred representation:
+`8.0.0` is a major forward-only release. It adds the task-neutral
+`vv-agent.controller-command.v1` admission and its durable receipt without
+merging it with deferred resolution or terminal successor continuation:
 
-- `ToolCallOutcome.Deferred(DeferredToolHandle)` is the only deferred tool
-  outcome; completed tool results have no deferred status member;
-- the handle wire requires its schema discriminator plus four identity fields;
-- model-tool batches use one all-or-none admission CAS, one claim release, and
-  a durable batch barrier;
-- the event outbox is lifecycle-bounded rather than fixed-cardinality/byte
-  bounded; framework preflight reserves started, completed, deferred, and
-  resolution events before the first external tool effect;
-- `ToolContext.defer()` is the framework construction seam and fails with
-  `deferred_requires_checkpoint` before side effects without durable storage;
-- resolution uses a receipt-index-first internal revision CAS loop and an
-  independent, exact-handle tombstone index with no contract cardinality cap;
-  the index is retained across cycle commits and terminal replay, cleaned up
-  with its checkpoint, and supports both definitive success and failure;
-  early callbacks return retryable `deferred_resolution_not_admitted` without
-  writing state, while the closed public result uses
-  `AppliedReady(receipt)`, `AppliedWaiting(receipt)`, `Replayed(receipt)`,
-  `NotAdmitted`, or `ReconciliationRequired`;
-- trusted `accept_deferred` recovery decisions are exact-handle authority
-  evidence and are aggregated into one recovery CAS;
-- affected current wires are checkpoint/resume/store v7, operation journal v4,
-  tool metadata v3, tool execution result v4, durable deferred v2, handle v2,
-  tool-call outcome v2, result public v5, App Server observable v2, public API
-  v4, and distributed run driver v2. Run events are v4 because deferred
-  lifecycle fields are closed and required; the distributed worker response
-  remains v3 because no new worker variant is introduced.
+- `host_interaction_response`, `suspend`, `resume`, `cancel`, and explicit
+  `abort` are the only closed command variants sharing one
+  command id, RFC 8785 digest, passive run handle, resume-attempt fence, and
+  checkpoint revision CAS;
+- the App Server derives the global command id from `(threadId, turnId,
+  actionId)` using a length-prefixed RFC 8785 JCS UTF-8 payload and SHA-256;
+  `actionId` is stable only within its exact thread/turn scope, while the
+  derived id keys receipts, replay, and conflict detection;
+- the checkpoint discriminator is `vv-agent.checkpoint.v8` with no v7 reader;
+  `active_host_interaction` and `suspended_origin` are persisted for crash
+  recovery;
+- framework-only typed `HostInteractionRequest`/`HostInteractionOutcome`
+  admission holds the active claim and releases it in the same CAS; it is not
+  a controller variant;
+- the checkpoint revision, event outbox, command receipt, and controller wake
+  outbox marker are committed together. Replays return the retained receipt,
+  digest conflicts and stale fences write nothing, and an uncertain
+  publication remains ambiguous until the scheduler reconciles it;
+- producer admission and controller response admission have separate explicit
+  same-transaction sets; notification claim, delivery, and reconciliation are
+  independent row-level lifecycle transactions and never join either wake
+  transaction;
+- the framework-only host-interaction producer persists the complete strict
+  request (including credential-redacted prompt) in both the checkpoint and an
+  independent interaction record. It writes only a v4
+  `host_interaction_requested` event and an independent durable UI notification
+  outbox, never a worker wake. Same identity plus digest replays with zero
+  writes; a different binding or digest is a conflict;
+- a response command admission persists the complete closed user message,
+  response digest, command id, resolved-pending record, receipt, and recovery
+  wake at `admission_revision=expected_revision+1` (8 -> 9 is an example) before
+  returning; it does not append the consumed event. `resolved_pending` and
+  `resolved_claimed` are hard recovery barriers. A recovery worker calls the
+  combined `claim_and_consume_host_interaction_response(envelope)` operation,
+  which obtains the checkpoint execution claim and record phase together,
+  injects the response once, appends `host_interaction_response_consumed`, and
+  records `consumed_revision=admission_revision+1` (9 -> 10 is an example)
+  before model/tool work. A crash before commit rolls back both claims; a
+  consumed replay does not duplicate injection. The host UI notification is a
+  separate at-least-once outbox with stable observer deduplication;
+- `resume` wakes only a suspended running origin or a suspended host
+  interaction with a pending response. A host-origin suspension without a
+  response restores the wait and does not dispatch a worker;
+- the distributed worker response remains v3: a pending observation plus the
+  authoritative checkpoint status yields the host-interaction or suspended
+  wait reason. No synthetic worker or run-event variant is introduced;
+- the public API inventory is v5, the nonblocking distributed driver is v3,
+  and the App Server observable projection is v3 to expose narrow `turn/action`
+  plus the two non-terminal wait projections;
+- `wait_user` remains the existing terminal `ask_user` behavior. New input
+  after a terminal still requires the separate successor-run continuation
+  protocol;
+- SQLite and Redis receipt/interaction indexes are canonical. SQLite enforces
+  scalar state, lease, and foreign-key relations; the strict v8 codec validates
+  closed nested request/response JSON, RFC 8785 digests, forbidden fields, and
+  UTF-8 limits before CAS. Receipt payloads remain free of provider-specific
+  data, secrets, and application business fields.
 
-The support matrix for this release stays `pending-adoption` until both
-implementations pin the same revision and pass real producer and cross-
-repository gates.
-
-## Release Note: 7.0.1
-
-`7.0.1` is a patch release. It closes the existing v7 resolver error set by
-recording `deferred_checkpoint_claimed` wherever the canonical contract lists
-typed deferred-resolution errors. When an exact active deferred handle is
-presented while its checkpoint has a non-null claim, the resolver raises this
-typed error without a journal, receipt, barrier, outbox, or revision write. It
-is not a `DeferredResolveDecision` variant and does not add a wire field,
-public argument, or decision shape. The support matrix remains
-`pending-adoption` until both implementations adopt and pass the paired gates.
-Adoption evidence must include a real Python and Rust producer trigger for this
-case with the exact error, zero-write, and non-variant assertions recorded in
-the canonical fixture.
+The support matrix is `pending-adoption` until both implementations pin the
+same v8 revision and pass real producer, full repository, and cross-language
+gates.
 
 ## Completion Evidence
 

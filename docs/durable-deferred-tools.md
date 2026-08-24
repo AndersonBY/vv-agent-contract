@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `7.0.1` defines one task-neutral boundary for a tool whose external
+Contract `8.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the

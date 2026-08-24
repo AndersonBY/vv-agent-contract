@@ -19,11 +19,21 @@ The driver reloads the checkpoint exactly once and returns one decision:
 - `retry_at`: enqueue the enclosed recovery envelope no earlier than the given
   Unix-millisecond deadline;
 - `wait`: do not enqueue work while reconciliation, a deferred batch barrier,
-  or a host-owned interaction remains unresolved;
+  a host interaction, or a suspension remains unresolved;
 - `finalize_required`: run the framework terminal controller for the verified
   candidate while retaining the worker claim;
 - `terminal_replay`: return the exact retained durable terminal without running
   terminal processing again.
+
+`DistributedBackend.resolve_controller_command(command)` is the public control
+operation; `command.handle` is the only handle input. It delegates admission
+to `CheckpointStore.admit_controller_command(command)` and returns one closed
+`ControllerCommandResolution`: response/resume receipts produce an enqueue-only
+`wake_after_controller_command` decision for the retained logical cycle;
+suspend/cancel/abort produce no wake. A same-id replay returns the retained
+receipt without a second wake. The receipt, checkpoint revision, event marker,
+and wake outbox are one CAS transaction; a reaper recovers a crash before
+enqueue.
 
 A duplicate or out-of-order callback whose delivery has already been overtaken
 returns `wait(reason=superseded_delivery)`. It does not enqueue an older cycle,
@@ -70,6 +80,41 @@ wait for a worker:
 the host reuses the retained previous envelope and pending observation in the
 existing `advance` operation, or the running-checkpoint reconciler performs
 that existing dispatch through the ordinary recovery claim path.
+
+The same observation rule applies to `host_interaction` and `suspended`:
+`distributed-worker-response.v3` remains `pending`—only an uncommitted
+observation, never a result—while one authoritative
+checkpoint read maps the status to `wait(reason=host_interaction)` or
+`wait(reason=suspended)`. A successful controller command emits an enqueue-only
+recovery decision for the same logical cycle while preserving the last
+committed cycle index; it does not poll, sleep, or fabricate a run event. Host
+response admission persists the full resolved interaction record, receipt, and
+recovery wake at `admission_revision=expected_revision+1` (8 -> 9 is an
+example), but no consumed marker. `resolved_pending` and `resolved_claimed`
+are hard recovery barriers. One recovery worker calls
+`claim_and_consume_host_interaction_response(envelope)`, which locks the
+checkpoint and record together with `claim_mode=recovery` and the authoritative
+pre-claim `resume_attempt`, obtains the checkpoint execution claim,
+injects the message, records the complete RunEvent v4
+`host_interaction_response_consumed`, and commits
+`consume_revision=admission_revision+1` (9 -> 10 is an example) before model or
+tool work. The combined CAS releases the transient record claim while retaining
+the checkpoint execution claim for model/tool ownership; a crash before commit
+rolls back to `resolved_pending`, while replay after commit returns the marker
+without a second injection or wake. The successful recovery claim increments
+`resume_attempt` exactly once (2 -> 3 in the canonical example), and the
+consumed event plus next recovery envelope carry 3; stale, failed, and replay
+paths preserve their authoritative value. A record-only claim is invalid. The
+producer's `host_interaction_requested` notification is UI/event-only and uses
+the separate durable UI notification outbox with `wait_reason=host_interaction`.
+Its delivery is at-least-once and observers deduplicate stable notification
+identities. An uncertain notification callback is reconciled explicitly to
+delivered, retry, or abort; the reaper retries pending/expired claims but never
+blind-retries ambiguous rows. A suspended running origin
+resumes with a wake, while a host-interaction origin resumes to wait unless a
+response is pending.
+The closed command, receipt, precedence, and crash matrix are in
+`controller-command.md`.
 
 Cycle, advance, and terminal-finalizer transport tasks use late acknowledgement
 and reject-on-worker-loss semantics. A delivery that commits and then dies before

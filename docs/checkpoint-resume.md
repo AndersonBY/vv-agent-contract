@@ -1,13 +1,39 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 7.0.1. It is a task-neutral persistence and recovery
+`vv-agent-contract` 8.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
 The capability name is **durable resume with explicit ambiguity**. “Exact
 resume” is not used as an unqualified guarantee because an external operation
 can complete without its receipt becoming durable.
+
+## Controller Commands
+
+The v8 controller seam is specified in `controller-command.md`. It admits one
+closed `ControllerCommand` against a passive run handle and one checkpoint
+revision fence. `host_interaction` and `suspended` are non-terminal statuses;
+their command receipt and checkpoint revision are one CAS, and recovery keeps
+the same last-committed cycle index while reclaiming the same logical cycle and
+retained journal evidence. A worker's existing
+`pending` response is observed together with the authoritative status, so the
+driver can wait for `host_interaction` or `suspended` without a new worker wire
+variant.
+
+The command receipt is not a deferred-tool receipt. `resolve_deferred` must
+clear an unresolved deferred barrier before controller state changes can be
+admitted. Likewise, `wait_user` remains the terminal `ask_user` result and a
+new input uses the separate successor-run continuation protocol. A committed
+terminal, live claim, unresolved ambiguity, and deferred barrier have strict
+precedence over ordinary cancellation; see the canonical fault matrix and
+SQLite receipt schema for crash-after-commit-before-enqueue recovery.
+
+If a response arrives while a host interaction is suspended, admission stores
+the complete response record but leaves the checkpoint suspended and emits no
+worker wake. Resuming that host origin dispatches exactly once when the record
+is pending. Resuming a suspended running origin dispatches immediately; a host
+origin without a response remains waiting.
 
 ## Activation And Strictness
 
@@ -18,7 +44,7 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v7` and
+suffix. Records require `schema_version=vv-agent.checkpoint.v8` and
 `run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
@@ -195,7 +221,7 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v7`;
+- `schema_version`, exactly `vv-agent.checkpoint.v8`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
@@ -206,10 +232,58 @@ event cursor remain excluded.
   `shared_state`;
 - nullable `budget_usage`;
 - `event_cursor` and `event_outbox`;
+- `active_host_interaction`, the complete closed
+  `vv-agent.host-interaction-request.v1` object
+  `{schema_version, interaction_id, logical_cycle, operation_id, tool_call_id,
+  request_digest, prompt}` or null. Prompt content is credential-redacted and
+  capped at 65,536 UTF-8 bytes;
+- `suspended_origin`, a closed `{status, active_host_interaction}` object or
+  null. `host_interaction` and `suspended` persist these fields and have no
+  live claim, so a crash reloads the exact origin before wake/recovery;
 - `extension_state`;
 - `model_call_journal` and `tool_journal`. Deferred resolution receipts live in
   the independent durable receipt index, keyed by the exact deferred handle;
-  they are not embedded in the checkpoint record.
+  they are not embedded in the checkpoint record. Host interaction records are
+  an independent index: they retain the full request and, after response
+  admission, the full closed user message, response digest, command id, and
+  `resolved_pending`/`resolved_claimed`/`consumed` state. Admission at
+  `admission_revision=expected_revision+1` (8 -> 9 is an example) stores the
+  complete resolved record, command receipt, and recovery wake but no consumed
+  event or marker. These two resolved states are a hard recovery barrier:
+  ordinary continue/claim is rejected or routed to the dedicated
+  `claim_and_consume_host_interaction_response(envelope)` operation. Recovery
+  locks the checkpoint and record together, obtains the checkpoint execution
+  claim with `claimed_cycle=cycle_index+1`, performs the transient
+  `resolved_claimed` phase, injects the response once, records
+  `consumed_revision=admission_revision+1` (9 -> 10 is an example), and appends
+  `host_interaction_response_consumed` in the same CAS before model/tool work.
+  The combined recovery claim uses `claim_mode=recovery`: its envelope carries
+  the authoritative pre-claim `resume_attempt`, a successful claim increments
+  that value exactly once (2 -> 3 in the canonical example), and the consumed
+  event plus next envelope carry 3. Failed, stale, and consumed-replay paths
+  preserve their authoritative value. The record claim is released while the
+  checkpoint execution claim remains held until the next progress CAS. A crash
+  before commit rolls back both claims to `resolved_pending`; a consumed replay
+  does not inject again. Consumed records
+  remain through the next cycle commit or terminal acknowledgement and are
+  removed only by explicit checkpoint retention cleanup. The UI notification is
+  an independent durable `host_interaction_notification_outbox`, delivered via
+  `thread/status` and `thread/status/changed`, never the recovery wake outbox;
+  notification delivery is at-least-once and observers deduplicate stable
+  notification identities. Ambiguous notification delivery is resolved by
+  `reconcile_host_interaction_notification` to delivered, retry, or abort;
+  the reaper retries pending/expired claims but never blind-retries ambiguous
+  rows.
+
+The transaction boundary is operation-specific. Producer admission atomically
+contains the checkpoint active interaction, full interaction record,
+`host_interaction_requested` event outbox row, UI notification row, claim
+release, and revision; it does not contain a controller receipt or recovery
+wake. Controller response admission atomically contains checkpoint state, the
+resolved interaction record, controller receipt, canonical event outbox row,
+and recovery wake. Notification claim, delivery, and reconciliation each use
+their own notification-row owner/attempt CAS and never extend either admission
+transaction.
 
 `revision`, the claim tuple, lease, `terminal_result`, and
 `terminal_acknowledged` are required current fields. A claim tuple is
@@ -694,7 +768,7 @@ background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
 closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
-part of the current checkpoint.v7 wire. This restriction is explicit rather than silently
+part of the current checkpoint.v8 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence
