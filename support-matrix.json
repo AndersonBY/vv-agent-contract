@@ -17,6 +17,6 @@
     }
   },
   "adoption_note": "v8.1.0 is awaiting paired implementation snapshots and cross-language producer gates.",
-  "last_verified_at": "2026-08-28T07:29:52Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/33150706798"
+  "last_verified_at": "2026-08-28T21:09:09Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/33209931381"
 }
