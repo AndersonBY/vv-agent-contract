@@ -100,6 +100,7 @@ jobs:
       - name: Validate canonical contract
         run: |
           python3 contract/scripts/contractctl.py --root contract validate
+          node contract/scripts/verify_jcs.mjs
           python3 -m unittest discover -s contract/tests
 
       - name: Verify both locked snapshots

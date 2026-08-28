@@ -1,5 +1,20 @@
 # Changelog
 
+## 8.1.0 — pending adoption
+
+- Added a task-neutral compiled distributed-start capability. Callers may pass
+  an already-compiled `AgentTask`; the framework preserves that prepared task,
+  does not re-run compile-time producers, and still returns a passive handle
+  without waiting for cycle completion.
+- Kept the existing distributed envelope, worker response, checkpoint, and
+  driver decision wire shapes unchanged.
+- Hardened cross-repository conformance with an isolated Redis service,
+  dynamic service-port discovery, and an explicit health probe.
+
+This minor release remains `pending-adoption` until both language
+implementations pin the same revision and pass their real producer and
+cross-language quality gates.
+
 ## 8.0.1 — pending adoption
 
 - Corrected the `claimed_active_cycle` checkpoint fixture by removing an

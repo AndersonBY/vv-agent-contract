@@ -220,7 +220,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `8.0.1` applies the sparse bounded-result rules in
+Contract `8.1.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -364,8 +364,10 @@ candidate routes to framework-owned terminal finalization; it is never treated
 as a durable terminal by the callback. `Runner.finalize_distributed` consumes
 the verified decision in a separate bounded finalizer, including the unclaimed
 `max_cycles` candidate produced after the last committed cycle. Duplicate or
-out-of-order callbacks stop with `superseded_delivery`. See
-`distributed-run-driver.md`.
+out-of-order callbacks stop with `superseded_delivery`. Both implementations
+also expose `start_distributed_compiled`, which accepts an already-compiled
+`AgentTask`, preserves its prepared runtime fields, and does not re-run
+compile-time instruction or context producers. See `distributed-run-driver.md`.
 
 Deferred admission reuses the `pending` worker response because no cycle
 commit and no response result were returned by this delivery attempt. While any current-batch deferred

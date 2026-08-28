@@ -124,6 +124,18 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 8.1.0
+
+`8.1.0` is a minor release. It adds a task-neutral compiled distributed-start
+capability: both implementations accept an already-compiled `AgentTask`,
+preserve its prepared runtime fields, and do not re-run compile-time
+instruction or context producers. The capability remains enqueue-only and
+returns a passive handle; the existing distributed envelope, worker response,
+checkpoint, and driver decision wire shapes are unchanged. The cross-repository
+workflow also provisions and probes Redis for the Rust persistence gate. The
+support matrix remains `pending-adoption` until both implementations adopt and
+pass the paired gates.
+
 ## Release Note: 8.0.1
 
 `8.0.1` is a patch release with no wire or runtime behavior change. It removes

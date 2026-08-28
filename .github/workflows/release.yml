@@ -37,6 +37,7 @@ jobs:
       - name: Validate and test
         run: |
           python3 scripts/contractctl.py validate
+          node scripts/verify_jcs.mjs
           python3 -m unittest discover -s tests
 
       - name: Build release assets

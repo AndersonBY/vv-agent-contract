@@ -87,12 +87,23 @@ class ContractRepositoryTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:\n", workflow)
+        self.assertIn("node scripts/verify_jcs.mjs", workflow)
+
+    def test_release_workflow_runs_jcs_gate(self) -> None:
+        workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+
+        self.assertIn("node scripts/verify_jcs.mjs", workflow)
+
+    def test_cross_repository_workflow_runs_canonical_jcs_gate(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+
+        self.assertIn("node contract/scripts/verify_jcs.mjs", workflow)
 
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "8.0.1")
+        self.assertEqual(report["version"], "8.1.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -795,7 +806,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "8.0.1")
+        self.assertEqual(fixture["contract_version"], "8.1.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -2544,7 +2555,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 306)
+        self.assertEqual(surface_member_count, 307)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
@@ -4394,7 +4405,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "8.0.1")
+        self.assertEqual(fixture["contract_version"], "8.1.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -5108,6 +5119,15 @@ class ContractRepositoryTests(unittest.TestCase):
             runner_members["start_distributed"]["rust"]["name"],
             "start_distributed",
         )
+        compiled_start = runner_members["start_distributed_compiled"]
+        self.assertEqual(compiled_start["python"]["name"], "start_distributed_compiled")
+        self.assertEqual(compiled_start["rust"]["name"], "start_distributed_compiled")
+        self.assertEqual(
+            [parameter["name"] for parameter in compiled_start["python"]["signature"]["parameters"]],
+            ["agent", "task", "run_config", "continuation"],
+        )
+        self.assertTrue(compiled_start["python"]["signature"]["parameters"][2]["required"])
+        self.assertFalse(compiled_start["python"]["signature"]["parameters"][3]["required"])
         self.assertEqual(
             runner_members["finalize_distributed"]["python"]["name"],
             "finalize_distributed",

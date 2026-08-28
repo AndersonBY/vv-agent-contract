@@ -29,6 +29,9 @@ jobs:
       - name: Validate canonical contract
         run: python3 scripts/contractctl.py validate
 
+      - name: Verify canonical JCS vectors
+        run: node scripts/verify_jcs.mjs
+
       - name: Run contract tooling tests
         run: python3 -m unittest discover -s tests
 

@@ -11,13 +11,13 @@ admitted by the framework. It reads that authoritative checkpoint, enqueues at
 most the next required cycle, and returns a passive `DistributedRunHandle`.
 It never waits for the cycle result.
 
-The caller may supply an already-compiled `AgentTask` or `PreparedRun` to
-`start`. The framework consumes that prepared value as-is and must not compile
-it again or re-run compile-time instruction/context producers. Python and Rust
-must expose equivalent language-level APIs for this input; names and calling
-conventions may follow language idioms, but the existing
-`vv-agent.distributed-run.v5` envelope and all other wire shapes remain
-unchanged.
+The public `start_distributed_compiled` entrypoint accepts an already-compiled
+`AgentTask` (or the language-equivalent prepared-run value). The framework
+consumes that prepared value as-is and must not compile it again or re-run
+compile-time instruction/context producers. Python and Rust must expose
+equivalent language-level APIs for this input; names and calling conventions
+may follow language idioms, but the existing `vv-agent.distributed-run.v5`
+envelope and all other wire shapes remain unchanged.
 
 `advance` receives the previous envelope plus either one closed worker response
 or an out-of-band transport failure. The observation is never authoritative.
