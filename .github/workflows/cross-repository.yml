@@ -32,6 +32,16 @@ permissions:
 jobs:
   conformance:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
@@ -77,11 +87,20 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install native test tools
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+        run: sudo apt-get update && sudo apt-get install -y redis-tools ripgrep
+
+      - name: Probe Redis service
+        shell: bash
+        env:
+          REDIS_HOST_PORT: ${{ job.services.redis.ports['6379'] }}
+        run: |
+          set -euo pipefail
+          test "$(redis-cli --raw -h 127.0.0.1 -p "$REDIS_HOST_PORT" ping)" = PONG
 
       - name: Validate canonical contract
         run: |
           python3 contract/scripts/contractctl.py --root contract validate
+          node contract/scripts/verify_jcs.mjs
           python3 -m unittest discover -s contract/tests
 
       - name: Verify both locked snapshots
@@ -100,6 +119,8 @@ jobs:
 
       - name: Run Rust full gate
         working-directory: vv-agent-rs
+        env:
+          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
         run: |
           cargo fmt --all -- --check
           cargo test -p vv-agent -- --test-threads=1

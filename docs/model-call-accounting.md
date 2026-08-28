@@ -1,6 +1,6 @@
 # Model Call Accounting And Recovery
 
-Contract `7.0.1` makes every framework-issued model attempt observable and
+Contract `8.1.0` makes every framework-issued model attempt observable and
 budgeted. The contract is task-neutral: it records which runtime mechanism
 requested inference, but never infers a task category, semantic progress, or
 answer quality.
@@ -124,7 +124,7 @@ does not fabricate usage for an opaque output-repair callback.
 
 ## Checkpoint Atomicity
 
-Checkpoint `vv-agent.checkpoint.v7` stores the run-level model-call ledger. A
+Checkpoint `vv-agent.checkpoint.v8` stores the run-level model-call ledger. A
 model journal entry records its operation and the actual effective `backend`
 and `model`; internal calls must not copy these values from the root run
 definition. Before provider dispatch,

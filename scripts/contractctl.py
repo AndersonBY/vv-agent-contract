@@ -192,11 +192,13 @@ def validate_contract(root: Path) -> dict[str, Any]:
     required_docs = [
         root / "README.md",
         root / "README_ZH.md",
+        root / "CHANGELOG.md",
         root / "docs" / "parity-contract.md",
         root / "docs" / "change-workflow.md",
         root / "docs" / "versioning-policy.md",
         root / "docs" / "run-budgets.md",
         root / "docs" / "checkpoint-resume.md",
+        root / "docs" / "controller-command.md",
         root / "docs" / "model-call-accounting.md",
         root / "docs" / "prompt-bundles-and-tool-results.md",
         root / "docs" / "durable-deferred-tools.md",
@@ -231,7 +233,12 @@ def rebuild_manifest(root: Path) -> dict[str, Any]:
 
 
 def bundle_paths(root: Path) -> list[Path]:
-    fixed = [root / "contract.json", root / "README.md", root / "README_ZH.md"]
+    fixed = [
+        root / "contract.json",
+        root / "README.md",
+        root / "README_ZH.md",
+        root / "CHANGELOG.md",
+    ]
     generated = [
         path
         for directory in (root / "docs", root / "fixtures")

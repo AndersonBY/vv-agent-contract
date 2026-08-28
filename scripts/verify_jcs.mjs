@@ -485,6 +485,49 @@ if (WRITE) {
   );
 }
 
+const controllerCommand = readFixture("controller_command.json");
+const producerDigest = controllerCommand.host_interaction_producer?.request_wire?.request_digest?.golden;
+if (!producerDigest) {
+  fail("controller_command: missing host interaction producer digest vector");
+}
+if (WRITE) {
+  Object.assign(producerDigest, vectorValues(producerDigest.request_without_digest));
+} else {
+  verifyVector(
+    "controller_command/host_interaction_producer/request_digest",
+    producerDigest.request_without_digest,
+    producerDigest,
+  );
+}
+for (const vector of controllerCommand.jcs_vectors ?? []) {
+  if (WRITE) {
+    Object.assign(vector, vectorValues(vector.value));
+  } else {
+    verifyVector(`controller_command/jcs/${vector.name}`, vector.value, vector);
+  }
+}
+for (const vector of controllerCommand.digest_vectors ?? []) {
+  const digestInput = vector.command_digest_input ?? vector.response_digest_input;
+  const actual = vectorValues(digestInput);
+  if (WRITE) {
+    Object.assign(vector, actual);
+  } else {
+    if (vector.sha256 !== actual.sha256) {
+      fail(`controller_command/${vector.name}: digest mismatch`);
+    }
+    if (vector.canonical_json_utf8_bytes !== actual.canonical_json_utf8_bytes) {
+      fail(`controller_command/${vector.name}: byte length mismatch`);
+    }
+  }
+}
+if (WRITE) {
+  fs.writeFileSync(
+    path.join(ROOT, "fixtures", "controller_command.json"),
+    `${JSON.stringify(controllerCommand, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 const checkpointResume = readFixture("checkpoint_resume.json");
 const frozenPromptResume = checkpointResume.runner_cases.find(
   (entry) => entry.name === "frozen_prompt_bundle_resume_does_not_reinvoke_producers",

@@ -87,15 +87,26 @@ class ContractRepositoryTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:\n", workflow)
+        self.assertIn("node scripts/verify_jcs.mjs", workflow)
+
+    def test_release_workflow_runs_jcs_gate(self) -> None:
+        workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+
+        self.assertIn("node scripts/verify_jcs.mjs", workflow)
+
+    def test_cross_repository_workflow_runs_canonical_jcs_gate(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+
+        self.assertIn("node contract/scripts/verify_jcs.mjs", workflow)
 
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "7.0.1")
+        self.assertEqual(report["version"], "8.1.0")
         self.assertEqual(report["domains"], 20)
-        self.assertEqual(report["fixture_files"], 53)
-        self.assertEqual(report["manifest_entries"], 52)
+        self.assertEqual(report["fixture_files"], 54)
+        self.assertEqual(report["manifest_entries"], 53)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
@@ -795,12 +806,14 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "7.0.1")
+        self.assertEqual(fixture["contract_version"], "8.1.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
                 "pending",
                 "running",
+                "host_interaction",
+                "suspended",
                 "deferred",
                 "reconciliation_required",
                 "wait_user",
@@ -1419,8 +1432,8 @@ class ContractRepositoryTests(unittest.TestCase):
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(public_api["contract"], "vv-agent-public-api-v4")
-        self.assertEqual(public_api["schema_version"], 4)
+        self.assertEqual(public_api["contract"], "vv-agent-public-api-v5")
+        self.assertEqual(public_api["schema_version"], 5)
         capabilities = {
             item["id"]
             for domain in public_api["domains"]
@@ -1771,6 +1784,12 @@ class ContractRepositoryTests(unittest.TestCase):
                 "failed",
                 "max_cycles",
             ],
+        )
+        self.assertEqual(wire["checkpoint_only_statuses"], ["host_interaction", "suspended"])
+        self.assertTrue(wire["checkpoint_only_status_semantics"]["excluded_from_agent_result"])
+        self.assertTrue(wire["checkpoint_only_status_semantics"]["excluded_from_terminal_result"])
+        self.assertTrue(
+            set(wire["checkpoint_only_statuses"]).isdisjoint(set(wire["statuses"]))
         )
         deferred_semantics = wire["deferred_status_semantics"]
         self.assertTrue(deferred_semantics["non_terminal"])
@@ -2512,7 +2531,16 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 169)
+        self.assertEqual(len(capabilities), 177)
+        self.assertTrue(
+            {
+                "runtime_backend.host_interaction_request",
+                "runtime_backend.host_interaction_outcome",
+                "runtime_backend.produce_host_interaction",
+                "runtime_backend.resolve_controller_command",
+                "runtime_backend.controller_command_resolution",
+            }.issubset(capabilities)
+        )
         self.assertIn("tools.message", capabilities)
         self.assertNotIn("runtime_backend.cycle_runner", capabilities)
         self.assertIn("agent.sub_agent_config", capabilities)
@@ -2527,7 +2555,7 @@ class ContractRepositoryTests(unittest.TestCase):
             + len(surface.get("supporting_operations", []))
             for surface in fixture["surfaces"]
         )
-        self.assertEqual(surface_member_count, 306)
+        self.assertEqual(surface_member_count, 307)
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["agent"]["members"]})
         self.assertIn("no_tool_policy", {member["id"] for member in surfaces["run_config"]["members"]})
         self.assertIn("session_memory_enabled", {member["id"] for member in surfaces["run_config"]["members"]})
@@ -2684,6 +2712,215 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(budget["turnStatus"], "failed")
         self.assertEqual(budget["completionReason"], "budget_exhausted")
         self.assertEqual(budget["budgetUsageField"], "present")
+
+    def test_app_server_controller_admission_projects_nonterminal_waits(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/app_server_observable.json").read_text(encoding="utf-8"))
+        controller = fixture["controllerAdmission"]
+        self.assertEqual(controller["method"], "turn/action")
+        self.assertEqual(
+            controller["requestFields"],
+            ["threadId", "turnId", "actionId", "action"],
+        )
+        self.assertEqual(
+            controller["actionVariants"],
+            ["respond", "suspend", "resume", "cancel", "abort"],
+        )
+        self.assertTrue(controller["publicReceiptSanitized"])
+        self.assertEqual(controller["actionId"]["idempotency_key"], "scope-local input to the global command_id derivation")
+        self.assertEqual(
+            controller["actionId"]["stable_across_client_retries"],
+            "within the exact threadId+turnId scope",
+        )
+        self.assertEqual(controller["actionId"]["stable_scope"], ["threadId", "turnId"])
+        self.assertEqual(controller["actionId"]["maxUtf8Bytes"], 512)
+        self.assertEqual(controller["identityMaxUtf8Bytes"], 512)
+        self.assertEqual(controller["messageSchema"]["contentMaxUtf8Bytes"], 65536)
+        self.assertEqual(controller["messageSchema"]["unknownFields"], "reject")
+        self.assertTrue(controller["serverDerivedCommand"]["deterministic"])
+        self.assertEqual(
+            controller["serverDerivedCommand"]["commandId"],
+            "server derives command_id from (threadId, turnId, actionId) with the strict identity algorithm; client commandId is rejected",
+        )
+        self.assertEqual(
+            controller["serverDerivedCommand"]["commandIdAlgorithm"],
+            "fixtures/controller_command.json#identity_derivation.algorithms.command_id",
+        )
+        self.assertEqual(controller["serverDerivedCommand"]["identityMaxUtf8Bytes"], 512)
+        self.assertEqual(controller["strictCases"]["missing_action_id"], "reject")
+        self.assertEqual(controller["strictCases"]["action_id_over_utf8_limit"], "reject_action_id_invalid")
+        self.assertEqual(controller["strictCases"]["action_id_replay_different_payload"], "reject_action_id_conflict")
+        self.assertEqual(
+            controller["hostPromptProjection"]["fields"],
+            ["status", "waitReason", "prompt"],
+        )
+        self.assertIn("requestDigest", controller["hostPromptProjection"]["neverProjects"])
+        self.assertEqual(controller["hostPromptProjection"]["readSurface"]["method"], "thread/status")
+        self.assertEqual(controller["hostPromptProjection"]["readSurface"]["notification"], "thread/status/changed")
+        self.assertEqual(
+            controller["hostPromptProjection"]["readSurface"]["source"],
+            "host_interaction_notification_outbox.payload",
+        )
+        self.assertEqual(
+            controller["credentialSanitizer"]["output"]["prompt"],
+            "Approve [credential redacted] at [external locator redacted]",
+        )
+        self.assertTrue(controller["frameworkReceipt"]["visibility"] == "framework_public")
+        self.assertNotIn("checkpointKey", controller["requestFields"])
+        self.assertNotIn("command", controller["requestFields"])
+        self.assertIn("checkpointKey", controller["internalFieldsRejected"])
+        self.assertNotIn("commandDigest", controller["responseFields"])
+        self.assertEqual(
+            controller["publicReceiptFields"],
+            ["actionId", "accepted", "status", "waitReason"],
+        )
+        self.assertTrue(controller["controlIsAdmissionOnly"])
+        self.assertFalse(controller["turnResumeNewInputAllowed"])
+        self.assertTrue(controller["askUserTerminalSemanticsUnchanged"])
+        for status, wait_reason, projection_key in (
+            ("host_interaction", "host_interaction", "hostInteractionProjection"),
+            ("suspended", "suspended", "suspendedProjection"),
+        ):
+            projection = controller[projection_key]
+            self.assertEqual(projection["agentStatus"], status)
+            self.assertEqual(projection["turnStatus"], "interrupted")
+            self.assertEqual(projection["waitReason"], wait_reason)
+            self.assertIsNone(projection["completionReason"])
+            self.assertIsNone(projection["error"])
+
+    def test_app_server_command_id_vectors_scope_replay_and_transaction_boundaries(self) -> None:
+        app_server = json.loads(
+            (ROOT / "fixtures/app_server_observable.json").read_text(encoding="utf-8")
+        )
+        controller = json.loads(
+            (ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8")
+        )
+        store = json.loads((ROOT / "fixtures/checkpoint_store.json").read_text(encoding="utf-8"))
+        codec = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
+
+        algorithm = controller["identity_derivation"]["algorithms"]["command_id"]
+        self.assertEqual(
+            app_server["controllerAdmission"]["serverDerivedCommand"]["commandIdAlgorithm"],
+            "fixtures/controller_command.json#identity_derivation.algorithms.command_id",
+        )
+        golden = algorithm["golden"]
+        golden_payload = {
+            "action_id": golden["actionId"],
+            "schema_version": algorithm["payload_schema_version"],
+            "thread_id": golden["threadId"],
+            "turn_id": golden["turnId"],
+        }
+        self.assertEqual(golden["payload"], golden_payload)
+        canonical = json.dumps(
+            golden_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        self.assertEqual(len(canonical), golden["canonical_json_utf8_bytes"])
+        preimage = (
+            algorithm["domain_prefix"].encode("utf-8")
+            + b"\x00"
+            + len(canonical).to_bytes(8, "big")
+            + canonical
+        )
+        self.assertEqual(hashlib.sha256(preimage).hexdigest(), golden["command_id"])
+        self.assertEqual(len(golden["command_id"]), 64)
+
+        cases = app_server["controllerAdmission"]["commandIdCases"]
+        case_by_name = {case["name"]: case for case in cases}
+        self.assertEqual(
+            case_by_name["same_scope_replay"]["expectedCommandId"],
+            case_by_name["same_scope_payload_conflict"]["expectedCommandId"],
+        )
+        self.assertNotEqual(
+            case_by_name["same_scope_replay"]["expectedCommandId"],
+            case_by_name["different_thread_same_action"]["expectedCommandId"],
+        )
+        self.assertNotEqual(
+            case_by_name["same_scope_replay"]["expectedCommandId"],
+            case_by_name["different_turn_same_action"]["expectedCommandId"],
+        )
+        for case in cases:
+            payload = {
+                "action_id": case["actionId"],
+                "schema_version": algorithm["payload_schema_version"],
+                "thread_id": case["threadId"],
+                "turn_id": case["turnId"],
+            }
+            canonical = json.dumps(
+                payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            digest = hashlib.sha256(
+                algorithm["domain_prefix"].encode("utf-8")
+                + b"\x00"
+                + len(canonical).to_bytes(8, "big")
+                + canonical
+            ).hexdigest()
+            self.assertEqual(digest, case["expectedCommandId"], case["name"])
+            self.assertEqual(len(canonical), len(canonical.decode("utf-8").encode("utf-8")))
+
+        self.assertEqual(controller["sqlite"]["primary_key"], "command_id")
+        self.assertEqual(
+            controller["redis"]["receipt_key_command_id_source"],
+            "identity_derivation.algorithms.command_id",
+        )
+
+        producer = controller["host_interaction_producer"]["admission"]["transaction_boundary"]
+        response = controller["cas"]["receipt_event_wake_atomicity"]
+        self.assertEqual(producer["operation"], "producer_admission")
+        self.assertIn("checkpoint.active_host_interaction", producer["same_transaction"])
+        self.assertIn("host_interaction_notification_outbox row", producer["same_transaction"])
+        self.assertIn("host_interaction_requested RunEvent v4 outbox row", producer["same_transaction"])
+        self.assertIn("controller command receipt", producer["excludes"])
+        self.assertIn("controller recovery wake outbox", producer["excludes"])
+        self.assertEqual(response["operation"], "controller_response_admission")
+        self.assertIn("controller command receipt", response["same_transaction"])
+        self.assertIn("recovery wake outbox marker", response["same_transaction"])
+        self.assertNotIn("host_interaction_notification_outbox delivery", response["same_transaction"])
+        self.assertIn("host_interaction_notification_outbox delivery", response["excludes"])
+
+        store_boundary = store["controller_outbox_protocol"]["transaction_boundary"]
+        self.assertEqual(store_boundary["operation"], "controller_response_admission")
+        self.assertEqual(store_boundary["same_transaction"], response["same_transaction"])
+        notification_boundary = store["host_interaction_notification_outbox"]["transaction_boundary"]
+        self.assertEqual(
+            set(notification_boundary["operations"]), {"claim", "deliver", "reconcile"}
+        )
+        for operation in notification_boundary["operations"].values():
+            self.assertNotIn("checkpoint", operation["same_transaction"])
+            self.assertIn("controller command receipt", operation["excludes"])
+        self.assertEqual(
+            codec["host_interaction_persistence"]["notification_outbox"]["transaction_boundary"][
+                "controller_response_admission"
+            ]["same_transaction"],
+            response["same_transaction"],
+        )
+
+    def test_sqlite_notification_metadata_columns_match_canonical_sql(self) -> None:
+        controller = json.loads(
+            (ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8")
+        )
+        sql = (ROOT / "fixtures/checkpoint_sqlite_canonical.sql").read_text(encoding="utf-8")
+        table_match = re.search(
+            r"CREATE TABLE IF NOT EXISTS host_interaction_notification_outbox \(\n(.*?)\n\);",
+            sql,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(table_match)
+        assert table_match is not None
+        sql_columns = []
+        for raw_line in table_match.group(1).splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith(("UNIQUE ", "CHECK ", "FOREIGN KEY ")):
+                continue
+            column_match = re.match(r"([a-z][a-z0-9_]*)\s+", line)
+            if column_match:
+                sql_columns.append(column_match.group(1))
+        metadata_columns = controller["sqlite"]["notification_columns"]
+        self.assertEqual(metadata_columns, sql_columns)
+        self.assertEqual(
+            metadata_columns[-4:],
+            ["delivered_at_ms", "aborted_at_ms", "abort_reason", "last_error"],
+        )
+        self.assertIn("aborted_at_ms", metadata_columns)
+        self.assertIn("abort_reason", metadata_columns)
 
     def test_public_api_properties_include_canonical_signatures(self) -> None:
         fixture = json.loads((ROOT / "fixtures/public_api.json").read_text(encoding="utf-8"))
@@ -3007,11 +3244,13 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v7")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v8")
         self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v5")
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
         self.assertNotIn("deferred_resolution_receipts", fixture["required_fields"])
+        self.assertIn("active_host_interaction", fixture["required_fields"])
+        self.assertIn("suspended_origin", fixture["required_fields"])
         self.assertNotIn("deferred_resolution_receipts", canonical)
         self.assertTrue(fixture["deferred_receipt_index"]["independent"])
         self.assertFalse(fixture["deferred_receipt_index"]["bounded"])
@@ -3024,7 +3263,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v7",
+                "required_value": "vv-agent.checkpoint.v8",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
@@ -3043,15 +3282,100 @@ class ContractRepositoryTests(unittest.TestCase):
             {case["name"] for case in fixture["invalid_cases"]},
         )
         valid_cases = {case["name"]: case["payload"] for case in fixture["valid_cases"]}
+        allowed_checkpoint_fields = set(fixture["required_fields"])
         for payload in valid_cases.values():
             self.assertEqual(payload["run_definition"], minimal_definition["definition"])
             self.assertEqual(payload["run_definition_digest"], minimal_definition["sha256"])
+            self.assertIn("active_host_interaction", payload)
+            self.assertIn("suspended_origin", payload)
+        for case_name, payload in valid_cases.items():
+            self.assertEqual(set(payload), allowed_checkpoint_fields, case_name)
+            self.assertEqual(payload["schema_version"], fixture["discriminator"]["required_value"], case_name)
+            claim_fields = {
+                payload["claim_token"],
+                payload["claimed_cycle"],
+                payload["lease_expires_at_ms"],
+            }
+            self.assertTrue(
+                (claim_fields == {None}) or (None not in claim_fields),
+                case_name,
+            )
+            if None not in claim_fields:
+                self.assertEqual(payload["claimed_cycle"], payload["cycle_index"] + 1, case_name)
+            status = payload["status"]
+            if status == "host_interaction":
+                self.assertIsNotNone(payload["active_host_interaction"], case_name)
+                self.assertIsNone(payload["suspended_origin"], case_name)
+                self.assertIsNone(payload["terminal_result"], case_name)
+            elif status == "suspended":
+                self.assertIsNone(payload["active_host_interaction"], case_name)
+                self.assertIsNotNone(payload["suspended_origin"], case_name)
+                self.assertIsNone(payload["terminal_result"], case_name)
+            else:
+                self.assertIsNone(payload["active_host_interaction"], case_name)
+                self.assertIsNone(payload["suspended_origin"], case_name)
+        unknown_top_level = next(
+            case for case in fixture["invalid_cases"] if case["name"] == "unknown_top_level_is_rejected"
+        )
+        self.assertEqual(
+            set(unknown_top_level["payload"]) - allowed_checkpoint_fields,
+            {"vendor_future"},
+        )
         self.assertTrue(
             all(
                 "run_definition" in case["payload"]
                 for case in fixture["invalid_cases"]
-                if case["name"] != "unknown_schema"
+                if case["name"] != "unknown_schema" and "payload" in case
             )
+        )
+        self.assertIn(
+            "old_v7_schema_is_rejected_forward_only",
+            {case["name"] for case in fixture["invalid_cases"]},
+        )
+        self.assertTrue(fixture["status_rules"]["old_checkpoint_discriminator_is_rejected_without_reader_fallback"])
+        self.assertIsNone(canonical["active_host_interaction"])
+        self.assertIsNone(canonical["suspended_origin"])
+        self.assertTrue(fixture["host_interaction_persistence"]["producer_cas"]["claim_release_is_atomic"])
+        active_wire = fixture["host_interaction_persistence"]["active_host_interaction"]
+        self.assertEqual(
+            active_wire["required_fields"],
+            [
+                "schema_version",
+                "interaction_id",
+                "logical_cycle",
+                "operation_id",
+                "tool_call_id",
+                "request_digest",
+                "prompt",
+            ],
+        )
+        self.assertEqual(active_wire["prompt_max_utf8_bytes"], 65536)
+        self.assertTrue(active_wire["content_policy"]["credential_redacted"])
+        self.assertTrue(fixture["host_interaction_record"]["full_request_required"])
+        self.assertTrue(fixture["host_interaction_record"]["full_resolved_response_required"])
+        self.assertTrue(fixture["host_interaction_record"]["response_digest_only_is_invalid"])
+        self.assertTrue(fixture["host_interaction_persistence"]["producer_event_outbox_is_notification_only"])
+        notification_outbox = fixture["host_interaction_persistence"]["notification_outbox"]
+        self.assertEqual(
+            notification_outbox["states"],
+            ["pending", "claimed", "delivered", "ambiguous", "aborted"],
+        )
+        self.assertEqual(
+            set(notification_outbox["ambiguous_resolution"]["outcomes"]),
+            {"delivered", "retry", "abort"},
+        )
+        self.assertTrue(
+            fixture["host_interaction_persistence"][
+                "response_while_suspended_host_origin_keeps_suspended_until_resume"
+            ]
+        )
+        self.assertEqual(
+            {case["name"] for case in fixture["host_interaction_invalid_cases"]},
+            {
+                "active_request_missing_prompt",
+                "active_request_prompt_over_utf8_limit",
+                "resolved_record_stores_digest_only",
+            },
         )
         suspended = valid_cases["reconciliation_required_retains_ambiguous_journal"]
         self.assertIsNone(suspended["claim_token"])
@@ -3093,6 +3417,8 @@ class ContractRepositoryTests(unittest.TestCase):
             ["terminal_result_task_usage_model_calls_equal_checkpoint_ledger"]
         )
         for case in [*fixture["valid_cases"], *fixture["invalid_cases"]]:
+            if "payload" not in case:
+                continue
             payload = case["payload"]
             terminal_result = payload.get("terminal_result")
             if terminal_result is not None:
@@ -3426,6 +3752,26 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["namespaces"]["deferred_receipt_checkpoint_set_prefix"],
             "vv-agent:deferred-receipts-by-checkpoint:",
         )
+        self.assertEqual(
+            fixture["namespaces"]["controller_command_receipt_redis_key_prefix"],
+            "vv-agent:controller-command:",
+        )
+        self.assertEqual(
+            fixture["namespaces"]["controller_command_checkpoint_set_prefix"],
+            "vv-agent:controller-commands-by-checkpoint:",
+        )
+        notification = fixture["host_interaction_notification_outbox"]
+        self.assertEqual(
+            notification["states"],
+            ["pending", "claimed", "delivered", "ambiguous", "aborted"],
+        )
+        self.assertEqual(
+            set(notification["operations"]["reconcile"]["outcomes"]),
+            {"delivered", "retry", "abort"},
+        )
+        self.assertEqual(notification["reaper"]["ambiguous"], "enqueue reconciliation work; never blind-retry an uncertain callback")
+        controller_actions = fixture["controller_outbox_protocol"]["actions"]
+        self.assertNotIn("host_interaction_notification", controller_actions)
         self.assertEqual(cases["claim_next_cycle"]["expected"]["resume_attempt"], 1)
         self.assertEqual(cases["expired_claim_can_be_reclaimed"]["expected"]["resume_attempt"], 2)
         self.assertEqual(
@@ -3440,6 +3786,14 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertIn(
             "accept_deferred_batch",
+            {operation["name"] for operation in fixture["operations"]},
+        )
+        self.assertIn(
+            "admit_controller_command",
+            {operation["name"] for operation in fixture["operations"]},
+        )
+        self.assertIn(
+            "replay_controller_command",
             {operation["name"] for operation in fixture["operations"]},
         )
         mixed_batch = deferred_cases["admit_deferred_batch_mixed_outcomes_releases_claim_once"]
@@ -3519,8 +3873,8 @@ class ContractRepositoryTests(unittest.TestCase):
 
     def test_checkpoint_resume_fixture_covers_all_fault_boundaries(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
-        self.assertEqual(fixture["version"], 7)
-        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v7")
+        self.assertEqual(fixture["version"], 8)
+        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v8")
         self.assertIn("deferred", fixture["checkpoint_states"])
         self.assertEqual(
             fixture["deferred_pending_semantics"],
@@ -3529,7 +3883,7 @@ class ContractRepositoryTests(unittest.TestCase):
         cases = {case["name"]: case for case in fixture["runner_cases"]}
         matrix = fixture["fault_matrix"]
 
-        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 10)])
+        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 17)])
         self.assertEqual(matrix[3]["resume"], "replay_receipt_without_usage_or_budget_increment")
         self.assertEqual(
             cases["started_model_requires_reconciliation"]["expected"]["completion_reason"],
@@ -4048,6 +4402,541 @@ class ContractRepositoryTests(unittest.TestCase):
             else:
                 self.assertIn("value", mutation)
 
+    def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(fixture["contract_version"], "8.1.0")
+        self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
+        self.assertTrue(fixture["scope"]["task_neutral"])
+        self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
+        self.assertTrue(fixture["scope"]["terminal_successor_is_separate"])
+        self.assertTrue(fixture["scope"]["ask_user_terminal_semantics_unchanged"])
+
+        request_wire = fixture["request_wire"]
+        self.assertTrue(request_wire["closed"])
+        self.assertEqual(request_wire["optional_fields"], [])
+        self.assertEqual(
+            request_wire["required_fields"],
+            [
+                "schema_version",
+                "command_id",
+                "command_digest",
+                "handle",
+                "resume_attempt",
+                "expected_revision",
+                "command",
+            ],
+        )
+        self.assertEqual(
+            set(request_wire["variants"]),
+            {
+                "host_interaction_response",
+                "suspend",
+                "resume",
+                "cancel",
+                "abort",
+            },
+        )
+        self.assertTrue(request_wire["command_id"]["is_idempotency_key"])
+        self.assertEqual(request_wire["command_id"]["max_utf8_bytes"], 512)
+        self.assertEqual(request_wire["handle"]["identity_max_utf8_bytes"], 512)
+        self.assertTrue(request_wire["fences"]["resume_attempt"]["must_equal_authoritative_checkpoint"])
+        self.assertTrue(request_wire["fences"]["expected_revision"]["must_equal_authoritative_checkpoint"])
+        self.assertEqual(request_wire["variants"]["abort"]["requires"], "reconciliation_required only")
+        self.assertEqual(
+            request_wire["variants"]["host_interaction_response"]["response"]["content_max_utf8_bytes"],
+            65536,
+        )
+        self.assertEqual(
+            set(request_wire["variants"]["host_interaction_response"]["identity_binding"]),
+            {
+                "checkpoint_key",
+                "run_id",
+                "trace_id",
+                "resume_attempt",
+                "expected_revision",
+                "logical_cycle",
+                "interaction_id",
+                "operation_id",
+                "tool_call_id",
+                "request_digest",
+            },
+        )
+        self.assertFalse(any(
+            transition.get("command") == "abort" and transition.get("from") != "reconciliation_required"
+            for transition in fixture["state_machine"]["transitions"]
+        ))
+
+        receipt_wire = fixture["receipt_wire"]
+        self.assertTrue(receipt_wire["closed"])
+        self.assertEqual(receipt_wire["visibility"], "framework_public")
+        self.assertTrue(receipt_wire["app_server_internal_fields_hidden"])
+        self.assertEqual(receipt_wire["outbox_states"], ["pending", "claimed", "delivered", "ambiguous"])
+        self.assertEqual(
+            receipt_wire["required_fields"][-3:],
+            ["outbox_action", "outbox_destination", "outbox_attempt"],
+        )
+        self.assertFalse(receipt_wire["replay"]["second_outbox_item"])
+        self.assertEqual(receipt_wire["conflict"]["writes"], [])
+
+        producer = fixture["host_interaction_producer"]
+        self.assertTrue(producer["framework_only"])
+        self.assertFalse(producer["controller_command_variant"])
+        self.assertTrue(producer["admission"]["requires_active_claim"])
+        self.assertTrue(producer["admission"]["claim_release_is_atomic"])
+        self.assertFalse(producer["admission"]["external_effect_inside_transaction"])
+        self.assertEqual(producer["request_wire"]["prompt_max_utf8_bytes"], 65536)
+        self.assertTrue(producer["request_wire"]["content_policy"]["credential_redacted"])
+        self.assertEqual(
+            producer["admission"]["replay"]["same_interaction_identity_and_digest_after_claim_release"],
+            "return retained outcome with zero writes",
+        )
+        self.assertEqual(
+            producer["admission"]["producer_outbox_rule"],
+            "producer writes only host_interaction_requested event and UI notification outbox; it never writes controller recovery wake",
+        )
+        self.assertEqual(
+            {case["name"] for case in producer["admission"]["invalid_cases"]},
+            {
+                "prompt_over_utf8_limit",
+                "producer_unknown_content_field",
+                "producer_request_digest_conflict_after_claim_release",
+                "producer_identity_over_utf8_limit",
+            },
+        )
+        self.assertTrue(
+            {
+                "host_interaction_conflict",
+                "host_interaction_fields_invalid",
+                "host_interaction_content_too_large",
+                "host_interaction_response_missing",
+                "notification_conflict",
+            }.issubset(set(fixture["errors"]))
+        )
+        interaction_record = fixture["host_interaction_record"]
+        self.assertTrue(interaction_record["admission"]["response_command_writes_full_resolved_response_in_same_cas"])
+        self.assertTrue(interaction_record["admission"]["claim_and_consume_are_one_transaction"])
+        self.assertTrue(interaction_record["admission"]["hard_recovery_barrier"]["model_or_tool_before_consume"] == "forbidden")
+        revision_semantics = interaction_record["admission"]["revision_semantics"]
+        self.assertTrue(revision_semantics["numbers_are_examples"])
+        self.assertEqual(revision_semantics["admission_revision"], "expected_revision + 1")
+        self.assertEqual(revision_semantics["consume_revision"], "admission_revision + 1")
+        self.assertFalse(interaction_record["admission"]["claim_cas_is_record_only"])
+        self.assertIn("consumed_revision", interaction_record["admission"]["response_snapshot_split"]["consume_writes"][-1])
+        self.assertEqual(interaction_record["cleanup"]["consumed"], "retain through next committed cycle or terminal acknowledgement, then delete only with explicit checkpoint retention cleanup")
+        notification = fixture["host_interaction_notification_outbox"]
+        self.assertTrue(notification["separate_from_controller_receipt_outbox"])
+        self.assertEqual(notification["states"], ["pending", "claimed", "delivered", "ambiguous", "aborted"])
+        self.assertTrue(notification["claim"]["owner_attempt_cas"])
+        self.assertEqual(notification["wait_reason"], "host_interaction")
+        self.assertEqual(notification["claim"]["delivery_semantics"], "at_least_once")
+        self.assertTrue(notification["claim"]["observer_deduplication_required"])
+        self.assertFalse(notification["claim"]["exactly_once_guarantee"])
+        ambiguity = notification["ambiguous_resolution"]
+        self.assertEqual(
+            ambiguity["operation"],
+            "reconcile_host_interaction_notification(notification_id, payload_digest, outcome)",
+        )
+        self.assertEqual(set(ambiguity["outcomes"]), {"delivered", "retry", "abort"})
+        self.assertEqual(
+            ambiguity["reaper"]["ambiguous"],
+            "enqueue reconciliation work; never blind-retry an uncertain callback",
+        )
+        self.assertEqual(
+            {case["name"] for case in notification["invalid_cases"]},
+            {"wait_reason_over_utf8_limit", "notification_unknown_field"},
+        )
+        delivery_cases = {case["name"]: case for case in notification["delivery_cases"]}
+        self.assertEqual(
+            delivery_cases["claim_crash_before_ack"]["expected"],
+            "at_least_once_with_observer_deduplication",
+        )
+        self.assertEqual(
+            delivery_cases["delivery_ack_crash_boundary"]["expected"],
+            "duplicate_delivery_is_safe_but_not_exactly_once",
+        )
+        self.assertIn("notification_id", producer["outcome_wire"]["required_fields"])
+        self.assertIn("notification_payload_digest", producer["outcome_wire"]["required_fields"])
+        self.assertEqual(
+            producer["admission"]["same_transaction_record_set"],
+            [
+                "checkpoint.active_host_interaction",
+                "host_interaction_records row",
+                "host_interaction_requested RunEvent v4 outbox row",
+                "host_interaction_notification_outbox row",
+                "active claim release",
+                "checkpoint revision",
+            ],
+        )
+        conflict_case = fixture["producer_conflict_cases"][0]
+        self.assertEqual(conflict_case["error"], "host_interaction_conflict")
+        self.assertEqual(conflict_case["writes"], 0)
+        self.assertEqual(conflict_case["notification_rows_added"], 0)
+        self.assertEqual(
+            set(fixture["resolution_wire"]["required_fields"]),
+            {"schema_version", "kind"},
+        )
+        self.assertEqual(
+            fixture["resolution_wire"]["variants"]["rejected"]["forbidden_fields"],
+            ["receipt", "wake"],
+        )
+        producer_case = fixture["producer_cases"][0]
+        self.assertEqual(producer_case["before"]["claimed_cycle"], 4)
+        self.assertEqual(producer_case["after"]["active_host_interaction"]["logical_cycle"], 4)
+        self.assertIsNone(producer_case["after"]["claim_token"])
+        self.assertFalse(producer_case["outbox"]["external_effect_inside_transaction"])
+        self.assertEqual(producer_case["outbox"]["wake_action"], "none")
+        self.assertEqual(producer_case["outbox"]["worker_enqueue_count"], 0)
+        self.assertEqual(producer_case["outbox"]["notification_action"], "host_interaction_notification")
+        self.assertEqual(producer_case["outcome"]["outbox_state"], "pending")
+        self.assertEqual(producer_case["outbox"]["notification_payload"]["wait_reason"], "host_interaction")
+        record_id_input = {
+            "schema_version": "vv-agent.host-interaction-record.v1",
+            "checkpoint_key": "checkpoint/controller-42",
+            "interaction_id": "interaction-42",
+            "logical_cycle": 4,
+            "request_digest": producer_case["request"]["request_digest"],
+        }
+        record_id_bytes = json.dumps(
+            record_id_input, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        self.assertEqual(
+            producer_case["outcome"]["record_id"],
+            hashlib.sha256(record_id_bytes).hexdigest(),
+        )
+        notification_id_input = {
+            "schema_version": "vv-agent.host-interaction-notification.v1",
+            "record_id": producer_case["outcome"]["record_id"],
+            "transition": "host_interaction_requested",
+        }
+        notification_id_bytes = json.dumps(
+            notification_id_input, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        self.assertEqual(
+            producer_case["outcome"]["notification_id"],
+            hashlib.sha256(notification_id_bytes).hexdigest(),
+        )
+        notification_payload = producer_case["outbox"]["notification_payload"]
+        self.assertEqual(
+            producer_case["outcome"]["notification_payload_digest"],
+            hashlib.sha256(
+                json.dumps(
+                    notification_payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+        )
+        self.assertIn("prompt", producer_case["after"]["active_host_interaction"])
+        events = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/run_events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        requested = next(event for event in events if event["type"] == "host_interaction_requested")
+        consumed = next(event for event in events if event["type"] == "host_interaction_response_consumed")
+        self.assertEqual(requested["version"], "v4")
+        self.assertEqual(requested["prompt"], "Choose an approved option.")
+        self.assertEqual(consumed["consumed_revision"], 10)
+        self.assertEqual(consumed["resume_attempt"], 3)
+        event_rules = json.loads(
+            (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
+        )["rules"]["host_interaction_fields"]
+        self.assertEqual(event_rules["unknown_fields"], "reject")
+        self.assertEqual(event_rules["prompt_and_response_digest"], "strict credential-redacted UTF-8 content; max 65536 bytes")
+        rejected_event_names = {
+            case["id"]
+            for case in json.loads(
+                (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
+            )["reject"]
+        }
+        self.assertTrue(
+            {
+                "host_interaction_requested_prompt_over_utf8_limit",
+                "host_interaction_consumed_unknown_field",
+            }.issubset(rejected_event_names)
+        )
+        suspended_response = next(
+            case
+            for case in fixture["canonical_cases"]
+            if case["name"] == "suspended_host_response_then_resume_dispatches"
+        )
+        self.assertEqual(suspended_response["response"]["outbox_action"], "none")
+        self.assertEqual(suspended_response["response"]["worker_enqueue_count"], 0)
+        self.assertEqual(suspended_response["resume"]["outbox_action"], "recovery_dispatch")
+        self.assertEqual(suspended_response["resume"]["worker_enqueue_count"], 1)
+        no_wake = next(
+            case for case in fixture["canonical_cases"] if case["name"] == "non_waking_controls_do_not_dispatch"
+        )
+        self.assertEqual(no_wake["receipt_outbox"]["worker_enqueue_count"], 0)
+        self.assertEqual(no_wake["receipt_outbox"]["outbox_destination"], None)
+        response_case = next(
+            case for case in fixture["canonical_cases"]
+            if case["name"] == "host_interaction_response_same_logical_cycle"
+        )
+        self.assertNotIn("consumed", response_case["checkpoint_after"]["host_interaction_record"])
+        self.assertIsNone(response_case["checkpoint_after"]["host_interaction_record"]["consumed_revision"])
+        recovery_snapshot = response_case["recovery_consume_snapshot"]
+        self.assertEqual(
+            recovery_snapshot["worker_a_atomic_operation"]["checkpoint_revision_after"],
+            "admission_revision + 1",
+        )
+        self.assertFalse(recovery_snapshot["worker_a_atomic_operation"]["model_or_tool_started"])
+        self.assertTrue(recovery_snapshot["worker_a_atomic_operation"]["record_claim_released_after_commit"])
+        self.assertTrue(recovery_snapshot["worker_a_atomic_operation"]["checkpoint_execution_claim_retained"])
+        self.assertEqual(recovery_snapshot["worker_a_atomic_operation"]["claim_mode"], "recovery")
+        self.assertEqual(recovery_snapshot["worker_a_atomic_operation"]["resume_attempt_before"], 2)
+        self.assertEqual(recovery_snapshot["worker_a_atomic_operation"]["resume_attempt_after"], 3)
+        self.assertEqual(recovery_snapshot["worker_a_atomic_operation"]["consumed_event_resume_attempt"], 3)
+        self.assertFalse(recovery_snapshot["crash_before_commit"]["record_only_claim"])
+        self.assertEqual(
+            {case["name"] for case in fixture["recovery_cases"]},
+            {
+                "resolved_pending_combined_dual_worker_race",
+                "resolved_pending_combined_crash_before_commit",
+                "resolved_pending_admission_example",
+                "resolved_pending_atomic_consume_example",
+                "consumed_replay_after_atomic_consume",
+                "stale_recovery_envelope_zero_write",
+                "ordinary_claim_rejected_at_recovery_barrier",
+            },
+        )
+        stale_case = next(case for case in fixture["recovery_cases"] if case["name"] == "stale_recovery_envelope_zero_write")
+        self.assertEqual(stale_case["error"], "host_interaction_recovery_stale")
+        self.assertEqual(stale_case["after"]["injection_count"], 0)
+        barrier_case = next(case for case in fixture["recovery_cases"] if case["name"] == "ordinary_claim_rejected_at_recovery_barrier")
+        self.assertEqual(barrier_case["error"], "host_interaction_recovery_required")
+        self.assertEqual(barrier_case["route"], "claim_and_consume_host_interaction_response")
+        cross_impl = fixture["cross_implementation_expectations"][0]
+        self.assertEqual(cross_impl["expected"]["claim_mode"], "recovery")
+        self.assertEqual(cross_impl["expected"]["resume_attempt_after"], 3)
+        self.assertEqual(cross_impl["expected"]["next_envelope"]["resume_attempt"], 3)
+        event_types = {event["type"] for event in events}
+        self.assertTrue(all(event["version"] == "v4" for event in events))
+        self.assertTrue(all(event.get("event_id") for event in events))
+        self.assertTrue(fixture["event_outbox_contract"]["all_entries_are_complete_run_events"])
+        self.assertNotIn(
+            "controller_resumed",
+            [name for case in fixture["fault_matrix"] for name in case["after"]["event_outbox"]],
+        )
+        self.assertNotIn(
+            "controller_state_changed",
+            [name for case in fixture["fault_matrix"] for name in case["after"]["event_outbox"]],
+        )
+        self.assertNotIn(
+            "terminal_candidate",
+            [name for case in fixture["fault_matrix"] for name in case["after"]["event_outbox"]],
+        )
+        for case in fixture["fault_matrix"]:
+            for snapshot in (case["before"], case["after"]):
+                for event_name in snapshot["event_outbox"]:
+                    self.assertIn(event_name, event_types, case["id"])
+
+        for vector in fixture["digest_vectors"]:
+            digest_input = vector.get("command_digest_input", vector.get("response_digest_input"))
+            canonical_bytes = json.dumps(
+                digest_input,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.assertEqual(len(canonical_bytes), vector["canonical_json_utf8_bytes"])
+            self.assertEqual(hashlib.sha256(canonical_bytes).hexdigest(), vector["sha256"])
+
+        requests = {
+            case["name"]: case["request"]
+            for case in fixture["canonical_cases"]
+            if "request" in case
+        }
+
+        def set_path(payload: dict[str, object], path: str, value: object) -> None:
+            target: dict[str, object] = payload
+            parts = path.split(".")
+            for part in parts[:-1]:
+                target = target[part]  # type: ignore[assignment]
+            target[parts[-1]] = value
+
+        for case in fixture["invalid_cases"]:
+            mutation = case.get("mutation", {})
+            expected_digest = mutation.get("recompute_command_digest")
+            if expected_digest is None:
+                continue
+            base_name = case["base_valid_case"]
+            candidate = copy.deepcopy(requests[base_name])
+            for path, value in mutation.get("replace", {}).items():
+                if path != "command_digest":
+                    set_path(candidate, path, value)
+            for path, value in mutation.get("add", {}).items():
+                set_path(candidate, path, value)
+            if "replace_command" in case:
+                candidate["command"] = copy.deepcopy(case["replace_command"])
+            candidate.pop("command_digest", None)
+            canonical_bytes = json.dumps(
+                candidate,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.assertEqual(
+                hashlib.sha256(canonical_bytes).hexdigest(),
+                expected_digest,
+                case["name"],
+            )
+
+        states = fixture["state_machine"]
+        self.assertTrue({"host_interaction", "suspended"}.issubset(states["non_terminal"]))
+        self.assertIn("wait_user", states["terminal"])
+        self.assertTrue(states["wait_user_is_still_terminal"])
+        self.assertTrue(states["deferred_is_not_host_interaction"])
+        self.assertTrue(states["terminal_successor_does_not_mutate_source"])
+        self.assertEqual(
+            fixture["precedence"][:4],
+            [
+                "committed_terminal",
+                "live_claim",
+                "unresolved_ambiguous_operation",
+                "unresolved_deferred_barrier",
+            ],
+        )
+        self.assertEqual(
+            {case["name"] for case in fixture["invalid_cases"]},
+            {
+                "missing_schema_version",
+                "unknown_schema_version",
+                "unknown_top_level_field",
+                "unknown_variant_field",
+                "response_over_utf8_limit",
+                "command_id_over_utf8_limit",
+                "handle_identity_over_utf8_limit",
+                "host_response_identity_over_utf8_limit",
+                "null_optional_fence_is_rejected",
+                "boolean_revision_is_rejected",
+                "digest_mismatch",
+                "same_id_different_digest",
+                "stale_revision",
+                "stale_run_id",
+                "stale_trace_id",
+                "stale_resume_attempt",
+                "stale_logical_cycle",
+                "stale_interaction_id",
+                "stale_operation_id",
+                "stale_tool_call_id",
+                "stale_request_digest_binding",
+                "deferred_barrier_blocks_command",
+                "ambiguity_blocks_cancel",
+                "terminal_checkpoint_is_not_rewritten",
+                "abort_from_suspended_is_rejected",
+            },
+        )
+        self.assertEqual(
+            [case["id"] for case in fixture["fault_matrix"]],
+            [f"C{index}" for index in range(1, 18)],
+        )
+        worker = fixture["worker_observation"]
+        self.assertEqual(worker["worker_response_schema"], "vv-agent.distributed-worker-response.v3")
+        self.assertEqual(worker["host_interaction_observation"]["driver_wait_reason"], "host_interaction")
+        self.assertEqual(worker["suspended_observation"]["driver_wait_reason"], "suspended")
+        self.assertEqual(worker["deferred_observation"]["driver_wait_reason"], "deferred_pending")
+        self.assertEqual(worker["resume_dispatch"]["cycle_index"], "unchanged")
+        self.assertEqual(worker["resume_dispatch"]["decision"], "wake_after_controller_command")
+        self.assertEqual(worker["pending_semantics"], "only_uncommitted_observation; never an authoritative result or state transition")
+        public_api = json.loads((ROOT / "fixtures/public_api.json").read_text(encoding="utf-8"))
+        runtime_capabilities = {
+            capability["id"]: capability
+            for domain in public_api["domains"]
+            if domain["id"] == "runtime_backend"
+            for capability in domain["capabilities"]
+        }
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.controller_command"]["wire"],
+            "fixtures/controller_command.json#request_wire",
+        )
+        self.assertTrue(
+            runtime_capabilities["runtime_backend.controller_command"]["deferred_resolution_is_separate"]
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.controller_command_receipt"]["wire"],
+            "fixtures/controller_command.json#receipt_wire",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.controller_command_receipt"]["visibility"],
+            "framework_public",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.resolve_controller_command"]["signature"],
+            "resolve_controller_command(command)",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.resolve_controller_command"]["handle_source"],
+            "command.handle; no duplicate handle parameter",
+        )
+        self.assertEqual(
+            runtime_capabilities["runtime_backend.resolve_controller_command"]["response_record"],
+            "fixtures/controller_command.json#host_interaction_record",
+        )
+        recovery_capability = runtime_capabilities[
+            "runtime_backend.claim_and_consume_host_interaction_response"
+        ]
+        self.assertEqual(
+            recovery_capability["signature"],
+            "claim_and_consume_host_interaction_response(envelope)",
+        )
+        self.assertEqual(
+            recovery_capability["wire"],
+            "fixtures/controller_command.json#host_interaction_recovery_wire",
+        )
+        self.assertEqual(
+            recovery_capability["result_wire"],
+            "fixtures/controller_command.json#host_interaction_recovery_result",
+        )
+        recovery_result = fixture["host_interaction_recovery_result"]
+        self.assertEqual(
+            recovery_result["checkpoint_execution_claim_state_values"],
+            ["retained", "released", "not_acquired"],
+        )
+        self.assertEqual(recovery_result["applied"]["checkpoint_execution_claim_state"], "retained")
+        self.assertEqual(recovery_result["rejected"]["checkpoint_execution_claim_state"], "not_acquired")
+        self.assertTrue(recovery_capability["requires_checkpoint_execution_claim"])
+        self.assertTrue(recovery_capability["record_only_claim_forbidden"])
+        identity = fixture["identity_derivation"]
+        self.assertEqual(
+            identity["algorithms"]["command_id"]["formula"],
+            "lowercase_sha256(UTF8(domain_prefix) || 0x00 || uint64_be(length(JCS_UTF8(payload))) || JCS_UTF8(payload))",
+        )
+        self.assertEqual(identity["algorithms"]["notification_id"]["transition"], "host_interaction_requested")
+        self.assertEqual(identity["utf8_limits"]["command_id"], 512)
+        self.assertEqual(identity["utf8_limits"]["request_digest"], 64)
+        self.assertEqual(
+            fixture["host_interaction_recovery_wire"]["expected_revision_semantics"],
+            "the envelope carries admission_revision; consume_revision is admission_revision + 1; successful recovery also increments resume_attempt exactly once",
+        )
+        self.assertIn("claim_mode", fixture["host_interaction_recovery_wire"]["required_fields"])
+        self.assertEqual(fixture["host_interaction_recovery_wire"]["claim_mode"]["value"], "recovery")
+        self.assertEqual(fixture["host_interaction_recovery_result"]["applied"]["resume_attempt"], "wire resume_attempt + 1")
+        control_cases = {case["id"]: case for case in fixture["fault_matrix"]}
+        self.assertEqual(control_cases["C15"]["after"]["checkpoint"]["status"], "suspended")
+        self.assertEqual(control_cases["C16"]["after"]["checkpoint"]["status"], "failed")
+        self.assertEqual(control_cases["C16"]["after"]["terminal_result"]["completion_reason"], "cancelled")
+        self.assertEqual(control_cases["C16"]["after"]["event_outbox"], ["run_state_changed", "run_cancelled"])
+        self.assertNotIn("run_failed", control_cases["C16"]["after"]["event_outbox"])
+        self.assertEqual(control_cases["C17"]["before"]["checkpoint"]["status"], "reconciliation_required")
+        self.assertEqual(control_cases["C17"]["operation"]["kind"], "abort")
+        self.assertNotIn("suspended_or_failed", json.dumps(fixture))
+        for case in fixture["fault_matrix"]:
+            self.assertTrue({"before", "operation", "after", "expected"}.issubset(case), case["id"])
+            self.assertIn("checkpoint", case["before"], case["id"])
+            self.assertIn("checkpoint", case["after"], case["id"])
+            self.assertTrue(
+                {"receipt", "event_outbox", "wake_outbox"}.issubset(case["before"]),
+                case["id"],
+            )
+            self.assertTrue(
+                {"receipt", "event_outbox", "wake_outbox"}.issubset(case["after"]),
+                case["id"],
+            )
+            self.assertIn("revision", case["before"]["checkpoint"], case["id"])
+            self.assertIn("revision", case["after"]["checkpoint"], case["id"])
+
     def test_distributed_run_driver_is_enqueue_only_and_checkpoint_authoritative(self) -> None:
         fixture = json.loads(
             (ROOT / "fixtures/distributed_run_driver.json").read_text(encoding="utf-8")
@@ -4055,7 +4944,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(
             fixture["schema_version"],
-            "vv-agent.distributed-run-driver.v2",
+            "vv-agent.distributed-run-driver.v3",
         )
         self.assertTrue(fixture["handle"]["passive"])
         self.assertEqual(
@@ -4083,7 +4972,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(fixture["operations"]["finalize"]["waits_for_child_task"])
         self.assertEqual(
             set(fixture["decisions"]),
-            {"dispatch", "retry_at", "wait", "finalize_required", "terminal_replay"},
+            {
+                "dispatch",
+                "wake_after_controller_command",
+                "retry_at",
+                "wait",
+                "finalize_required",
+                "terminal_replay",
+            },
         )
         self.assertEqual(set(fixture["decision_fields"]), set(fixture["decisions"]))
         self.assertTrue(fixture["rules"]["worker_response_is_observation"])
@@ -4097,6 +4993,30 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["rules"]["last_resolution_returns_unclaimed_running"])
         self.assertTrue(fixture["rules"]["deferred_pending_wait_is_not_host_interaction"])
         self.assertTrue(fixture["rules"]["deferred_status_is_not_claimable"])
+        self.assertTrue(fixture["rules"]["host_interaction_wait_is_non_terminal"])
+        self.assertTrue(fixture["rules"]["suspended_wait_is_non_terminal"])
+        self.assertTrue(fixture["rules"]["controller_command_recovery_is_same_logical_cycle"])
+        self.assertTrue(fixture["rules"]["host_interaction_response_injection_reads_full_record"])
+        self.assertTrue(fixture["rules"]["host_interaction_response_consumed_once"])
+        revision_semantics = fixture["rules"]["host_response_revision_semantics"]
+        self.assertTrue(revision_semantics["numbers_are_examples"])
+        self.assertEqual(revision_semantics["admission_revision"], "expected_revision + 1")
+        self.assertEqual(revision_semantics["consume_revision"], "admission_revision + 1")
+        self.assertEqual(revision_semantics["recovery_claim_mode"], "recovery")
+        self.assertEqual(revision_semantics["resume_attempt_before"], 2)
+        self.assertEqual(revision_semantics["resume_attempt_after_successful_claim"], 3)
+        self.assertEqual(revision_semantics["consumed_event_resume_attempt"], 3)
+        self.assertEqual(
+            fixture["rules"]["host_response_recovery_operation"],
+            "claim_and_consume_host_interaction_response",
+        )
+        self.assertTrue(fixture["rules"]["host_response_recovery_combined_checkpoint_record_cas"])
+        self.assertEqual(fixture["rules"]["host_response_recovery_claim_mode"], "recovery")
+        self.assertTrue(fixture["rules"]["host_response_recovery_before_model_or_tool"])
+        self.assertTrue(fixture["rules"]["host_response_record_only_claim_forbidden"])
+        self.assertTrue(fixture["rules"]["producer_notification_never_dispatches_worker"])
+        self.assertTrue(fixture["rules"]["suspended_host_origin_resume_without_response_waits"])
+        self.assertTrue(fixture["rules"]["suspended_host_origin_resume_with_response_dispatches"])
         transitions = {case["name"]: case for case in fixture["transition_cases"]}
         self.assertEqual(transitions["start"]["cycle_index"], 1)
         self.assertEqual(transitions["committed_cycle"]["claim_mode"], "continue")
@@ -4109,6 +5029,34 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(transitions["deferred_batch_ready"]["decision"], "dispatch")
         self.assertEqual(transitions["deferred_batch_ready"]["resolve_decision"], "applied_ready")
         self.assertEqual(transitions["deferred_batch_ready"]["claim_mode"], "recovery")
+        self.assertEqual(transitions["host_interaction_pending"]["reason"], "host_interaction")
+        self.assertEqual(transitions["suspended_pending"]["reason"], "suspended")
+        self.assertTrue(
+            transitions["controller_command_resolution_wakes_same_logical_cycle"]["same_logical_cycle"]
+        )
+        self.assertEqual(
+            transitions["controller_command_resolution_wakes_same_logical_cycle"]["resume_attempt"],
+            2,
+        )
+        self.assertEqual(
+            transitions["controller_command_resolution_wakes_same_logical_cycle"]["revision_semantics"]["resume_attempt_before"],
+            2,
+        )
+        self.assertEqual(
+            transitions["controller_command_resolution_wakes_same_logical_cycle"]["revision_semantics"]["resume_attempt_after"],
+            3,
+        )
+        transition_revision = transitions["controller_command_resolution_wakes_same_logical_cycle"]["revision_semantics"]
+        self.assertEqual(transition_revision["consume_revision"], "admission_revision + 1")
+        self.assertTrue(transition_revision["numbers_are_examples"])
+        self.assertEqual(
+            fixture["operations"]["resolve_controller_command"]["store_method"],
+            "CheckpointStore.admit_controller_command(command)",
+        )
+        self.assertEqual(
+            fixture["operations"]["resolve_controller_command"]["public_signature"],
+            "resolve_controller_command(command)",
+        )
 
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
@@ -4171,6 +5119,15 @@ class ContractRepositoryTests(unittest.TestCase):
             runner_members["start_distributed"]["rust"]["name"],
             "start_distributed",
         )
+        compiled_start = runner_members["start_distributed_compiled"]
+        self.assertEqual(compiled_start["python"]["name"], "start_distributed_compiled")
+        self.assertEqual(compiled_start["rust"]["name"], "start_distributed_compiled")
+        self.assertEqual(
+            [parameter["name"] for parameter in compiled_start["python"]["signature"]["parameters"]],
+            ["agent", "task", "run_config", "continuation"],
+        )
+        self.assertTrue(compiled_start["python"]["signature"]["parameters"][2]["required"])
+        self.assertFalse(compiled_start["python"]["signature"]["parameters"][3]["required"])
         self.assertEqual(
             runner_members["finalize_distributed"]["python"]["name"],
             "finalize_distributed",
@@ -4187,11 +5144,32 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("run_definition_schema TEXT NOT NULL", sql)
         self.assertIn("run_definition TEXT NOT NULL", sql)
         self.assertIn("terminal_acknowledged", sql)
+        self.assertIn("active_host_interaction", sql)
+        self.assertIn("suspended_origin", sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_records (", sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_notification_outbox (", sql)
+        self.assertIn("response_digest TEXT", sql)
+        self.assertIn("strict v8 codec", sql)
         self.assertIn("model_call_journal", sql)
         self.assertNotIn("deferred_resolution_receipts" + " TEXT NOT NULL", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS deferred_resolution_receipts (", sql)
         self.assertIn("handle_key TEXT PRIMARY KEY", sql)
         self.assertIn("FOREIGN KEY (checkpoint_key) REFERENCES checkpoints(checkpoint_key) ON DELETE CASCADE", sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS controller_command_receipts (", sql)
+        self.assertIn("command_id TEXT PRIMARY KEY", sql)
+        self.assertIn("outbox_state TEXT NOT NULL", sql)
+        self.assertIn("outbox_action TEXT NOT NULL", sql)
+        self.assertIn("outbox_destination TEXT", sql)
+        self.assertIn("claim_token TEXT", sql)
+        self.assertIn("delivered_at_ms INTEGER", sql)
+        self.assertIn("controller_command_receipts_outbox_idx", sql)
+        self.assertIn("host_interaction_notification_outbox_lease_idx", sql)
+        self.assertIn("aborted_at_ms INTEGER", sql)
+        self.assertIn("abort_reason TEXT", sql)
+        self.assertIn("'aborted'", sql)
+        self.assertIn("claim_and_consume_host_interaction_response", sql)
+        self.assertIn("record-only claim is invalid", sql)
+        self.assertIn("at-least-once", sql)
         connection = sqlite3.connect(":memory:")
         try:
             connection.executescript(sql)
@@ -4200,24 +5178,27 @@ class ContractRepositoryTests(unittest.TestCase):
                 INSERT INTO checkpoints (
                     checkpoint_key, schema_version, run_definition_schema, run_definition, task_id,
                     root_run_id, trace_id, run_definition_digest, resume_attempt,
-                    cycle_index, status, messages, cycles, model_calls, shared_state, budget_usage,
+                    cycle_index, status, active_host_interaction, suspended_origin,
+                    messages, cycles, model_calls, shared_state, budget_usage,
                     event_cursor, event_outbox, extension_state, model_call_journal,
                     tool_journal, revision, claim_token, claimed_cycle,
                     lease_expires_at_ms, terminal_result, terminal_acknowledged
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v7",
+                    "vv-agent.checkpoint.v8",
                     "vv-agent.run-definition.v5",
                     "{}",
                     "task-1",
                     "run-1",
                     "trace-1",
-                    "c" * 64,
+                    "294ed84885a9235b13ab76220cfca7ee5632c50788457734dee4c4ccc1dd72f7",
                     1,
                     0,
                     "running",
+                    None,
+                    None,
                     "[]",
                     "[]",
                     "[]",
@@ -4242,7 +5223,16 @@ class ContractRepositoryTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 )
             }
-            self.assertEqual(tables, {"checkpoints", "deferred_resolution_receipts"})
+            self.assertEqual(
+                tables,
+                {
+                    "checkpoints",
+                    "deferred_resolution_receipts",
+                    "host_interaction_records",
+                    "host_interaction_notification_outbox",
+                    "controller_command_receipts",
+                },
+            )
             connection.execute(
                 """
                 INSERT INTO deferred_resolution_receipts (
@@ -4261,6 +5251,139 @@ class ContractRepositoryTests(unittest.TestCase):
                     "succeeded",
                 ),
             )
+            connection.execute(
+                """
+                UPDATE checkpoints
+                SET status = 'host_interaction',
+                    active_host_interaction = ?,
+                    suspended_origin = NULL,
+                    claim_token = NULL,
+                    claimed_cycle = NULL,
+                    lease_expires_at_ms = NULL
+                WHERE checkpoint_key = ?
+                """,
+                (
+                    '{"schema_version":"vv-agent.host-interaction-request.v1","interaction_id":"interaction-1","logical_cycle":1,"operation_id":"op-1","tool_call_id":"call-1","request_digest":"' + "a" * 64 + '","prompt":"Choose an approved option."}',
+                    "checkpoint-key",
+                ),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT status, active_host_interaction, suspended_origin FROM checkpoints WHERE checkpoint_key = ?",
+                    ("checkpoint-key",),
+                ).fetchone()[0],
+                "host_interaction",
+            )
+            connection.execute(
+                """
+                INSERT INTO host_interaction_records (
+                    record_id, checkpoint_key, interaction_id, logical_cycle,
+                    request, request_digest, state, attempt, claim_token,
+                    lease_expires_at_ms, response, response_digest, command_id,
+                    resolved_revision, consumed_revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "record-1",
+                    "checkpoint-key",
+                    "interaction-1",
+                    1,
+                    '{"schema_version":"vv-agent.host-interaction-request.v1","interaction_id":"interaction-1","logical_cycle":1,"operation_id":"op-1","tool_call_id":"call-1","request_digest":"' + "a" * 64 + '","prompt":"Choose an approved option."}',
+                    "a" * 64,
+                    "active",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE host_interaction_records
+                SET state = 'resolved_pending', response = ?, response_digest = ?,
+                    command_id = ?, resolved_revision = ?
+                WHERE record_id = ?
+                """,
+                (
+                    '{"schema_version":"vv-agent.host-interaction-response.v1","interaction_id":"interaction-1","logical_cycle":1,"operation_id":"op-1","tool_call_id":"call-1","request_digest":"' + "a" * 64 + '","command_id":"command-1","response":{"role":"user","content":"Continue."},"response_digest":"294ed84885a9235b13ab76220cfca7ee5632c50788457734dee4c4ccc1dd72f7"}',
+                    "c" * 64,
+                    "command-1",
+                    9,
+                    "record-1",
+                ),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state, response, command_id FROM host_interaction_records WHERE record_id = ?",
+                    ("record-1",),
+                ).fetchone(),
+                (
+                    "resolved_pending",
+                    '{"schema_version":"vv-agent.host-interaction-response.v1","interaction_id":"interaction-1","logical_cycle":1,"operation_id":"op-1","tool_call_id":"call-1","request_digest":"' + "a" * 64 + '","command_id":"command-1","response":{"role":"user","content":"Continue."},"response_digest":"294ed84885a9235b13ab76220cfca7ee5632c50788457734dee4c4ccc1dd72f7"}',
+                    "command-1",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO host_interaction_notification_outbox (
+                    notification_id, checkpoint_key, record_id, payload, payload_digest,
+                    outbox_state, claim_token, lease_expires_at_ms, attempt,
+                    delivered_at_ms, last_error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "notification-1",
+                    "checkpoint-key",
+                    "record-1",
+                    '{"schema_version":"vv-agent.host-interaction-notification.v1","notification_id":"notification-1","record_id":"record-1","interaction_id":"interaction-1","logical_cycle":1,"status":"host_interaction","prompt":"Choose an approved option."}',
+                    "n" * 64,
+                    "pending",
+                    None,
+                    None,
+                    0,
+                    None,
+                    None,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE host_interaction_notification_outbox
+                SET outbox_state = 'claimed', claim_token = ?, lease_expires_at_ms = ?, attempt = 1
+                WHERE notification_id = ? AND outbox_state = 'pending'
+                """,
+                ("notification-owner", 2000000000000, "notification-1"),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT outbox_state, claim_token, attempt FROM host_interaction_notification_outbox WHERE notification_id = ?",
+                    ("notification-1",),
+                ).fetchone(),
+                ("claimed", "notification-owner", 1),
+            )
+            connection.execute(
+                """
+                UPDATE host_interaction_notification_outbox
+                SET outbox_state = 'delivered', claim_token = NULL,
+                    lease_expires_at_ms = NULL, delivered_at_ms = 2000000000001
+                WHERE notification_id = ? AND claim_token = ? AND attempt = 1
+                """,
+                ("notification-1", "notification-owner"),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT outbox_state, delivered_at_ms FROM host_interaction_notification_outbox WHERE notification_id = ?",
+                    ("notification-1",),
+                ).fetchone(),
+                ("delivered", 2000000000001),
+            )
+            connection.execute(
+                "UPDATE checkpoints SET status = 'running', active_host_interaction = NULL WHERE checkpoint_key = ?",
+                ("checkpoint-key",),
+            )
             self.assertEqual(
                 connection.execute(
                     "SELECT handle_key, receipt_status FROM deferred_resolution_receipts WHERE checkpoint_key = ?",
@@ -4269,12 +5392,69 @@ class ContractRepositoryTests(unittest.TestCase):
                 ("h" * 64, "succeeded"),
             )
             connection.execute(
+                """
+                INSERT INTO controller_command_receipts (
+                    command_id, checkpoint_key, handle, command_digest, command,
+                    resume_attempt, expected_revision, receipt, resulting_status,
+                    resulting_revision, outbox_state, outbox_id, outbox_action,
+                    outbox_destination, attempt, claim_token, lease_expires_at_ms,
+                    delivered_at_ms, last_error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "command-1",
+                    "checkpoint-key",
+                    "{}",
+                    "d" * 64,
+                    '{"kind":"host_interaction_response"}',
+                    1,
+                    0,
+                    '{"outbox_state":"pending"}',
+                    "running",
+                    1,
+                    "pending",
+                    "outbox-command-1",
+                    "recovery_dispatch",
+                    "distributed_advance",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT command_id, outbox_state FROM controller_command_receipts WHERE checkpoint_key = ?",
+                    ("checkpoint-key",),
+                ).fetchone(),
+                ("command-1", "pending"),
+            )
+            connection.execute(
                 "DELETE FROM checkpoints WHERE checkpoint_key = ?",
                 ("checkpoint-key",),
             )
             self.assertIsNone(
                 connection.execute(
                     "SELECT handle_key FROM deferred_resolution_receipts WHERE checkpoint_key = ?",
+                    ("checkpoint-key",),
+                ).fetchone()
+            )
+            self.assertIsNone(
+                connection.execute(
+                    "SELECT command_id FROM controller_command_receipts WHERE checkpoint_key = ?",
+                    ("checkpoint-key",),
+                ).fetchone()
+            )
+            self.assertIsNone(
+                connection.execute(
+                    "SELECT record_id FROM host_interaction_records WHERE checkpoint_key = ?",
+                    ("checkpoint-key",),
+                ).fetchone()
+            )
+            self.assertIsNone(
+                connection.execute(
+                    "SELECT notification_id FROM host_interaction_notification_outbox WHERE checkpoint_key = ?",
                     ("checkpoint-key",),
                 ).fetchone()
             )
@@ -4312,7 +5492,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 53)
+            self.assertEqual(synced["fixture_files"], 54)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 
