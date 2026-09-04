@@ -1,5 +1,17 @@
 # Changelog
 
+## 8.1.1 — pending adoption
+
+- Recorded Redis checkpoint atomicity as implementation-neutral
+  compare-and-swap transaction semantics. Lua, WATCH/MULTI/EXEC, and
+  equivalent transactions satisfy the contract when they preserve the
+  required revision, claim, lease, and pending-event fences.
+- Kept all wire and runtime behavior unchanged.
+
+This patch remains `pending-adoption` until both language implementations pin
+the same contract revision and pass their real producer and cross-language
+quality gates.
+
 ## 8.1.0 — pending adoption
 
 - Added a task-neutral compiled distributed-start capability. Callers may pass

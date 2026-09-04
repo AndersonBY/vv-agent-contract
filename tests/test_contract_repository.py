@@ -103,7 +103,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "8.1.0")
+        self.assertEqual(report["version"], "8.1.1")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -806,7 +806,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "8.1.0")
+        self.assertEqual(fixture["contract_version"], "8.1.1")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -3737,7 +3737,25 @@ class ContractRepositoryTests(unittest.TestCase):
             "started",
         )
         self.assertTrue(cases["terminal_ack_is_retained"]["expected"]["row_present"])
-        self.assertTrue(fixture["redis_rules"]["whole_json_heartbeat_forbidden"])
+        redis_rules = fixture["redis_rules"]
+        atomicity = {
+            key: value for key, value in redis_rules.items() if key.endswith("_atomicity")
+        }
+        self.assertEqual(
+            set(atomicity),
+            {
+                "progress_atomicity",
+                "suspend_atomicity",
+                "claimed_finalize_atomicity",
+                "event_delivery_atomicity",
+                "heartbeat_atomicity",
+            },
+        )
+        self.assertTrue(
+            all(value.startswith("compare_and_swap_transaction_") for value in atomicity.values())
+        )
+        self.assertFalse(any("lua" in value.lower() for value in atomicity.values()))
+        self.assertTrue(redis_rules["whole_json_heartbeat_forbidden"])
         self.assertEqual(fixture["namespaces"]["sqlite_table"], "checkpoints")
         self.assertEqual(fixture["namespaces"]["redis_key_prefix"], "vv-agent:checkpoint:")
         self.assertEqual(
@@ -4405,7 +4423,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "8.1.0")
+        self.assertEqual(fixture["contract_version"], "8.1.1")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
