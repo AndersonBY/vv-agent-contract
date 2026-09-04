@@ -103,7 +103,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "8.1.1")
+        self.assertEqual(report["version"], "8.1.2")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -714,6 +714,10 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertIn("streaming_write", fixture["artifact_contract"])
         self.assertIn("without_full_output_materialization", fixture["bash_contract"]["above_limit_persistence"])
+        self.assertIn(
+            "success_result_has_non_null_error_code",
+            {case["name"] for case in fixture["invalid_cases"]},
+        )
 
         required = set(fixture["result_contract"]["required_fields"])
         optional = set(fixture["result_contract"]["optional_fields"])
@@ -733,6 +737,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 raise ValueError("shape")
             if any(result[key] is None for key in keys & optional):
                 raise ValueError("null optional")
+            if result.get("status_code") == "SUCCESS" and result.get("error_code") is not None:
+                raise ValueError("success error code")
             if result.get("truncated") is not True:
                 if keys & truncation_fields:
                     raise ValueError("ordinary recovery fields")
@@ -806,7 +812,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "8.1.1")
+        self.assertEqual(fixture["contract_version"], "8.1.2")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -4423,7 +4429,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "8.1.1")
+        self.assertEqual(fixture["contract_version"], "8.1.2")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
