@@ -124,6 +124,15 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 8.1.1
+
+`8.1.1` is a patch release with no wire or runtime behavior change. It records
+Redis checkpoint atomicity as compare-and-swap transaction semantics without
+prescribing an implementation. Lua, WATCH/MULTI/EXEC, and equivalent
+transactions are valid when they preserve the required revision, claim, lease,
+and pending-event fences. The support matrix remains `pending-adoption` until
+both implementations adopt and pass the paired gates.
+
 ## Release Note: 8.1.0
 
 `8.1.0` is a minor release. It adds a task-neutral compiled distributed-start
