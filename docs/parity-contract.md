@@ -220,7 +220,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `8.1.1` applies the sparse bounded-result rules in
+Contract `8.1.2` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.

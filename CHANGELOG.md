@@ -1,5 +1,15 @@
 # Changelog
 
+## 8.1.2 — pending adoption
+
+- Added canonical invalid coverage requiring `ToolExecutionResult` values with
+  `status_code=SUCCESS` and a non-null `error_code` to be rejected.
+- Kept wire and runtime behavior unchanged.
+
+This patch remains `pending-adoption` until both language implementations pin
+the same contract revision and pass their real producer and cross-language
+quality gates.
+
 ## 8.1.1 — pending adoption
 
 - Recorded Redis checkpoint atomicity as implementation-neutral

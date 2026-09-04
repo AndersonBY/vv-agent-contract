@@ -124,6 +124,14 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 8.1.2
+
+`8.1.2` is a patch release with no wire or runtime behavior change. It adds
+canonical invalid coverage for `ToolExecutionResult`: a result with
+`status_code=SUCCESS` and a non-null `error_code` is invalid and must be
+rejected as `tool_result_invalid`. The support matrix remains
+`pending-adoption` until both implementations adopt and pass the paired gates.
+
 ## Release Note: 8.1.1
 
 `8.1.1` is a patch release with no wire or runtime behavior change. It records

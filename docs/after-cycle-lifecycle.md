@@ -1,6 +1,6 @@
 # After-Cycle Lifecycle Hooks
 
-Contract `8.1.1` includes an optional, task-neutral host control point after a
+Contract `8.1.2` includes an optional, task-neutral host control point after a
 complete Agent cycle. It lets a host observe a committed unit of work,
 add a bounded user steering message for the next cycle, narrow tool access, or
 stop with a non-success result. It does not classify tasks or decide whether a
