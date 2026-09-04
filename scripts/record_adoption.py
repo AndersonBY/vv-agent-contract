@@ -39,6 +39,10 @@ def record_adoption(
 
     timestamp = verified_at or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     matrix["status"] = "verified"
+    matrix["adoption_note"] = (
+        f"v{contract['version']} passed the paired implementation snapshots "
+        "and cross-language producer gates."
+    )
     matrix["last_verified_at"] = timestamp
     matrix["cross_repository_run"] = run_url
     matrix["implementations"]["python"]["status"] = "verified"

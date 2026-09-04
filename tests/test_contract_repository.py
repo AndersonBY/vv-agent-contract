@@ -5560,6 +5560,11 @@ class ContractRepositoryTests(unittest.TestCase):
                 verified_at="2026-07-13T12:00:00Z",
             )
             self.assertEqual(matrix["status"], "verified")
+            self.assertEqual(
+                matrix["adoption_note"],
+                f"v{matrix['contract_version']} passed the paired implementation snapshots "
+                "and cross-language producer gates.",
+            )
             self.assertEqual(matrix["implementations"]["python"]["verified_revision"], revision)
 
             build = contractctl.build_bundle(ROOT, temporary_path / "dist", revision=revision)
