@@ -1,18 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "8.1.2",
-  "status": "pending-adoption",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "pending-adoption"
+      "status": "verified",
+      "verified_revision": "ff9745757b5be5ee149637c7487b727b36f35475"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "pending-adoption"
+      "status": "verified",
+      "verified_revision": "5d9152fe2ac74946ee09fdd2da0210d5c20ebf5e"
     }
   },
-  "adoption_note": "v8.1.2 is awaiting strict reader and event producer fixes before the paired implementation gates can pass."
+  "adoption_note": "v8.1.2 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-05T02:24:33Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/33938139743"
 }
