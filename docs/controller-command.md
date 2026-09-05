@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `8.1.2` defines one task-neutral, closed admission seam for durable
+Contract `9.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -43,18 +43,50 @@ transport retries and is the idempotency key.
 | `host_interaction_response` | `kind`, `interaction_id`, `logical_cycle`, `operation_id`, `tool_call_id`, `request_digest`, `response` | Respond to the exact persisted host interaction and wake same logical cycle. |
 | `suspend` | `kind` | Persist a resumable suspension; it never wakes a worker. |
 | `resume` | `kind` | Restore the persisted origin and wake same logical cycle; it accepts no new input. |
-| `cancel` | `kind` | Write the cancelled terminal only after ambiguity/deferred/claim precedence. It never wakes a worker. |
-| `abort` | `kind` | Only `reconciliation_required` may be operator-aborted; preserve the ambiguous journal. It never wakes a worker. |
+| `cancel` | `kind` | Set `cancel_requested` for a live claim, or atomically reclaim an expired claim and close the cycle as cancelled. It never wakes a worker. |
+| `abort` | `kind` | Only `reconciliation_required` may be operator-aborted; close unclosed tools as `tool_cancelled` while retaining their observations. It never wakes a worker. |
 
 The host response fields bind `checkpoint_key`, `run_id`, `trace_id`,
 `resume_attempt`, `expected_revision`, `logical_cycle`, `interaction_id`,
 `operation_id`, `tool_call_id`, and `request_digest`. Its response is a closed
 user message with only `role=user` and `content`.
 
-`cancel` is a terminal failed projection with
-`terminal_result.completion_reason=cancelled`; its event outbox uses the
-registered RunEvent v4 `run_cancelled` event (alongside `run_state_changed`),
-not `run_failed`.
+For an unclaimed checkpoint with no unclosed logical cycle, `cancel` is a
+terminal failed projection with `terminal_result.completion_reason=cancelled`
+and `resume_observations=[]`; it does not emit `cycle_aborted`. An unclaimed
+`cancel`, `operator_abort`, or `lease_lost` that has an unclosed logical cycle
+must carry or determine a positive `logical_cycle`, close every unclosed tool,
+emit `cycle_aborted`, and only then write terminal lifecycle. An expired claim
+is reclaimed and control is applied in one CAS, using the claimed finalizer
+when cycle closure is required. For a live claim, `cancel` atomically sets
+`cancel_requested=true` and retains the claim so the worker can stop at a safe
+boundary. Its renewal result is the typed
+`renewed`/`cancel_requested`/`claim_lost` outcome. The durable
+`cycle_aborted` event closes the logical cycle and any unclosed tools; it uses
+the applicable reason (`cancelled`, `lease_lost`, or `operator_abort`) and
+`tool_cancelled` for those tool entries. Each closed journal entry stores the
+typed error object `{code: "tool_cancelled", message, retryable: false}` and
+the concrete `resume_observation` fields
+`operation_id`, `operation_kind`, `cycle_index`, `state`, `risk`, and
+`idempotency_support`; the terminal result retains the same object at
+`resume_observations`, a unique list sorted by operation identity. The event id is stable, so identical replay is a
+zero-write operation and a different payload is `event_identity_conflict`.
+This live-claim control-plane write does not advance the checkpoint revision:
+the command receipt and `run_state_changed` payload record
+`cancel_requested: false -> true` while the worker continues to fence
+progress, ordinary receipts, and renewal with its current revision. Those
+claimed writes never clear an already-true signal. Terminal finalization
+releases the claim; the next logical cycle is the single place that creates a
+checkpoint with `cancel_requested=false`. Replaying the same command identity
+is zero-write.
+The owning worker may still perform its fenced progress CAS and one definitive
+`record_tool_receipt`: revision then advances normally for those mutations,
+the signal remains true, and the following renewal returns
+`cancel_requested` without duplicating the event or receipt.
+For `lease_lost`, a new recovery claim plus the existing `finalize_claimed`
+operation supplies revision and cycle fences; the old owner
+writes nothing. Their observations remain evidence, so no unknown external
+effect is rewritten as a successful or definitive failure result.
 
 The wire has no `begin_host_interaction` variant. Framework code that needs a
 non-terminal interaction uses the typed producer below; application code never
@@ -125,7 +157,7 @@ never `recovery_dispatch`.
 
 ## Checkpoint state and cycle terminology
 
-The v8 checkpoint discriminator is `vv-agent.checkpoint.v8`; no v7 reader,
+The v9 checkpoint discriminator is `vv-agent.checkpoint.v9`; no v8 reader,
 namespace probe, or migration fallback exists. A checkpoint always persists
 the complete strict `active_host_interaction` request (including prompt and
 schema discriminator) and `suspended_origin`, both closed objects or null:
@@ -143,6 +175,10 @@ schema discriminator) and `suspended_origin`, both closed objects or null:
 identity after the producer releases the claim. A response or resume preserves
 `cycle_index` and reacquires the same logical cycle; it does not create a new
 cycle or use the ambiguous phrase “same cycle” without this distinction.
+
+`cycle_aborted.logical_cycle` is the closure identity and is positive; when
+the closure is admitted from a claimed checkpoint it equals
+`cycle_index + 1`. The event does not substitute a second cycle counter.
 
 The states are `pending`, `running`, `host_interaction`, `suspended`,
 `deferred`, `reconciliation_required`, `wait_user`, `completed`, `failed`,
@@ -229,12 +265,15 @@ Errors are strict and observable: `controller_command_digest_invalid`,
 `host_interaction_conflict`, `host_interaction_fields_invalid`,
 `host_interaction_content_too_large`, and `host_interaction_response_missing`.
 
-Precedence is: committed terminal, live claim, unresolved ambiguity,
-unresolved deferred barrier, command state rule, ordinary cancellation.
+Precedence is: committed terminal, live claim, unresolved ambiguity, deferred
+barrier, command state rule, then cancellation handling. A live claim receives
+the cancellation signal; an expired claim is reclaimed before cancellation is
+applied. An unresolved ambiguous operation remains explicit and cannot be
+turned into a successful result by cancellation.
 
 ## Worker observation and wake recovery
 
-`vv-agent.distributed-worker-response.v3` remains unchanged. `pending` means
+`vv-agent.distributed-worker-response.v4` is the current response wire. `pending` means
 only that this delivery returned no committed observation/result; it is not an
 authoritative transition. The driver reads the checkpoint once and maps the
 authoritative status to separate `deferred`, `host_interaction`,
@@ -309,7 +348,7 @@ reconcile protocol. Delivery is at-least-once and observer deduplication is
 required; an uncertain callback is ambiguous, not exactly-once. The reaper
 routes ambiguous rows to explicit delivered/retry/abort reconciliation and
 never blind-retries them. It is never reused as a recovery wake. SQLite only enforces scalar
-lifecycle relations; strict v8 codec validation owns nested JSON shape and
+lifecycle relations; strict v9 codec validation owns nested JSON shape and
 UTF-8/digest limits.
 Redis must expose equivalent replay, conflict, stale, lease, and ambiguity
 semantics.

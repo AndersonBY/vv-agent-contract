@@ -103,7 +103,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "8.1.2")
+        self.assertEqual(report["version"], "9.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -278,6 +278,62 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(rejected["stale_version"]["version"], "v3")
         self.assertEqual(rejected["unknown_version"]["version"], "v5")
         self.assertEqual(rejected["future_version"]["version"], "v5")
+        canonical_cycle_aborts = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/run_events.jsonl").read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("type") == "cycle_aborted"
+        ]
+        self.assertEqual(len(canonical_cycle_aborts), 3)
+        for cycle_abort in canonical_cycle_aborts:
+            self.assertEqual(cycle_abort["logical_cycle"], cycle_abort["cycle_index"] + 1)
+        self.assertEqual(canonical_cycle_aborts[0]["reason"], "cancelled")
+        self.assertEqual(canonical_cycle_aborts[0]["logical_cycle"], 2)
+        cycle_abort_rules = invalid["rules"]["cycle_aborted_fields"]
+        self.assertEqual(
+            cycle_abort_rules["reason_values"],
+            ["cancelled", "lease_lost", "operator_abort"],
+        )
+        self.assertEqual(cycle_abort_rules["logical_cycle"], "positive_json_safe_integer")
+        self.assertEqual(
+            cycle_abort_rules["logical_cycle_relation"],
+            "logical_cycle = cycle_index + 1",
+        )
+        self.assertEqual(cycle_abort_rules["cycle_index_semantics"], "last committed cycle index")
+        self.assertTrue(
+            {
+                "cycle_aborted_unknown_reason",
+                "cycle_aborted_missing_logical_cycle",
+                "cycle_aborted_unknown_field",
+            }.issubset(rejected)
+        )
+        lifecycle_events = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/run_events.jsonl").read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("run_id") == "run_cycle_abort_operator"
+        ]
+        self.assertEqual(
+            [event["type"] for event in lifecycle_events],
+            ["operation_ambiguous", "cycle_aborted", "run_state_changed", "run_failed"],
+        )
+        self.assertEqual(
+            [event["event_id"] for event in lifecycle_events],
+            [
+                "evt_operation_ambiguous_operator_abort",
+                "evt_cycle_aborted_operator_abort",
+                "evt_run_state_changed_operator_abort",
+                "evt_run_failed_operator_abort",
+            ],
+        )
+        lease_events = [
+            json.loads(line)
+            for line in (ROOT / "fixtures/run_events.jsonl").read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("run_id") == "run_cycle_abort_lease_lifecycle"
+        ]
+        self.assertEqual(
+            [event["type"] for event in lease_events],
+            ["operation_ambiguous", "cycle_aborted", "run_state_changed", "run_failed"],
+        )
+        self.assertEqual(lease_events[1]["reason"], "lease_lost")
 
         configured = json.loads(
             (ROOT / "fixtures/configured_sub_agent.json").read_text(encoding="utf-8")
@@ -693,6 +749,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["schema_version"], "vv-agent.tool-execution-result.v4"
         )
+        self.assertEqual(
+            fixture["result_contract"]["canonical_writer_normalization"],
+            {
+                "writer": "strict ToolExecutionResult typed writer",
+                "omit_empty_optional_fields": ["metadata"],
+                "include_present_optional_fields_after_normalization": True,
+            },
+        )
         ordinary = fixture["canonical_results"]["ordinary"]
         self.assertEqual(
             set(ordinary),
@@ -812,7 +876,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "8.1.2")
+        self.assertEqual(fixture["contract_version"], "9.0.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -873,9 +937,22 @@ class ContractRepositoryTests(unittest.TestCase):
                 ["deferred", "failed"],
             ],
         )
+        self.assertEqual(
+            fixture["journal"]["admission_transition_operations"],
+            {
+                "started_to_deferred": "admit_deferred_batch",
+                "ambiguous_to_deferred": "accept_deferred_batch",
+            },
+        )
         self.assertEqual(fixture["batch"]["admission_operation"], "admit_deferred_batch")
+        self.assertEqual(fixture["batch"]["ordinary_receipt_operation"], "record_tool_receipt")
+        self.assertTrue(fixture["batch"]["ordinary_receipts_are_written_before_admission"])
         self.assertTrue(fixture["batch"]["admission_cas"]["atomic"])
         self.assertTrue(fixture["batch"]["mixed_completed_and_deferred"]["all_or_none"])
+        self.assertIn(
+            "ordinary receipts are committed by record_tool_receipt",
+            fixture["batch"]["mixed_completed_and_deferred"]["all_or_none_scope"],
+        )
         self.assertTrue(fixture["batch"]["mixed_completed_and_deferred"]["claim_release"].startswith("one"))
         self.assertEqual(
             fixture["batch"]["mixed_completed_and_deferred"]["completed_status_mapping"]["SUCCESS"]["journal_state"],
@@ -885,6 +962,8 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["batch"]["mixed_completed_and_deferred"]["completed_status_mapping"]["ERROR"]["journal_state"],
             "failed",
         )
+        self.assertTrue(fixture["batch"]["mixed_completed_and_deferred"]["ordinary_receipt_is_not_repeated"])
+        self.assertIn("completed outcome", fixture["batch"]["admission_cas"]["rejects"])
         self.assertEqual(
             fixture["batch"]["error_completed_batch"]["completed_journal_state"],
             "failed",
@@ -979,7 +1058,15 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(batch["example"]["merged_tool_result_order"], ["call_a", "call_b", "call_c"])
         self.assertTrue(batch["example"]["single_admission_call"])
         self.assertTrue(batch["example"]["single_claim_release"])
+        self.assertEqual(batch["example"]["ordinary_receipt_order"], ["call_b"])
+        self.assertEqual(batch["example"]["admission_deferred_only_order"], ["call_a", "call_c"])
         self.assertTrue(batch["barrier"]["claimable_statuses_exclude_deferred"])
+        self.assertEqual(batch["mixed_completed_and_deferred"]["completed_outcome_admission"], "reject_deferred_admission_completed_outcome")
+        self.assertEqual(batch["admission_cas"]["revision_increment"], 1)
+        mixed_expected = fixture["canonical_cases"][2]["expected"]
+        self.assertEqual(mixed_expected["ordinary_receipt_revision_increment"], 1)
+        self.assertEqual(mixed_expected["admission_revision_increment"], 1)
+        self.assertEqual(mixed_expected["total_revision_increment"], 2)
         self.assertEqual(fixture["events_and_outbox"]["run_event_schema_version"], "v4")
         self.assertEqual(fixture["distributed"]["driver_wait_reason"], "deferred_pending")
         self.assertFalse(fixture["distributed"]["new_worker_response_variant"])
@@ -1438,8 +1525,8 @@ class ContractRepositoryTests(unittest.TestCase):
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(public_api["contract"], "vv-agent-public-api-v5")
-        self.assertEqual(public_api["schema_version"], 5)
+        self.assertEqual(public_api["contract"], "vv-agent-public-api-v6")
+        self.assertEqual(public_api["schema_version"], 6)
         capabilities = {
             item["id"]
             for domain in public_api["domains"]
@@ -1454,6 +1541,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 "tools.result_cursor",
             }.issubset(capabilities)
         )
+        self.assertIn("result.resume_observations", capabilities)
+        self.assertNotIn("result.resume_observation", capabilities)
         surfaces = {surface["id"]: surface for surface in public_api["surfaces"]}
         expected_tool_members = {
             "tool_execution_result": {
@@ -1756,6 +1845,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/result_public.json").read_text(encoding="utf-8")
         )
         wire = fixture["agent_result_wire"]
+        self.assertEqual(fixture["version"], 6)
         required = {
             "status",
             "completion_reason",
@@ -1769,12 +1859,36 @@ class ContractRepositoryTests(unittest.TestCase):
             "shared_state",
             "token_usage",
             "checkpoint_key",
-            "resume_observation",
+            "resume_observations",
         }
         optional = {"budget_usage", "budget_exhaustion", "error_code"}
 
         self.assertEqual(set(wire["required_fields"]), required)
         self.assertEqual(set(wire["optional_fields"]), optional)
+        self.assertNotIn("resume_observation", wire["required_fields"])
+        self.assertEqual(
+            wire["resume_observations"]["sort_by"],
+            ["operation_id", "operation_kind", "cycle_index"],
+        )
+        self.assertEqual(
+            wire["resume_observations"]["unique_by"],
+            ["operation_id", "operation_kind", "cycle_index"],
+        )
+        for vector in fixture["resume_observation_vectors"]:
+            observations = vector["input"]
+            canonical = vector["canonical"]
+            self.assertEqual(
+                canonical,
+                sorted(
+                    observations,
+                    key=lambda observation: (
+                        observation["operation_id"],
+                        observation["operation_kind"],
+                        observation["cycle_index"],
+                    ),
+                ),
+                vector["name"],
+            )
         self.assertTrue(wire["optional_fields_omitted_when_absent"])
         self.assertTrue(wire["optional_fields_reject_null"])
         self.assertEqual(wire["unknown_fields"], "reject")
@@ -1804,6 +1918,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIsNone(deferred_semantics["completion_reason"])
         self.assertIsNone(fixture["deferred_pending_result"]["completion_reason"])
         self.assertEqual(fixture["deferred_pending_result"]["wait_reason"], "deferred_pending")
+        self.assertEqual(fixture["deferred_pending_result"]["resume_observations"], [])
         self.assertEqual(set(fixture["agent_result"]), required)
         self.assertTrue(optional.isdisjoint(fixture["agent_result"]))
 
@@ -1847,6 +1962,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.task_token_usage",
             }.issubset(capabilities)
         )
+        self.assertIn("result.resume_observations", capabilities)
+        self.assertNotIn("result.resume_observation", capabilities)
 
     def test_tool_execution_result_has_one_typed_status_field(self) -> None:
         behavior = json.loads(
@@ -3250,7 +3367,9 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v8")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v9")
+        self.assertIn("cancel_requested", fixture["required_fields"])
+        self.assertIs(canonical["cancel_requested"], False)
         self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v5")
         self.assertEqual(canonical["run_definition"], minimal_definition["definition"])
         self.assertEqual(canonical["run_definition_digest"], minimal_definition["sha256"])
@@ -3269,7 +3388,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v8",
+                "required_value": "vv-agent.checkpoint.v9",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
@@ -3297,6 +3416,7 @@ class ContractRepositoryTests(unittest.TestCase):
         for case_name, payload in valid_cases.items():
             self.assertEqual(set(payload), allowed_checkpoint_fields, case_name)
             self.assertEqual(payload["schema_version"], fixture["discriminator"]["required_value"], case_name)
+            self.assertIsInstance(payload["cancel_requested"], bool, case_name)
             claim_fields = {
                 payload["claim_token"],
                 payload["claimed_cycle"],
@@ -3320,6 +3440,88 @@ class ContractRepositoryTests(unittest.TestCase):
             else:
                 self.assertIsNone(payload["active_host_interaction"], case_name)
                 self.assertIsNone(payload["suspended_origin"], case_name)
+        for payload in valid_cases.values():
+            for entry in payload["tool_journal"]:
+                if "identity_key" not in entry:
+                    continue
+                identity_wire = {
+                    "attempt": entry["attempt"],
+                    "checkpoint_key": payload["checkpoint_key"],
+                    "operation_id": entry["operation_id"],
+                    "request_digest": entry["request_digest"],
+                    "tool_call_id": entry["tool_call_id"],
+                }
+                identity_bytes = json.dumps(
+                    identity_wire,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                self.assertEqual(
+                    hashlib.sha256(identity_bytes).hexdigest(),
+                    entry["identity_key"],
+                    entry["operation_id"],
+                )
+        operator_abort_terminal = valid_cases["operator_abort_terminal_retains_closed_tool_entries"]
+        self.assertEqual(operator_abort_terminal["status"], "failed")
+        self.assertEqual(operator_abort_terminal["claim_token"], None)
+        self.assertEqual(operator_abort_terminal["claimed_cycle"], None)
+        self.assertEqual(
+            [entry["state"] for entry in operator_abort_terminal["tool_journal"]],
+            ["succeeded", "failed", "failed"],
+        )
+        ordinary_entries = operator_abort_terminal["tool_journal"][:2]
+        self.assertEqual(ordinary_entries[0]["state"], "succeeded")
+        self.assertEqual(ordinary_entries[1]["state"], "failed")
+        for entry in ordinary_entries:
+            self.assertRegex(entry["identity_key"], r"^[0-9a-f]{64}$")
+            self.assertRegex(entry["result_digest"], r"^[0-9a-f]{64}$")
+        self.assertIsNotNone(ordinary_entries[0]["result"])
+        self.assertIsNone(ordinary_entries[0]["error"])
+        self.assertIsNone(ordinary_entries[1]["result"])
+        self.assertEqual(ordinary_entries[1]["error"]["code"], "provider_rejected")
+        self.assertEqual(ordinary_entries[1]["error"]["message"], "rejected")
+        closure_entry = operator_abort_terminal["tool_journal"][2]
+        self.assertEqual(closure_entry["error"]["code"], "tool_cancelled")
+        self.assertEqual(
+            [entry["request_digest"] for entry in operator_abort_terminal["tool_journal"]],
+            [
+                "cc94008fb3960d6728cc88e405d5b35d273890f9d9d0de8a01cdc964e44d46cf",
+                "6b05beb10de1bae7a2989e39294d4a1f02f4f4b357437bc198f47b6b7be85b49",
+                "223d24f1600427316b4d4eeb943f7abccd8c79222a2c12dc5c57a0697aa0c64f",
+            ],
+        )
+        self.assertEqual(
+            closure_entry["identity_key"],
+            "af9e1e01d64c3b1c9cf0bd6971f43af87aec330443c3a6d506d9f63aee798023",
+        )
+        self.assertNotIn("result_digest", closure_entry)
+        self.assertEqual(
+            operator_abort_terminal["terminal_result"]["resume_observations"],
+            [closure_entry["resume_observation"]],
+        )
+        self.assertTrue(fixture["status_rules"]["terminal_journal_state_rule"]["terminal_allows_closed_entries"])
+        self.assertTrue(fixture["status_rules"]["terminal_journal_state_rule"]["terminal_forbids_active_entries"])
+        active_invalid = next(
+            case
+            for case in fixture["invalid_cases"]
+            if case["name"] == "terminal_result_with_active_tool_journal_is_invalid"
+        )
+        self.assertEqual(active_invalid["error"], "checkpoint_status_invalid")
+        self.assertTrue(active_invalid["terminal_result_preserved"])
+        mutated_terminal = copy.deepcopy(valid_cases[active_invalid["base_valid_case"]])
+        mutated_terminal["tool_journal"] = active_invalid["mutation"]["replace"]["tool_journal"]
+        self.assertIsNotNone(mutated_terminal["terminal_result"])
+        self.assertEqual(mutated_terminal["tool_journal"][0]["state"], "started")
+        self.assertIn(
+            active_invalid["active_state_representative"],
+            fixture["status_rules"]["terminal_journal_state_rule"]["active_states"],
+        )
+        self.assertEqual(
+            fixture["status_rules"]["terminal_journal_state_rule"]["active_states"],
+            ["planned", "started", "deferred", "ambiguous"],
+        )
         unknown_top_level = next(
             case for case in fixture["invalid_cases"] if case["name"] == "unknown_top_level_is_rejected"
         )
@@ -3334,11 +3536,36 @@ class ContractRepositoryTests(unittest.TestCase):
                 if case["name"] != "unknown_schema" and "payload" in case
             )
         )
+        current_discriminator = fixture["discriminator"]["required_value"]
+        for case in fixture["invalid_cases"]:
+            payload = case.get("payload")
+            if not isinstance(payload, dict) or payload.get("schema_version") != current_discriminator:
+                continue
+            self.assertTrue(
+                allowed_checkpoint_fields.issubset(payload),
+                case["name"],
+            )
+        claimed_cycle_case = next(
+            case for case in fixture["invalid_cases"] if case["name"] == "claimed_cycle_not_next"
+        )
+        self.assertIs(claimed_cycle_case["payload"]["cancel_requested"], False)
         self.assertIn(
-            "old_v7_schema_is_rejected_forward_only",
+            "old_v8_schema_is_rejected_forward_only",
             {case["name"] for case in fixture["invalid_cases"]},
         )
         self.assertTrue(fixture["status_rules"]["old_checkpoint_discriminator_is_rejected_without_reader_fallback"])
+        self.assertIn(
+            "cancel_requested_not_boolean",
+            {case["name"] for case in fixture["invalid_cases"]},
+        )
+        self.assertEqual(
+            fixture["status_rules"]["renew_returns_typed_outcome"],
+            ["renewed", "cancel_requested", "claim_lost"],
+        )
+        self.assertTrue(fixture["status_rules"]["expired_claim_cancel_or_suspend_reclaims_atomically"])
+        self.assertTrue(fixture["status_rules"]["suspended_never_persists_live_or_expired_claim"])
+        self.assertTrue(fixture["status_rules"]["expired_claim_is_reclaimed_before_suspended_status"])
+        self.assertTrue(fixture["status_rules"]["cycle_aborted_closes_logical_cycle_and_unclosed_tools"])
         self.assertIsNone(canonical["active_host_interaction"])
         self.assertIsNone(canonical["suspended_origin"])
         self.assertTrue(fixture["host_interaction_persistence"]["producer_cas"]["claim_release_is_atomic"])
@@ -3441,9 +3668,16 @@ class ContractRepositoryTests(unittest.TestCase):
         abort_case = next(
             case
             for case in fixture["status_cases"]
-            if case["name"] == "operator_abort_terminal_preserves_unknown_outcome"
+            if case["name"] == "operator_abort_terminal_closes_unclosed_tools"
         )
-        self.assertTrue(abort_case["expected"]["ambiguous_journal_preserved"])
+        self.assertEqual(abort_case["expected"]["tool_journal_state"], "failed")
+        self.assertEqual(abort_case["expected"]["tool_error_code"], "tool_cancelled")
+        self.assertEqual(abort_case["expected"]["logical_cycle"], 2)
+        self.assertEqual(abort_case["expected"]["tool_closure"]["error"]["code"], "tool_cancelled")
+        self.assertEqual(
+            abort_case["expected"]["terminal_result"]["resume_observations"],
+            [abort_case["expected"]["tool_closure"]["resume_observation"]],
+        )
         codec_deferred_cases = {case["name"]: case for case in fixture["deferred_cases"]}
         self.assertEqual(
             codec_deferred_cases["resolved_last_deferred_returns_to_running"]["expected"]["resolution_decision"],
@@ -3567,6 +3801,24 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertEqual(sum(sizes), expected_total)
             self.assertEqual(case["canonical_total_entries_utf8_bytes"], expected_total)
 
+    def test_invalid_current_v9_payloads_keep_required_checkpoint_shape(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
+        current = fixture["discriminator"]["required_value"]
+        required = set(fixture["required_fields"])
+        current_cases = [
+            case
+            for case in fixture["invalid_cases"]
+            if isinstance(case.get("payload"), dict)
+            and case["payload"].get("schema_version") == current
+        ]
+        self.assertTrue(current_cases)
+        for case in current_cases:
+            self.assertTrue(required.issubset(case["payload"]), case["name"])
+        claimed_cycle = next(
+            case for case in current_cases if case["name"] == "claimed_cycle_not_next"
+        )
+        self.assertIs(claimed_cycle["payload"]["cancel_requested"], False)
+
     def test_operation_journal_never_silently_retries_unknown_effects(self) -> None:
         fixture = json.loads((ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8"))
         recovery = {case["name"]: case for case in fixture["recovery_cases"]}
@@ -3578,6 +3830,367 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["enums"]["states"],
             ["planned", "started", "deferred", "succeeded", "failed", "ambiguous"],
         )
+        self.assertEqual(
+            fixture["enums"]["active_states"],
+            ["planned", "started", "deferred", "ambiguous"],
+        )
+        self.assertEqual(fixture["enums"]["closed_states"], ["succeeded", "failed"])
+        receipt = fixture["ordinary_tool_receipt"]
+        self.assertEqual(receipt["operation"], "record_tool_receipt")
+        self.assertEqual(receipt["allowed_status_codes"], ["SUCCESS", "ERROR"])
+        self.assertEqual(receipt["journal_transition"], ["started", "succeeded_or_failed"])
+        self.assertEqual(receipt["event"], "tool_call_completed")
+        self.assertTrue(receipt["claim_preserved"])
+        self.assertEqual(
+            receipt["receipt_first"]["lookup_order"],
+            [
+                "stable receipt identity key (identity_key)",
+                "stored result_digest comparison",
+                "active claim, claimed cycle, and expected revision",
+            ],
+        )
+        self.assertEqual(
+            receipt["receipt_first"]["identity_hit_same_result_stale_expected_revision"],
+            "zero_write_replay",
+        )
+        self.assertEqual(
+            receipt["receipt_first"]["identity_hit_different_result"],
+            "typed tool_receipt_conflict with zero writes",
+        )
+        self.assertEqual(
+            fixture["receipt_identity"]["identity_fields"],
+            ["checkpoint_key", "operation_id", "attempt", "tool_call_id", "request_digest"],
+        )
+        identity_input = fixture["receipt_identity"]["identity_input"]
+        self.assertEqual(
+            identity_input["object_fields"],
+            ["attempt", "checkpoint_key", "operation_id", "request_digest", "tool_call_id"],
+        )
+        self.assertTrue(identity_input["closed"])
+        self.assertEqual(identity_input["optional_fields"], [])
+        self.assertEqual(identity_input["unknown_fields"], "reject")
+        for vector in fixture["receipt_identity"]["identity_vectors"]:
+            object_wire = json.dumps(
+                vector["object"],
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            self.assertEqual(
+                hashlib.sha256(object_wire).hexdigest(),
+                vector["identity_key"],
+                vector["name"],
+            )
+        self.assertEqual(
+            fixture["receipt_identity"]["result_digest"]["canonicalization"],
+            "RFC 8785 JSON Canonicalization Scheme over UTF-8 followed by lowercase SHA-256",
+        )
+        self.assertEqual(
+            fixture["receipt_identity"]["result_digest"]["normalization"],
+            {
+                "writer": "strict ToolExecutionResult typed writer",
+                "omit_empty_optional_fields": ["metadata"],
+                "include_present_optional_fields_after_normalization": True,
+            },
+        )
+        receipt_identity = fixture["receipt_identity"]
+        self.assertEqual(receipt_identity["receipt_primary_key"], "identity_key")
+        self.assertNotIn("result_digest", receipt_identity["receipt_primary_key"])
+        self.assertNotIn("receipt_index", receipt_identity)
+        self.assertEqual(receipt_identity["receipt_fields_persisted_in_journal"], ["identity_key", "result_digest"])
+        self.assertEqual(receipt_identity["receipt_fields_derived"], [])
+        self.assertNotIn("result_digest", receipt_identity["result_digest"]["required_fields"])
+        self.assertNotIn("error", receipt_identity["result_digest"]["required_fields"])
+        self.assertEqual(
+            receipt_identity["result_digest"]["wire_schema"],
+            "vv-agent.tool-execution-result.v4",
+        )
+        bounded_result = json.loads(
+            (ROOT / "fixtures/bounded_tool_result.json").read_text(encoding="utf-8")
+        )["result_contract"]
+        allowed_result_fields = set(bounded_result["required_fields"]) | set(
+            bounded_result["optional_fields"]
+        )
+        for vector in receipt_identity["result_digest_vectors"]:
+            wire = vector.get("canonical_result", vector.get("wire"))
+            self.assertIsNotNone(wire)
+            reader_input = vector.get("reader_input", wire)
+            self.assertTrue(set(wire).issubset(allowed_result_fields))
+            self.assertTrue(set(reader_input).issubset(allowed_result_fields))
+            self.assertNotIn("error", wire)
+            self.assertNotIn("result_digest", wire)
+            self.assertNotIn("error", reader_input)
+            self.assertNotIn("result_digest", reader_input)
+            canonical = json.dumps(
+                wire,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            self.assertEqual(hashlib.sha256(canonical).hexdigest(), vector["rfc8785_sha256"])
+        self.assertEqual(
+            receipt_identity["golden_result_digest"],
+            receipt_identity["result_digest_vectors"][0]["rfc8785_sha256"],
+        )
+        self.assertEqual(
+            receipt_identity["golden_result"],
+            receipt_identity["result_digest_vectors"][0]["wire"],
+        )
+        empty_metadata = next(
+            vector
+            for vector in receipt_identity["result_digest_vectors"]
+            if vector["name"] == "empty_metadata_round_trip"
+        )
+        self.assertEqual(empty_metadata["reader_input"]["metadata"], {})
+        self.assertNotIn("metadata", empty_metadata["canonical_result"])
+        normalized_empty = {
+            key: value
+            for key, value in empty_metadata["reader_input"].items()
+            if not (key == "metadata" and value == {})
+        }
+        self.assertEqual(normalized_empty, empty_metadata["canonical_result"])
+        error_empty_metadata = next(
+            vector
+            for vector in receipt_identity["result_digest_vectors"]
+            if vector["name"] == "error_empty_metadata_round_trip"
+        )
+        self.assertEqual(error_empty_metadata["reader_input"]["metadata"], {})
+        self.assertNotIn("metadata", error_empty_metadata["canonical_result"])
+        normalized_error = {
+            key: value
+            for key, value in error_empty_metadata["reader_input"].items()
+            if not (key == "metadata" and value == {})
+        }
+        self.assertEqual(normalized_error, error_empty_metadata["canonical_result"])
+        self.assertTrue(set(bounded_result["required_fields"]).issubset(receipt_identity["golden_result"]))
+        self.assertNotIn("error", receipt_identity["golden_result"])
+        self.assertNotIn("result_digest", receipt_identity["golden_result"])
+        self.assertTrue(fixture["receipt_identity"]["claim_and_revision_excluded_from_identity"])
+        self.assertEqual(
+            fixture["tool_journal_entry_wire"]["closure_entry"]["required_fields"][-2:],
+            ["error", "resume_observation"],
+        )
+        self.assertEqual(
+            fixture["tool_journal_entry_wire"]["ordinary_receipt_fields"]["persisted_in_journal"],
+            ["identity_key", "result_digest"],
+        )
+        self.assertFalse(
+            fixture["tool_journal_entry_wire"]["ordinary_receipt_fields"]["additional_index_or_table"]
+        )
+        state_fields = fixture["tool_journal_entry_wire"]["state_dependent_fields"]
+        self.assertTrue(all(spec["kind"] == "tool" for spec in state_fields.values()))
+        self.assertEqual(
+            state_fields["succeeded_definitive_receipt"]["required_fields"],
+            ["identity_key", "result_digest", "result"],
+        )
+        self.assertEqual(
+            state_fields["failed_definitive_receipt"]["required_fields"],
+            ["identity_key", "result_digest", "error"],
+        )
+        self.assertEqual(
+            state_fields["tool_cancelled_closure"]["forbidden_fields"],
+            ["result_digest"],
+        )
+        self.assertEqual(
+            fixture["tool_journal_entry_wire"]["closure_entry"]["error_code"],
+            "tool_cancelled",
+        )
+        closure = next(
+            case for case in fixture["valid_entries"] if case["name"] == "tool_failed_tool_cancelled_closure"
+        )["entry"]
+        self.assertEqual(closure["state"], "failed")
+        self.assertEqual(closure["result"], None)
+        self.assertEqual(closure["error"]["code"], "tool_cancelled")
+        self.assertEqual(closure["resume_observation"]["state"], "ambiguous")
+        self.assertRegex(closure["identity_key"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("result_digest", closure)
+        self.assertEqual(closure["resume_observation"]["operation_id"], closure["operation_id"])
+        succeeded_receipt = next(
+            case for case in fixture["valid_entries"] if case["name"] == "tool_succeeded"
+        )["entry"]
+        failed_receipt = next(
+            case for case in fixture["valid_entries"] if case["name"] == "tool_failed"
+        )["entry"]
+        for entry in (succeeded_receipt, failed_receipt):
+            self.assertRegex(entry["identity_key"], r"^[0-9a-f]{64}$")
+            self.assertRegex(entry["result_digest"], r"^[0-9a-f]{64}$")
+        self.assertEqual(succeeded_receipt["state"], "succeeded")
+        self.assertIsNotNone(succeeded_receipt["result"])
+        self.assertIsNone(succeeded_receipt["error"])
+        self.assertEqual(failed_receipt["state"], "failed")
+        self.assertIsNone(failed_receipt["result"])
+        self.assertEqual(failed_receipt["error"]["code"], "provider_rejected")
+        self.assertEqual(failed_receipt["error"]["message"], error_empty_metadata["reader_input"]["content"])
+        for case in fixture["valid_entries"]:
+            entry = case["entry"]
+            if entry.get("kind") != "tool" or entry.get("state") not in {"succeeded", "failed"}:
+                continue
+            if case["name"] == "tool_failed_tool_cancelled_closure":
+                self.assertRegex(entry.get("identity_key", ""), r"^[0-9a-f]{64}$", case["name"])
+                self.assertNotIn("result_digest", entry)
+            else:
+                self.assertRegex(entry.get("identity_key", ""), r"^[0-9a-f]{64}$", case["name"])
+                self.assertRegex(entry.get("result_digest", ""), r"^[0-9a-f]{64}$", case["name"])
+            identity_wire = {
+                "attempt": entry["attempt"],
+                "checkpoint_key": case.get("checkpoint_key", "tenant-7/run-42"),
+                "operation_id": entry["operation_id"],
+                "request_digest": entry["request_digest"],
+                "tool_call_id": entry["tool_call_id"],
+            }
+            identity_bytes = json.dumps(
+                identity_wire,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            self.assertEqual(hashlib.sha256(identity_bytes).hexdigest(), entry["identity_key"])
+            if entry["result"] is not None:
+                result_bytes = json.dumps(
+                    entry["result"],
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                self.assertEqual(hashlib.sha256(result_bytes).hexdigest(), entry["result_digest"])
+            elif case["name"] != "tool_failed_tool_cancelled_closure":
+                self.assertEqual(entry["result_digest"], error_empty_metadata["rfc8785_sha256"])
+        invalid_entries = {case["name"]: case for case in fixture["invalid_entries"]}
+        self.assertEqual(
+            invalid_entries["tool_failed_tool_cancelled_closure_missing_resume_observation"]["error_code"],
+            "operation_resume_observation_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_tool_cancelled_closure_unknown_field"]["error_code"],
+            "operation_entry_unknown_field",
+        )
+        self.assertEqual(
+            invalid_entries["tool_succeeded_missing_identity_key"]["error_code"],
+            "operation_receipt_identity_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_missing_result_digest"]["error_code"],
+            "operation_result_digest_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_missing_error"]["error_code"],
+            "operation_error_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_cancelled_closure_receipt_fields_forbidden"]["error_code"],
+            "operation_closure_receipt_forbidden",
+        )
+        self.assertEqual(
+            invalid_entries["tool_succeeded_unknown_field"]["error_code"],
+            "operation_entry_unknown_field",
+        )
+        receipt_cases = {case["name"]: case for case in fixture["receipt_cases"]}
+        self.assertEqual(
+            receipt_cases["crash_after_receipt_stale_replay"]["expected"]["writes"],
+            0,
+        )
+        self.assertEqual(
+            receipt_cases["same_identity_different_result_is_typed_conflict"]["expected"]["error"],
+            "tool_receipt_conflict",
+        )
+        self.assertFalse(receipt_cases["two_definitive_results_are_serialized"]["expected"]["parallel_cas_retry"])
+        self.assertEqual(
+            fixture["resume_observation"]["canonical_durable_carriers"],
+            [
+                "closed tool journal entry.resume_observation",
+                "terminal_result.resume_observations",
+            ],
+        )
+        self.assertTrue(receipt["handler_return_is_not_success_proof_for_ambiguous_outcome"])
+        self.assertEqual(
+            fixture["cycle_abort_rules"]["reasons"],
+            ["cancelled", "lease_lost", "operator_abort"],
+        )
+        self.assertEqual(
+            fixture["cycle_abort_rules"]["logical_cycle_semantics"],
+            "logical_cycle is the positive in-flight cycle and equals cycle_index + 1 at closure admission",
+        )
+        self.assertEqual(
+            fixture["outcome_classification"]["surface_to_model"]["resume_observation_carriers"],
+            ["tool_journal_entry.resume_observation"],
+        )
+        self.assertFalse(
+            fixture["outcome_classification"]["surface_to_model"]["model_visible_projection"][
+                "structured_resume_observation"
+            ]
+        )
+        self.assertTrue(fixture["cycle_abort_rules"]["logical_cycle_required"])
+        self.assertEqual(
+            fixture["cycle_abort_rules"]["unclosed_tool_entries"]["error_code"],
+            "tool_cancelled",
+        )
+        self.assertEqual(
+            set(fixture["cycle_abort_rules"]["unclosed_tool_entries"]["resume_observation"]),
+            {
+                "operation_id",
+                "operation_kind",
+                "cycle_index",
+                "state",
+                "risk",
+                "idempotency_support",
+            },
+        )
+        self.assertEqual(
+            [case["name"] for case in fixture["cycle_abort_cases"]],
+            ["cancelled", "lease_lost", "operator_abort"],
+        )
+        cycle_abort_cases = fixture["cycle_abort_cases"]
+        self.assertEqual(
+            {case["reason"] for case in cycle_abort_cases},
+            {"cancelled", "lease_lost", "operator_abort"},
+        )
+        self.assertEqual(
+            len({case["event_id"] for case in cycle_abort_cases}),
+            3,
+        )
+        self.assertEqual({case["logical_cycle"] for case in cycle_abort_cases}, {2})
+        operator_abort_case = next(
+            case for case in cycle_abort_cases if case["name"] == "operator_abort"
+        )
+        self.assertEqual(
+            operator_abort_case["event_sequence"],
+            ["operation_ambiguous", "cycle_aborted", "run_state_changed", "run_failed"],
+        )
+        self.assertEqual(
+            operator_abort_case["same_event_replay"],
+            {"writes": 0, "duplicate_event_count": 0},
+        )
+        for case in fixture["cycle_abort_cases"]:
+            self.assertEqual(case["tool_closure"]["state"], "failed")
+            self.assertEqual(case["tool_closure"]["error"]["code"], "tool_cancelled")
+            self.assertEqual(
+                set(case["tool_closure"]["resume_observation"]),
+                {
+                    "operation_id",
+                    "operation_kind",
+                    "cycle_index",
+                    "state",
+                    "risk",
+                    "idempotency_support",
+                },
+            )
+            self.assertEqual(
+                case["terminal_result"]["resume_observations"],
+                [case["tool_closure"]["resume_observation"]],
+            )
+            self.assertEqual(case["same_event_replay"]["writes"], 0)
+        self.assertEqual(
+            next(case for case in fixture["cycle_abort_cases"] if case["name"] == "cancelled")["operation"],
+            "finalize_claimed",
+        )
+        lease_loss = next(case for case in fixture["cycle_abort_cases"] if case["name"] == "lease_lost")
+        self.assertEqual(lease_loss["operation"], "finalize_claimed")
+        self.assertEqual(lease_loss["claim_mode"], "recovery")
+        self.assertEqual(lease_loss["old_owner"]["writes"], 0)
         self.assertEqual(fixture["deferred_rules"]["claimed_checkpoint_error"], "deferred_checkpoint_claimed")
         self.assertEqual(
             recovery["started_unknown_tool_is_not_retried"]["expected"]["status"],
@@ -3667,10 +4280,60 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["outcome_classification"]["timeout_after_started"],
             "ambiguous_unless_the_adapter_proves_a_definitive_outcome",
         )
+        self.assertEqual(
+            fixture["outcome_classification"]["tool_execution_failed_after_started"],
+            "ambiguous_unless_the_adapter_proves_a_definitive_outcome",
+        )
+        self.assertEqual(
+            fixture["outcome_classification"]["surface_to_model"]["transition"],
+            "ambiguous_to_failed",
+        )
+        self.assertEqual(
+            fixture["outcome_classification"]["surface_to_model"]["error_code"],
+            "tool_outcome_unknown",
+        )
+        self.assertTrue(fixture["outcome_classification"]["surface_to_model"]["synthetic_failure"])
+        self.assertFalse(
+            fixture["outcome_classification"]["surface_to_model"]["definitive_external_outcome"]
+        )
+        self.assertEqual(
+            fixture["outcome_classification"]["synthetic_unknown_outcome_failures_are_not_external_failure_proof"],
+            ["tool_outcome_unknown", "tool_cancelled"],
+        )
+        self.assertEqual(
+            recovery["started_model_default_bounded_duplicate_risk_retry"]["expected"]["attempt"],
+            2,
+        )
+        self.assertEqual(
+            recovery["started_model_explicit_reconciliation"]["expected"]["persisted_state"],
+            "ambiguous",
+        )
         self.assertFalse(
             recovery["blocking_tool_timeout_after_started_is_ambiguous"]["expected"][
                 "tool_process_assumed_stopped"
             ]
+        )
+        self.assertEqual(
+            recovery["started_tool_surfaces_unknown_outcome_to_model_by_default"]["expected"][
+                "model_visible_error_code"
+            ],
+            "tool_outcome_unknown",
+        )
+        self.assertEqual(
+            recovery["started_tool_surfaces_unknown_outcome_to_model_by_default"]["expected"][
+                "persisted_state"
+            ],
+            "failed",
+        )
+        self.assertEqual(
+            recovery["started_tool_surfaces_unknown_outcome_to_model_by_default"]["expected"]["event"],
+            "tool_call_completed",
+        )
+        self.assertEqual(
+            recovery["started_tool_surfaces_unknown_outcome_to_model_by_default"]["expected"][
+                "resume_observation"
+            ]["state"],
+            "ambiguous",
         )
         digest_mismatch = recovery["request_digest_mismatch_never_replays"]["expected"]
         self.assertEqual(digest_mismatch["failure_code"], "checkpoint_journal_integrity_mismatch")
@@ -3679,10 +4342,18 @@ class ContractRepositoryTests(unittest.TestCase):
         abort = next(
             case
             for case in fixture["reconciliation_cases"]
-            if case["name"] == "abort_is_explicit_terminal_failure"
+            if case["name"] == "abort_closes_cycle_with_unknown_effect_evidence"
         )["expected"]
-        self.assertEqual(abort["state"], "ambiguous")
-        self.assertTrue(abort["ambiguity_preserved"])
+        self.assertEqual(abort["state"], "failed")
+        self.assertEqual(abort["tool_error_code"], "tool_cancelled")
+        self.assertTrue(abort["cycle_aborted_event"])
+        self.assertEqual(abort["logical_cycle"], 2)
+        self.assertEqual(abort["tool_closure"]["resume_observation"]["state"], "ambiguous")
+        self.assertEqual(
+            abort["terminal_result"]["resume_observations"],
+            [abort["tool_closure"]["resume_observation"]],
+        )
+        self.assertTrue(abort["unknown_external_outcome_preserved"])
         self.assertTrue(
             fixture["pre_start_rules"][
                 "approval_resume_uses_source_tool_call_id_request_digest_and_idempotency_key"
@@ -3705,10 +4376,25 @@ class ContractRepositoryTests(unittest.TestCase):
         deferred_cases = {case["name"]: case for case in fixture["deferred_cases"]}
 
         self.assertTrue(fixture["revision_rules"]["progress_preserves_claim"])
+        self.assertEqual(fixture["revision_rules"]["live_claim_cancel_increment"], 0)
+        self.assertTrue(
+            fixture["revision_rules"]["live_claim_cancel_sets_cancel_requested_without_revision_change"]
+        )
+        self.assertTrue(
+            fixture["revision_rules"]["cancel_requested_cannot_be_cleared_by_claimed_progress_or_receipt"]
+        )
         self.assertFalse(fixture["revision_rules"]["heartbeat_requires_revision"])
         self.assertTrue(fixture["revision_rules"]["outbox_bounded_by_lifecycle_not_fixed_cardinality_or_bytes"])
         self.assertTrue(fixture["revision_rules"]["outbox_preflight_before_first_external_tool_effect"])
         self.assertTrue(fixture["revision_rules"]["outbox_no_post_effect_capacity_failure"])
+        self.assertEqual(
+            fixture["renew_result"]["variants"].keys(),
+            {"renewed", "cancel_requested", "claim_lost"},
+        )
+        self.assertTrue(fixture["renew_result"]["variants"]["renewed"]["claim_retained"])
+        self.assertTrue(fixture["renew_result"]["variants"]["cancel_requested"]["claim_retained"])
+        self.assertFalse(fixture["renew_result"]["variants"]["claim_lost"]["lease_write"])
+        self.assertFalse(fixture["renew_result"]["variants"]["claim_lost"]["payload_write"])
         self.assertEqual(
             fixture["revision_rules"]["resolve_deferred_claimed_error"],
             "deferred_checkpoint_claimed",
@@ -3722,6 +4408,35 @@ class ContractRepositoryTests(unittest.TestCase):
             cases["progress_keeps_claim"]["expected"]["outbox_event_types"],
             ["model_call_started"],
         )
+        receipt = cases["record_tool_receipt_preserves_claim"]["expected"]
+        self.assertEqual(receipt["outbox_event_types"], ["tool_call_started", "tool_call_completed"])
+        self.assertEqual(receipt["tool_journal_state"], "succeeded")
+        self.assertEqual(
+            receipt["result_digest"],
+            "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2",
+        )
+        self.assertEqual(receipt["claim_token"], "owner-tools")
+        duplicate = cases["record_tool_receipt_duplicate_is_zero_write"]
+        self.assertTrue(duplicate["expected"]["replayed"])
+        self.assertEqual(duplicate["operation"]["expected_revision"], 3)
+        self.assertEqual(duplicate["expected"]["revision"], 4)
+        conflict = cases["record_tool_receipt_conflicting_result_is_typed_zero_write"]
+        self.assertEqual(conflict["expected"]["error"], "tool_receipt_conflict")
+        self.assertFalse(conflict["expected"]["updated"])
+        self.assertEqual(conflict["expected"]["duplicate_event_count"], 0)
+        stale_owner = cases["record_tool_receipt_same_revision_wrong_claim_is_zero_write"]
+        self.assertEqual(stale_owner["operation"]["expected_revision"], stale_owner["initial"]["revision"])
+        self.assertNotEqual(stale_owner["operation"]["claim_token"], stale_owner["initial"]["claim_token"])
+        self.assertFalse(stale_owner["expected"]["updated"])
+        self.assertEqual(stale_owner["expected"]["writes"], 0)
+        self.assertEqual(stale_owner["expected"]["error"], "checkpoint_claim_conflict")
+        serial = cases["record_two_definitive_tool_results_serially"]["expected"]
+        self.assertEqual(serial["receipt_order"], ["call_1", "call_2"])
+        self.assertEqual(serial["outbox_event_types"].count("tool_call_completed"), 2)
+        self.assertFalse(serial["parallel_cas_retry"])
+        ordinary_finalize = cases["terminal_finalize_without_claim"]["expected"]
+        self.assertFalse(ordinary_finalize["cycle_aborted_event"])
+        self.assertEqual(ordinary_finalize["terminal_result"]["resume_observations"], [])
         terminal_progress = cases[
             "terminal_model_progress_updates_ledger_budget_and_outbox"
         ]["expected"]
@@ -3741,6 +4456,18 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             cases["heartbeat_after_progress_updates_lease_only"]["expected"]["journal_state"],
             "started",
+        )
+        self.assertEqual(
+            cases["heartbeat_after_progress_updates_lease_only"]["expected"]["renew_result"]["outcome"],
+            "renewed",
+        )
+        self.assertEqual(
+            cases["renew_returns_cancel_requested_and_retains_claim"]["expected"]["renew_result"]["outcome"],
+            "cancel_requested",
+        )
+        self.assertEqual(
+            cases["renew_expired_claim_returns_claim_lost_without_write"]["expected"]["renew_result"]["outcome"],
+            "claim_lost",
         )
         self.assertTrue(cases["terminal_ack_is_retained"]["expected"]["row_present"])
         redis_rules = fixture["redis_rules"]
@@ -3808,6 +4535,30 @@ class ContractRepositoryTests(unittest.TestCase):
             ],
             2,
         )
+        abort = cases["cycle_abort_closes_unclosed_tools"]["expected"]
+        self.assertEqual(abort["cycle_aborted_event"], True)
+        self.assertEqual(abort["logical_cycle"], 2)
+        self.assertEqual(abort["tool_error_code"], "tool_cancelled")
+        self.assertIsNone(abort["claim_token"])
+        self.assertEqual(cases["cycle_abort_closes_unclosed_tools"]["operation"]["kind"], "finalize_claimed")
+        self.assertNotIn("outcome", cases["cycle_abort_closes_unclosed_tools"]["operation"])
+        self.assertNotIn(
+            "aborted",
+            cases["cycle_abort_closes_unclosed_tools"]["operation"].values(),
+        )
+        commit_definition = next(
+            operation for operation in fixture["operations"] if operation["name"] == "commit_cycle"
+        )
+        self.assertTrue(commit_definition["success_only"])
+        finalize_definition = next(
+            operation for operation in fixture["operations"] if operation["name"] == "finalize"
+        )
+        self.assertIn("resume_observations=[]", finalize_definition["atomic"])
+        self.assertIn("positive logical_cycle", finalize_definition["atomic"])
+        self.assertEqual(
+            abort["terminal_result"]["resume_observations"],
+            [abort["tool_closure"]["resume_observation"]],
+        )
         self.assertIn(
             "accept_deferred_batch",
             {operation["name"] for operation in fixture["operations"]},
@@ -3820,11 +4571,29 @@ class ContractRepositoryTests(unittest.TestCase):
             "replay_controller_command",
             {operation["name"] for operation in fixture["operations"]},
         )
-        mixed_batch = deferred_cases["admit_deferred_batch_mixed_outcomes_releases_claim_once"]
+        operation_names = {operation["name"] for operation in fixture["operations"]}
+        self.assertNotIn("lease_loss_reaper", operation_names)
+        self.assertTrue(fixture["revision_rules"]["lease_lost_recovery_uses_existing_claimed_finalize"])
+        self.assertEqual(
+            fixture["revision_rules"]["record_tool_receipt_conflict_error"],
+            "tool_receipt_conflict",
+        )
+        self.assertTrue(fixture["resume_observation"]["boolean_presence_is_not_evidence"])
+        mixed_batch = deferred_cases["admit_deferred_batch_deferred_only_after_ordinary_receipt"]
         self.assertEqual(mixed_batch["scenario_id"], "deferred_batch_mixed_call_a_b_c.v1")
         self.assertEqual(mixed_batch["source"], "fixtures/deferred_tool.json#batch.example")
-        mixed_error = deferred_cases["admit_deferred_batch_mixed_error_marks_failed_journal"]
+        self.assertEqual(mixed_batch["ordinary_receipt"]["kind"], "record_tool_receipt")
+        self.assertEqual(mixed_batch["ordinary_receipt"]["revision"], 4)
+        self.assertEqual(mixed_batch["operation"]["expected_revision"], 4)
+        self.assertEqual(mixed_batch["expected"]["revision"], 5)
+        self.assertEqual(mixed_batch["expected"]["outbox_event_types"], ["tool_call_deferred", "tool_call_deferred"])
+        mixed_error = deferred_cases["admit_deferred_batch_deferred_only_after_ordinary_error_receipt"]
         self.assertEqual(mixed_error["scenario_id"], "deferred_batch_mixed_error_call_a_b_c.v1")
+        self.assertEqual(mixed_error["ordinary_receipt"]["status_code"], "ERROR")
+        self.assertEqual(mixed_error["ordinary_receipt"]["error_code"], "provider_rejected")
+        self.assertEqual(mixed_error["operation"]["expected_revision"], 4)
+        self.assertEqual(mixed_error["expected"]["revision"], 5)
+        self.assertEqual(mixed_error["expected"]["outbox_event_types"], ["tool_call_deferred", "tool_call_deferred"])
         first = deferred_cases["resolve_deferred_call_b_first"]
         last = deferred_cases["resolve_deferred_call_a_last"]
         self.assertEqual(first["scenario_id"], "deferred_resolution_call_b_then_call_a.v1")
@@ -3860,14 +4629,72 @@ class ContractRepositoryTests(unittest.TestCase):
         concurrent_claim = cases["concurrent_recovery_claims_increment_once"]["expected"]
         self.assertEqual(concurrent_claim["success_count"], 1)
         self.assertEqual(concurrent_claim["resume_attempt"], 2)
-        operator_abort = cases["operator_abort_terminal_retains_unknown_outcome"]["expected"]
-        self.assertEqual(operator_abort["tool_journal_state"], "ambiguous")
-        self.assertTrue(operator_abort["resume_observation_present"])
+        operator_abort = cases["operator_abort_terminal_closes_unclosed_tools"]["expected"]
+        self.assertEqual(operator_abort["tool_journal_state"], "failed")
+        self.assertEqual(operator_abort["tool_error_code"], "tool_cancelled")
+        self.assertTrue(operator_abort["cycle_aborted_event"])
+        self.assertEqual(operator_abort["tool_closure"]["error"]["code"], "tool_cancelled")
+        self.assertEqual(
+            operator_abort["terminal_result"]["resume_observations"],
+            [operator_abort["tool_closure"]["resume_observation"]],
+        )
         claimed_failure = cases["definitive_failure_finalizes_active_claim"]["expected"]
         self.assertIsNone(claimed_failure["claim_token"])
         self.assertEqual(claimed_failure["model_journal_count"], 0)
-        claimed_abort = cases["claimed_operator_abort_retains_unknown_outcome"]["expected"]
-        self.assertEqual(claimed_abort["tool_journal_state"], "ambiguous")
+        claimed_abort = cases["claimed_operator_abort_closes_unclosed_tools"]["expected"]
+        self.assertEqual(claimed_abort["tool_journal_state"], "failed")
+        self.assertEqual(claimed_abort["tool_error_code"], "tool_cancelled")
+        self.assertTrue(claimed_abort["cycle_aborted_event"])
+        self.assertEqual(claimed_abort["event_sequence"], [
+            "operation_ambiguous",
+            "cycle_aborted",
+            "run_state_changed",
+            "run_failed",
+        ])
+        self.assertEqual(
+            claimed_abort["replay"]["same_event_identity"],
+            {"updated": False, "writes": 0, "duplicate_event_count": 0},
+        )
+        multiple_abort = cases["claimed_operator_abort_closes_multiple_unclosed_tools"]["expected"]
+        self.assertTrue(multiple_abort["journal_is_authoritative"])
+        journal_observations = [
+            entry["resume_observation"] for entry in multiple_abort["tool_journal"]
+        ]
+        self.assertEqual(
+            [observation["operation_id"] for observation in journal_observations],
+            ["op_tool_cycle_2_call_2", "op_tool_cycle_2_call_3"],
+        )
+        self.assertEqual(multiple_abort["terminal_result"]["resume_observations"], journal_observations)
+        self.assertEqual(
+            len({
+                (
+                    observation["operation_id"],
+                    observation["operation_kind"],
+                    observation["cycle_index"],
+                )
+                for observation in multiple_abort["terminal_result"]["resume_observations"]
+            }),
+            2,
+        )
+        self.assertEqual(
+            multiple_abort["replay"]["same_event_identity"],
+            {"updated": False, "writes": 0, "duplicate_event_count": 0},
+        )
+        lease_lost = cases["lease_lost_recovery_claim_closes_cycle_and_races_old_owner"]
+        self.assertEqual(lease_lost["operation"]["kind"], "finalize_claimed")
+        self.assertEqual(lease_lost["operation"]["claim_mode"], "recovery")
+        self.assertEqual(lease_lost["old_owner_attempt"]["writes"], [])
+        self.assertEqual(lease_lost["old_owner_attempt"]["error"], "checkpoint_claim_conflict")
+        self.assertEqual(lease_lost["expected"]["cycle_aborted_event_id"], "evt_cycle_aborted_lease_lost")
+        self.assertEqual(lease_lost["expected"]["tool_closure"]["error"]["code"], "tool_cancelled")
+        self.assertEqual(
+            lease_lost["expected"]["terminal_result"]["resume_observations"],
+            [lease_lost["expected"]["tool_closure"]["resume_observation"]],
+        )
+        self.assertEqual(
+            lease_lost["expected"]["replay"]["same_event_identity"],
+            {"updated": False, "writes": 0, "duplicate_event_count": 0},
+        )
         running_delivery = cases["running_outbox_delivery_preserves_claim"]["expected"]
         self.assertEqual(running_delivery["claim_token"], "owner-events")
         terminal_delivery = cases["terminal_outbox_delivery_preserves_receipt"]["expected"]
@@ -3891,14 +4718,50 @@ class ContractRepositoryTests(unittest.TestCase):
             cases["create_absent"]["expected"]["resume_attempt"],
             1,
         )
-        error_admission = deferred_cases["admit_deferred_batch_mixed_error_marks_failed_journal"]
-        self.assertEqual(error_admission["expected"]["completed_journal_state"], "failed")
+        error_admission = deferred_cases["admit_deferred_batch_deferred_only_after_ordinary_error_receipt"]
+        self.assertEqual(error_admission["expected"]["completed_journal_state"], "failed_before_admission")
         self.assertEqual(error_admission["expected"]["completed_error_code"], "provider_rejected")
 
     def test_checkpoint_resume_fixture_covers_all_fault_boundaries(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
-        self.assertEqual(fixture["version"], 8)
-        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v8")
+        self.assertEqual(fixture["version"], 9)
+        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v9")
+        self.assertIn("cancel_requested", fixture["checkpoint_wire"]["required_fields"])
+        self.assertEqual(
+            fixture["cycle_semantics"]["cycle_aborted_cycle_index_relation"],
+            "logical_cycle = cycle_index + 1 at closure admission",
+        )
+        self.assertEqual(fixture["ambiguity_phases"]["pre_recovery"]["durable_state"], "ambiguous")
+        self.assertEqual(
+            fixture["ambiguity_phases"]["post_recovery_surface_to_model"]["error_code"],
+            "tool_outcome_unknown",
+        )
+        self.assertEqual(
+            fixture["ambiguity_phases"]["post_recovery_surface_to_model"]["resume_observation_carrier"],
+            "tool_journal_entry.resume_observation",
+        )
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["operation"],
+            "record_tool_receipt",
+        )
+        self.assertTrue(fixture["ordinary_tool_receipt_semantics"]["claim_retained"])
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["identity_fields"],
+            ["checkpoint_key", "operation_id", "attempt", "tool_call_id", "request_digest"],
+        )
+        self.assertTrue(fixture["ordinary_tool_receipt_semantics"]["receipt_first"])
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["stale_same_identity_same_result"],
+            "zero_write_replay",
+        )
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["different_result"],
+            "tool_receipt_conflict with zero writes",
+        )
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["admit_deferred_batch_receipts"],
+            "deferred-only; completed or already-receipted outcomes are rejected",
+        )
         self.assertIn("deferred", fixture["checkpoint_states"])
         self.assertEqual(
             fixture["deferred_pending_semantics"],
@@ -3907,7 +4770,7 @@ class ContractRepositoryTests(unittest.TestCase):
         cases = {case["name"]: case for case in fixture["runner_cases"]}
         matrix = fixture["fault_matrix"]
 
-        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 17)])
+        self.assertEqual([case["id"] for case in matrix], [f"F{index}" for index in range(1, 25)])
         self.assertEqual(matrix[3]["resume"], "replay_receipt_without_usage_or_budget_increment")
         self.assertEqual(
             cases["started_model_requires_reconciliation"]["expected"]["completion_reason"],
@@ -3922,6 +4785,61 @@ class ContractRepositoryTests(unittest.TestCase):
                 "model_call_records"
             ],
             2,
+        )
+        self.assertEqual(
+            cases["started_model_default_retry_with_duplicate_risk"]["expected"]["max_attempts"],
+            2,
+        )
+        self.assertEqual(
+            cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"][
+                "model_visible_error_code"
+            ],
+            "tool_outcome_unknown",
+        )
+        self.assertEqual(
+            cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"][
+                "journal_state"
+            ],
+            "failed",
+        )
+        self.assertFalse(
+            cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"][
+                "definitive_external_outcome"
+            ]
+        )
+        self.assertEqual(matrix[20]["pre_recovery"]["journal_state"], "ambiguous")
+        self.assertFalse(matrix[20]["pre_recovery"]["failed_receipt_written"])
+        self.assertEqual(matrix[20]["post_recovery_surface"]["journal_state"], "failed")
+        self.assertEqual(matrix[20]["post_recovery_surface"]["error_code"], "tool_outcome_unknown")
+        default_observation = cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"]
+        self.assertEqual(
+            set(default_observation["tool_journal_resume_observation"]),
+            {
+                "operation_id",
+                "operation_kind",
+                "cycle_index",
+                "state",
+                "risk",
+                "idempotency_support",
+            },
+        )
+        matrix_by_id = {case["id"]: case for case in matrix}
+        for case_id in ("F18", "F20", "F24"):
+            closure = matrix_by_id[case_id]["closure"]
+            self.assertEqual(closure["tool_state"], "failed")
+            self.assertEqual(closure["tool_error"]["code"], "tool_cancelled")
+            self.assertEqual(closure["resume_observation"]["state"], "ambiguous")
+            self.assertEqual(closure["same_event_replay"]["writes"], 0)
+        self.assertEqual(matrix_by_id["F18"]["old_owner"]["writes"], 0)
+        self.assertEqual(
+            matrix_by_id["F18"]["closure"]["event_order"],
+            ["operation_ambiguous", "cycle_aborted", "run_state_changed", "run_failed"],
+        )
+        self.assertEqual(
+            cases["started_timeout_or_tool_execution_failed_remains_ambiguous"]["expected"][
+                "model_visible_error_code"
+            ],
+            "tool_outcome_unknown",
         )
         self.assertFalse(
             cases["started_model_can_retry_only_with_explicit_risk_policy"]["expected"][
@@ -4092,8 +5010,12 @@ class ContractRepositoryTests(unittest.TestCase):
                 "run_deferred": ["tool_call_deferred", "tool_call_completed"],
                 "run_deferred_error": ["tool_call_deferred", "tool_call_completed"],
                 "run_deferred_acceptance": ["reconciliation_resolved", "tool_call_deferred"],
+                "run_cycle_abort_lease": ["cycle_aborted"],
             },
         )
+        aborted = grouped["run_cycle_abort_lease"][0]
+        self.assertEqual(aborted["logical_cycle"], 4)
+        self.assertEqual(aborted["reason"], "lease_lost")
         for scenario in grouped.values():
             self.assertEqual(len({record["run_id"] for record in scenario}), 1)
             self.assertEqual(len({record["trace_id"] for record in scenario}), 1)
@@ -4214,6 +5136,13 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(fixture["worker_rules"]["heartbeat_cannot_overwrite_journal"])
         self.assertTrue(fixture["worker_rules"]["reconciliation_provider_is_optional"])
         self.assertEqual(
+            fixture["worker_rules"]["missing_reconciliation_provider_applies_configured_policy"],
+            {
+                "require_reconciliation": "defer",
+                "surface_to_model": "tool_outcome_unknown_failed_receipt",
+            },
+        )
+        self.assertEqual(
             fixture["worker_rules"]["terminal_commit_order"][-1],
             "scheduler_acknowledgement",
         )
@@ -4253,7 +5182,7 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(
             fixture["schema_version"],
-            "vv-agent.distributed-worker-response.v3",
+            "vv-agent.distributed-worker-response.v4",
         )
         rules = fixture["wire_rules"]
         self.assertEqual(rules["discriminator"], "type")
@@ -4298,7 +5227,7 @@ class ContractRepositoryTests(unittest.TestCase):
             "shared_state",
             "token_usage",
             "checkpoint_key",
-            "resume_observation",
+            "resume_observations",
         }
         optional_result_fields = {"budget_usage", "budget_exhaustion", "error_code"}
         self.assertEqual(set(result_wire["required_fields"]), required_result_fields)
@@ -4410,7 +5339,10 @@ class ContractRepositoryTests(unittest.TestCase):
             for case in fixture["invalid_cases"]
             if case["name"] == "unknown_schema_version"
         )
-        self.assertNotEqual(unknown_version, fixture["schema_version"])
+        self.assertEqual(
+            unknown_version,
+            "vv-agent.distributed-worker-response.v5",
+        )
 
         valid_by_name = {case["name"]: case["response"] for case in fixture["valid_cases"]}
         for case in fixture["invalid_cases"]:
@@ -4429,12 +5361,28 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "8.1.2")
+        self.assertEqual(fixture["contract_version"], "9.0.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
         self.assertTrue(fixture["scope"]["terminal_successor_is_separate"])
         self.assertTrue(fixture["scope"]["ask_user_terminal_semantics_unchanged"])
+        lifecycle = fixture["lifecycle_control"]
+        self.assertEqual(
+            lifecycle["renew_result"]["outcomes"],
+            ["renewed", "cancel_requested", "claim_lost"],
+        )
+        self.assertIn("one CAS", lifecycle["expired_claim_control"]["cancel"])
+        self.assertIn("one CAS", lifecycle["expired_claim_control"]["suspend"])
+        self.assertEqual(lifecycle["expired_claim_control"]["live_claim_cancel_revision_increment"], 0)
+        self.assertIn(
+            "without a checkpoint revision increment",
+            lifecycle["expired_claim_control"]["live_claim_cancel_receipt"],
+        )
+        self.assertEqual(
+            lifecycle["cycle_aborted"]["reasons"],
+            ["cancelled", "lease_lost", "operator_abort"],
+        )
 
         request_wire = fixture["request_wire"]
         self.assertTrue(request_wire["closed"])
@@ -4817,7 +5765,7 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["precedence"][:4],
             [
                 "committed_terminal",
-                "live_claim",
+                "live_claim_cancel_requested",
                 "unresolved_ambiguous_operation",
                 "unresolved_deferred_barrier",
             ],
@@ -4854,10 +5802,10 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             [case["id"] for case in fixture["fault_matrix"]],
-            [f"C{index}" for index in range(1, 18)],
+            [f"C{index}" for index in range(1, 21)],
         )
         worker = fixture["worker_observation"]
-        self.assertEqual(worker["worker_response_schema"], "vv-agent.distributed-worker-response.v3")
+        self.assertEqual(worker["worker_response_schema"], "vv-agent.distributed-worker-response.v4")
         self.assertEqual(worker["host_interaction_observation"]["driver_wait_reason"], "host_interaction")
         self.assertEqual(worker["suspended_observation"]["driver_wait_reason"], "suspended")
         self.assertEqual(worker["deferred_observation"]["driver_wait_reason"], "deferred_pending")
@@ -4941,11 +5889,108 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(control_cases["C15"]["after"]["checkpoint"]["status"], "suspended")
         self.assertEqual(control_cases["C16"]["after"]["checkpoint"]["status"], "failed")
         self.assertEqual(control_cases["C16"]["after"]["terminal_result"]["completion_reason"], "cancelled")
+        self.assertEqual(control_cases["C16"]["after"]["terminal_result"]["resume_observations"], [])
+        self.assertFalse(control_cases["C16"]["after"]["cycle_aborted_event"])
+        self.assertEqual(control_cases["C16"]["operation"]["closure_operation"], "finalize")
         self.assertEqual(control_cases["C16"]["after"]["event_outbox"], ["run_state_changed", "run_cancelled"])
         self.assertNotIn("run_failed", control_cases["C16"]["after"]["event_outbox"])
         self.assertEqual(control_cases["C17"]["before"]["checkpoint"]["status"], "reconciliation_required")
         self.assertEqual(control_cases["C17"]["operation"]["kind"], "abort")
+        self.assertEqual(control_cases["C17"]["operation"]["closure_operation"], "finalize")
+        self.assertGreater(control_cases["C17"]["operation"]["logical_cycle"], 0)
+        self.assertEqual(control_cases["C17"]["after"]["unclosed_tool_state"], "failed")
+        self.assertEqual(control_cases["C17"]["after"]["unclosed_tool_error_code"], "tool_cancelled")
+        self.assertEqual(control_cases["C17"]["after"]["cycle_aborted_logical_cycle"], 2)
+        self.assertEqual(
+            control_cases["C17"]["after"]["event_outbox"],
+            ["operation_ambiguous", "cycle_aborted", "run_state_changed", "run_failed"],
+        )
+        self.assertEqual(
+            control_cases["C17"]["after"]["unclosed_tool_resume_observation"]["state"],
+            "ambiguous",
+        )
+        self.assertEqual(
+            control_cases["C17"]["after"]["terminal_result"]["resume_observations"],
+            [control_cases["C17"]["after"]["unclosed_tool_resume_observation"]],
+        )
+        self.assertEqual(
+            control_cases["C17"]["after"]["event_replay"],
+            {"same_event_identity": {"writes": 0, "duplicate_event_count": 0}},
+        )
         self.assertNotIn("suspended_or_failed", json.dumps(fixture))
+        self.assertTrue(control_cases["C18"]["after"]["checkpoint"]["cancel_requested"])
+        self.assertEqual(control_cases["C18"]["after"]["checkpoint"]["revision"], 60)
+        self.assertEqual(
+            control_cases["C18"]["after"]["run_state_changed_payload"],
+            {"cancel_requested": {"from": False, "to": True}},
+        )
+        self.assertEqual(
+            control_cases["C18"]["after"]["same_command_replay"],
+            {"writes": 0, "revision": 60, "duplicate_event_count": 0},
+        )
+        continuation = control_cases["C18"]["after"]["continuation"]
+        self.assertEqual(continuation["claim_token"], "owner-a")
+        self.assertTrue(continuation["cancel_requested"])
+        self.assertEqual(continuation["progress"]["expected_revision"], 60)
+        self.assertEqual(continuation["progress"]["after_revision"], 61)
+        self.assertTrue(continuation["progress"]["cancel_requested"])
+        self.assertEqual(continuation["record_tool_receipt"]["expected_revision"], 61)
+        self.assertEqual(continuation["record_tool_receipt"]["after_revision"], 62)
+        self.assertTrue(continuation["record_tool_receipt"]["cancel_requested"])
+        self.assertEqual(continuation["renew"]["outcome"], "cancel_requested")
+        self.assertEqual(continuation["renew"]["revision"], 62)
+        self.assertTrue(continuation["renew"]["cancel_requested"])
+        self.assertEqual(continuation["event_outbox"].count("tool_call_completed"), 1)
+        self.assertEqual(continuation["duplicate_event_count"], 0)
+        self.assertEqual(continuation["receipt_count"], 1)
+        operation_journal = json.loads(
+            (ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8")
+        )
+        request_vectors = {
+            case["name"]: case for case in operation_journal["request_digest"]["golden_cases"]
+        }
+        c18_receipt = continuation["record_tool_receipt"]
+        self.assertEqual(c18_receipt["operation_id"], "op_tool_cycle_2_call_1")
+        self.assertEqual(
+            c18_receipt["request_digest"],
+            request_vectors[c18_receipt["request_golden_case"]]["sha256"],
+        )
+        c18_identity_wire = {
+            "attempt": c18_receipt["attempt"],
+            "checkpoint_key": control_cases["C18"]["after"]["checkpoint"]["checkpoint_key"],
+            "operation_id": c18_receipt["operation_id"],
+            "request_digest": c18_receipt["request_digest"],
+            "tool_call_id": c18_receipt["tool_call_id"],
+        }
+        self.assertEqual(
+            hashlib.sha256(
+                json.dumps(
+                    c18_identity_wire,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest(),
+            c18_receipt["identity_key"],
+        )
+        self.assertEqual(control_cases["C18"]["after"]["checkpoint"]["claim_token"], "owner-a")
+        self.assertEqual(control_cases["C19"]["after"]["cycle_aborted_reason"], "cancelled")
+        self.assertEqual(control_cases["C19"]["operation"]["closure_operation"], "finalize_claimed")
+        self.assertEqual(
+            control_cases["C19"]["after"]["terminal_result"]["resume_observations"][0]["risk"],
+            "unknown_tool_side_effect",
+        )
+        self.assertEqual(
+            control_cases["C19"]["after"]["event_replay"],
+            {"same_event_identity": {"writes": 0, "duplicate_event_count": 0}},
+        )
+        self.assertEqual(control_cases["C19"]["before"]["checkpoint"]["resume_attempt"], 2)
+        self.assertEqual(control_cases["C19"]["after"]["checkpoint"]["resume_attempt"], 3)
+        self.assertIsNone(control_cases["C19"]["after"]["checkpoint"]["claim_token"])
+        self.assertEqual(control_cases["C20"]["after"]["checkpoint"]["status"], "suspended")
+        self.assertIsNone(control_cases["C20"]["after"]["checkpoint"]["claim_token"])
+        self.assertIsNone(control_cases["C20"]["after"]["checkpoint"]["lease_expires_at_ms"])
         for case in fixture["fault_matrix"]:
             self.assertTrue({"before", "operation", "after", "expected"}.issubset(case), case["id"])
             self.assertIn("checkpoint", case["before"], case["id"])
@@ -5167,13 +6212,15 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS checkpoints (", sql)
         self.assertIn("run_definition_schema TEXT NOT NULL", sql)
         self.assertIn("run_definition TEXT NOT NULL", sql)
+        self.assertIn("cancel_requested INTEGER NOT NULL CHECK (cancel_requested IN (0, 1))", sql)
+        self.assertNotIn("cancel_requested INTEGER NOT NULL DEFAULT", sql)
         self.assertIn("terminal_acknowledged", sql)
         self.assertIn("active_host_interaction", sql)
         self.assertIn("suspended_origin", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_records (", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_notification_outbox (", sql)
         self.assertIn("response_digest TEXT", sql)
-        self.assertIn("strict v8 codec", sql)
+        self.assertIn("strict v9 codec", sql)
         self.assertIn("model_call_journal", sql)
         self.assertNotIn("deferred_resolution_receipts" + " TEXT NOT NULL", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS deferred_resolution_receipts (", sql)
@@ -5202,16 +6249,16 @@ class ContractRepositoryTests(unittest.TestCase):
                 INSERT INTO checkpoints (
                     checkpoint_key, schema_version, run_definition_schema, run_definition, task_id,
                     root_run_id, trace_id, run_definition_digest, resume_attempt,
-                    cycle_index, status, active_host_interaction, suspended_origin,
+                    cycle_index, status, cancel_requested, active_host_interaction, suspended_origin,
                     messages, cycles, model_calls, shared_state, budget_usage,
                     event_cursor, event_outbox, extension_state, model_call_journal,
                     tool_journal, revision, claim_token, claimed_cycle,
                     lease_expires_at_ms, terminal_result, terminal_acknowledged
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v8",
+                    "vv-agent.checkpoint.v9",
                     "vv-agent.run-definition.v5",
                     "{}",
                     "task-1",
@@ -5221,6 +6268,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     1,
                     0,
                     "running",
+                    0,
                     None,
                     None,
                     "[]",

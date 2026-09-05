@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `8.1.2` defines one task-neutral boundary for a tool whose external
+Contract `9.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -60,13 +60,16 @@ effect.
 
 ## One admission for one model-tool batch
 
-The core keeps the active claim while it executes and collects every outcome in
-the current model tool batch. It then calls one framework-owned
-`admit_deferred_batch` CAS; a caller never loops over single-item admission.
+The core keeps the active claim while it executes. Each ordinary definitive
+result is first persisted by `record_tool_receipt`, which writes its journal
+receipt and `tool_call_completed` event immediately while retaining the claim.
+The core then calls one framework-owned `admit_deferred_batch` CAS for the
+remaining deferred outcomes; a caller never loops over single-item admission.
 The CAS compares the checkpoint key, expected revision, active claim token, and
-claimed cycle. It atomically writes all completed journal receipts, all
-deferred journal handles, all corresponding outbox events, the batch barrier,
-and the claim/lease release, then increments the revision once.
+claimed cycle. It writes only deferred journal handles, deferred-admission
+events, the batch barrier, and the claim/lease release, then increments the
+revision once. A completed outcome or an already-receipted entry is rejected
+as a duplicate admission.
 
 The event outbox is lifecycle-bounded, not limited by a fixed entry or byte
 cardinality. The framework knows the current model-tool batch size before the
@@ -76,15 +79,16 @@ later deferred-resolution completion event. This applies to ordinary and
 deferred tools; admission or resolution cannot fail with `outbox_full` after a
 provider effect. A no-fixed-cap independent outbox is an equivalent design.
 
-For a mixed batch, completed outcomes become `succeeded` journal entries and
-ordinary `tool_call_completed` events in that same CAS. Deferred outcomes
-become `deferred` journal entries and `tool_call_deferred` events in that same
-CAS. If at least one outcome is deferred, checkpoint status is `deferred`; the
-claim is released exactly once after the all-or-none write. Completed outcomes
-are retained in original model tool-call order, but they do not release the
-deferred barrier. If the CAS fails or the process crashes before it, every
-started entry not covered by the durable CAS is treated as ambiguous; neither
-a generated completed result nor a generated handle is silently assumed.
+For a mixed batch, ordinary completed outcomes already have `succeeded` or
+`failed` journal entries and `tool_call_completed` events from
+`record_tool_receipt`. Only deferred outcomes become `deferred` journal entries
+and `tool_call_deferred` events in the admission CAS. If at least one outcome is
+deferred, checkpoint status is `deferred`; the claim is released exactly once
+after the all-or-none write. Completed outcomes are retained in original model
+tool-call order, but they do not release the deferred barrier. If the CAS fails
+or the process crashes before it, every started entry not covered by a durable
+receipt or deferred admission is treated as ambiguous; neither a generated
+completed result nor a generated handle is silently assumed.
 
 The admission CAS is the only place that releases the claim for the batch. A
 partial journal/event write is invalid. A post-CAS crash replays the exact
@@ -216,7 +220,7 @@ the successful admission/resolution CAS.
 
 ## Distributed and App Server projection
 
-The worker response wire is unchanged (`vv-agent.distributed-worker-response.v3`).
+The worker response wire is `vv-agent.distributed-worker-response.v4`.
 Admission uses the existing `pending` response: no cycle commit and no response
 result were returned by this delivery attempt. The nonblocking driver reads
 the authoritative checkpoint and returns `wait(reason=deferred_pending)` while

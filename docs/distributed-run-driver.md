@@ -79,10 +79,12 @@ deferred journal entry has a definitive receipt. `deferred` is not claimable;
 only the last resolution CAS returns the checkpoint to unclaimed `running` and
 returns `DeferredResolveDecision.AppliedReady(receipt)`.
 
-Admission of a model-tool batch uses one `admit_deferred_batch` CAS for all
-completed and deferred outcomes and releases the claim once. A worker response
-of `pending` means no cycle commit and no response result were returned by this
-delivery attempt, not a terminal result. A
+An ordinary definitive tool result is persisted immediately by the
+`record_tool_receipt` mutation while retaining the worker claim. Admission of a
+model-tool batch then uses one `admit_deferred_batch` CAS only for still-deferred
+outcomes and releases the claim once; completed outcomes are rejected there as
+already receipted. A worker response of `pending` means no cycle commit and no
+response result were returned by this delivery attempt, not a terminal result. A
 `DeferredResolveDecision.AppliedReady(receipt)` resolution does not poll or
 wait for a worker:
 the host reuses the retained previous envelope and pending observation in the
@@ -90,7 +92,7 @@ existing `advance` operation, or the running-checkpoint reconciler performs
 that existing dispatch through the ordinary recovery claim path.
 
 The same observation rule applies to `host_interaction` and `suspended`:
-`distributed-worker-response.v3` remains `pending`—only an uncommitted
+`distributed-worker-response.v4` remains `pending`—only an uncommitted
 observation, never a result—while one authoritative
 checkpoint read maps the status to `wait(reason=host_interaction)` or
 `wait(reason=suspended)`. A successful controller command emits an enqueue-only

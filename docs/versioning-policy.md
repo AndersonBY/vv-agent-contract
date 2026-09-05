@@ -124,6 +124,55 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 9.0.0
+
+`9.0.0` is a major forward-only lifecycle release. It upgrades the checkpoint
+discriminator to `vv-agent.checkpoint.v9` and requires paired producer adoption
+for these task-neutral guarantees:
+
+The breaking `AgentResult.resume_observations` rename also advances the public
+result wire from version 5 to 6, the public API inventory from
+`vv-agent-public-api-v5`/schema 5 to `vv-agent-public-api-v6`/schema 6, and the
+distributed worker response from v3 to v4. Current readers reject the older
+discriminators and unknown future values; there is no alias or dual reader.
+
+- ordinary definitive tool results use an immediate `record_tool_receipt`
+  mutation that persists the journal and `tool_call_completed` event while
+  retaining the active claim; `admit_deferred_batch` admits only unresolved
+  deferred outcomes and releases the claim once;
+- checkpoints carry the required boolean `cancel_requested`; lease renewal
+  returns the closed typed outcome `renewed`, `cancel_requested`, or
+  `claim_lost`, and expired-claim cancel/suspend recovery is atomic;
+- `cycle_aborted` durably closes the logical cycle and any unclosed tools with
+  reason `cancelled`, `lease_lost`, or `operator_abort`;
+- ambiguity defaults to bounded model `retry_with_duplicate_risk` and tool
+  `surface_to_model`, while `require_reconciliation` remains explicit;
+  post-start timeout and `tool_execution_failed` remain ambiguous unless an
+  adapter proves a definitive external result.
+- receipt identity is stable across retries and excludes claim/revision fences;
+  the sole receipt lookup key is `identity_key`, while the stored canonical
+  result digest is the RFC 8785 SHA-256 of the complete strict
+  `vv-agent.tool-execution-result.v4` after canonical typed-writer
+  normalization; empty optional `metadata` is omitted and every optional field
+  present after normalization is included. Same-identity same-result stale replays are zero-write, while a
+  different result is the typed `tool_receipt_conflict`.
+- `cycle_aborted` stores concrete unknown-effect evidence in each closed tool
+  journal's `resume_observation` and in the sorted unique
+  `terminal_result.resume_observations` list, sorted and deduplicated by
+  operation identity;
+  a boolean presence marker is not the evidence carrier. Lease-loss closure
+  reuses the existing recovery claim plus `finalize_claimed` and fences the
+  old owner; `commit_cycle` is reserved for successful cycle commits.
+- `finalize` has a no-claim ordinary-terminal branch that emits no
+  `cycle_aborted` and stores `resume_observations=[]`; no-claim control closure
+  requires a positive logical cycle and closes unclosed tools before the
+  terminal lifecycle. Claimed control closure remains `finalize_claimed`.
+
+This release remains `pending-adoption` until both implementations pin the
+same v9 revision and pass real producer, full repository, and cross-language
+gates. Python and Rust producers must adopt the breaking v9 receipt digest,
+`finalize_claimed`, and `resume_observations` wire shapes.
+
 ## Release Note: 8.1.2
 
 `8.1.2` is a patch release with no wire or runtime behavior change. It adds

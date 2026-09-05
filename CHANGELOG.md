@@ -1,5 +1,38 @@
 # Changelog
 
+## 9.0.0 — pending adoption
+
+- Added durable per-tool receipts that persist the journal entry and
+  `tool_call_completed` event immediately while retaining the active claim.
+- Restricted `admit_deferred_batch` to deferred barrier admission and atomic
+  claim release; definitive ordinary receipts are never written twice.
+- Defined ordinary receipt identity as the sole `identity_key` lookup key;
+  `result_digest` is the stored RFC 8785/SHA-256 digest of the complete strict
+  `ToolExecutionResult` after canonical typed-writer normalization (empty
+  optional metadata is omitted) and drives replay versus typed conflict.
+- Upgraded checkpoints to `vv-agent.checkpoint.v9` with `cancel_requested`,
+  typed renewal outcomes, expired-claim control recovery, and durable
+  `cycle_aborted` lifecycle closure.
+- Reserved `commit_cycle` for successful cycle commits; claimed cancellation,
+  operator abort, and lease-loss closure use `finalize_claimed`, while an
+  unclaimed operator abort uses the existing `finalize` operation.
+- Replaced the terminal `resume_observation` field with the breaking v9
+  `resume_observations` list, sorted and deduplicated by operation identity;
+  each item is projected from the authoritative closed tool journal.
+- Bumped the public result wire to version 6, the public API inventory to
+  `vv-agent-public-api-v6`/schema 6, and the distributed worker response to
+  `vv-agent.distributed-worker-response.v4`; the prior singular result member
+  is not accepted by the current readers.
+- Made fail-forward ambiguity the default: bounded model retry with duplicate
+  risk and model-visible unknown tool outcomes; reconciliation remains explicit.
+- Classified post-start timeout and `tool_execution_failed` outcomes as
+  ambiguous unless an adapter proves a definitive result.
+
+This major release remains `pending-adoption` until both language
+implementations pin the same contract revision and pass their real producer
+and cross-language quality gates. Python and Rust producers must adopt these
+breaking v9 result, receipt, finalization, and terminal-observation shapes.
+
 ## 8.1.2 — pending adoption
 
 - Added canonical invalid coverage requiring `ToolExecutionResult` values with
