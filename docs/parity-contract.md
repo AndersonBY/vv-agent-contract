@@ -220,7 +220,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `8.1.2` applies the sparse bounded-result rules in
+Contract `9.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -251,8 +251,11 @@ framework does not infer metadata from names, arguments, or generic metadata.
 
 Tool lifecycle order is planned, optional approval, started, then completed.
 Started marks the external-effect boundary. A denial or approval short-circuit
-has no started event. Completed events always include directive, nullable error
-code, execution-start flag, and nullable monotonic duration.
+has no started event. Ordinary definitive results are persisted immediately by
+`record_tool_receipt`, which atomically writes the journal receipt and
+`tool_call_completed` event while retaining the active claim. Completed events
+always include directive, nullable error code, execution-start flag, and
+nullable monotonic duration.
 
 Every tool call is validated against its declared JSON Schema Draft 2020-12
 parameter schema after the planned event and before policy predicates,
@@ -288,7 +291,7 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v8` and embed an exact
+Checkpoint records require `vv-agent.checkpoint.v9` and embed an exact
 `vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
@@ -300,11 +303,43 @@ bundle; generic message/request metadata is not a prompt-section transport.
 
 Claims, leases, progress CAS, model-call ledgers, operation journals, event outboxes,
 reconciliation, terminal retention, and acknowledgement have the same atomic
-semantics in both languages. Unknown operation outcomes remain ambiguous until
+semantics in both languages. Lease renewal returns the closed typed outcome
+`renewed`, `cancel_requested`, or `claim_lost`; a live cancel sets the required
+checkpoint `cancel_requested` signal, while expired-claim cancel/suspend
+reclaims and applies control atomically. Unknown operation outcomes remain ambiguous until
 the host defers, retries under policy, supplies a verified receipt, records a
 typed failure, or explicitly aborts.
 
-The v8 `ControllerCommand` admission is also one task-neutral seam in both
+Definitive ordinary tool receipts use the same stable identity tuple
+`(checkpoint_key, operation_id, attempt, tool_call_id, request_digest)`. The
+stored `result_digest` is the RFC 8785 SHA-256 of the complete strict
+`vv-agent.tool-execution-result.v4` after canonical typed-writer
+normalization; empty optional `metadata` is omitted and every optional field
+present after normalization is included. Receipt lookup uses only the identity key and precedes the active
+claim/revision fence: a stale replay with the same identity and digest is a
+zero-write replay, while a different digest is the typed
+`tool_receipt_conflict` with zero writes. Ordinary receipt mutations are
+serialized; the parity contract does not introduce a parallel CAS-retry
+abstraction. Identity and digest come from the journal receipt itself; no
+ordinary receipt scan API is part of the wire. `admit_deferred_batch` admits only outcomes that are still
+deferred and never rewrites an already receipted result.
+
+`cycle_aborted` is the durable lifecycle close for `cancelled`, `lease_lost`,
+and `operator_abort`. It carries the `logical_cycle`, closes any unclosed tool
+journals with `tool_cancelled` plus a concrete `resume_observation` object, and
+retains the observations in the sorted unique `terminal_result.resume_observations`
+list. Lease-loss closure reuses the existing recovery claim and
+`finalize_claimed` operation with revision and cycle fences; a stale owner writes
+nothing and an identical `cycle_aborted` event replay writes nothing. The
+close does not claim that an unknown external effect succeeded.
+
+An ordinary unclaimed `finalize` with no cycle to close writes a terminal result
+with `resume_observations=[]` and no `cycle_aborted`. An unclaimed control
+finalization that still has an unclosed logical cycle must provide a positive
+`logical_cycle` and perform the tool closures and `cycle_aborted` write before
+the terminal lifecycle; claimed control closure uses `finalize_claimed`.
+
+The v9 `ControllerCommand` admission is also one task-neutral seam in both
 languages. Its closed command and receipt wires use the same handle,
 resume-attempt, and revision fences; `host_interaction` and `suspended` remain
 non-terminal and recover the same logical cycle while preserving the last
@@ -330,7 +365,7 @@ acknowledgement. Redelivery replays a durable terminal without executing the
 model or tools again.
 
 The worker response is a separate closed wire with
-`schema_version=vv-agent.distributed-worker-response.v3` and one required
+`schema_version=vv-agent.distributed-worker-response.v4` and one required
 `type` discriminator. Exactly four variants exist:
 
 - `pending` has no state fields and means that no cycle commit and no response

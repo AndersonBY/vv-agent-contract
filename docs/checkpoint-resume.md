@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 8.1.2. It is a task-neutral persistence and recovery
+`vv-agent-contract` 9.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -11,7 +11,7 @@ can complete without its receipt becoming durable.
 
 ## Controller Commands
 
-The v8 controller seam is specified in `controller-command.md`. It admits one
+The v9 controller seam is specified in `controller-command.md`. It admits one
 closed `ControllerCommand` against a passive run handle and one checkpoint
 revision fence. `host_interaction` and `suspended` are non-terminal statuses;
 their command receipt and checkpoint revision are one CAS, and recovery keeps
@@ -26,8 +26,13 @@ clear an unresolved deferred barrier before controller state changes can be
 admitted. Likewise, `wait_user` remains the terminal `ask_user` result and a
 new input uses the separate successor-run continuation protocol. A committed
 terminal, live claim, unresolved ambiguity, and deferred barrier have strict
-precedence over ordinary cancellation; see the canonical fault matrix and
-SQLite receipt schema for crash-after-commit-before-enqueue recovery.
+precedence over ordinary control. A live-claim cancel records
+`cancel_requested=true` and lets the worker observe a typed cancellation
+outcome on renewal; an expired claim is reclaimed and the control command is
+applied in that same CAS. Unresolved ambiguity remains evidence and is never
+rewritten as a successful result. See the canonical
+fault matrix and SQLite receipt schema for crash-after-commit-before-enqueue
+recovery.
 
 If a response arrives while a host interaction is suspended, admission stores
 the complete response record but leaves the checkpoint suspended and emits no
@@ -44,7 +49,7 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v8` and
+suffix. Records require `schema_version=vv-agent.checkpoint.v9` and
 `run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
@@ -66,6 +71,32 @@ outbox entries are appended contiguously as the model terminal event followed
 by either a configured budget snapshot or a budget-exhausted event carrying
 that final snapshot.
 
+### Immediate Ordinary Tool Receipts
+
+After an ordinary tool handler returns a definitive `SUCCESS` or `ERROR`
+result, the framework performs `record_tool_receipt` before returning control
+to the cycle runner. One atomic progress mutation transitions the matching
+`started` journal entry to `succeeded` or `failed`, appends the corresponding
+RunEvent v4 `tool_call_completed` outbox entry, and increments `revision`.
+The active claim and lease remain owned by the worker. Repeating the same
+receipt identity is an idempotent replay with no second event or revision;
+conflicting identity or result is rejected. The stable identity tuple is
+`(checkpoint_key, operation_id, attempt, tool_call_id, request_digest)` and
+the stored `result_digest` is lowercase SHA-256 over the RFC 8785 canonical
+UTF-8 complete strict `vv-agent.tool-execution-result.v4` after the canonical
+typed-writer normalization: empty optional `metadata` is omitted and every
+optional field present after normalization is included. Receipt lookup is
+keyed only by the stable identity tuple; the digest is a stored sibling value
+used to distinguish replay from conflict. A caller replaying the same identity
+and digest with a stale
+`expected_revision` gets a zero-write replay, while a different digest gets
+the typed `tool_receipt_conflict` with zero writes. Only an identity miss
+checks the active claim, claimed cycle, and revision. Ordinary definitive
+handler results are serialized through this mutation; the contract does not
+add a parallel receipt CAS-retry protocol. A definitive receipt is therefore
+never deferred to the later batch barrier. Identity and digest are read from
+the journal receipt itself; the ordinary receipt contract exposes no scan API.
+
 The top level has one exact current field set. Every listed field is present,
 including fields whose value may be null; readers do not synthesize omissions.
 Every contract-defined nested object is closed by its own current shape. Only
@@ -81,10 +112,10 @@ claim, or resume.
 - `key`: a stable, non-empty UTF-8 string of at most 512 bytes, or null only
   when `new` asks the framework to generate and return one;
 - `resume_policy`: `new`, `resume_if_present`, or `require_existing`;
-- `ambiguous_model_policy`: `require_reconciliation` or
-  `retry_with_duplicate_risk`;
-- `ambiguous_tool_policy`: `require_reconciliation` or
-  `retry_idempotent_only`;
+- `ambiguous_model_policy`: `retry_with_duplicate_risk` or
+  `require_reconciliation`;
+- `ambiguous_tool_policy`: `surface_to_model`, `retry_idempotent_only`, or
+  `require_reconciliation`;
 - exactly one of `store` (a process-local `CheckpointStore`) or
   `store_ref` (a reconstructable distributed capability reference);
 - `required_extension_namespaces`: unique, lexicographically serialized
@@ -108,8 +139,10 @@ Invalid public configuration fails with the stable error code recorded beside
 each invalid case in `checkpoint_config.json`. Language-native exception or
 error types may differ, but callers must be able to observe that code.
 
-The default resume policy is `new`. Both ambiguous-operation policies default
-to `require_reconciliation`. Per-run checkpoint configuration replaces a
+The default resume policy is `new`. The default model policy is the bounded
+`retry_with_duplicate_risk` policy (at most two attempts), and the default tool
+policy is `surface_to_model`. `require_reconciliation` remains an explicit
+opt-in for either operation. Per-run checkpoint configuration replaces a
 configured Runner default as one object; individual fields are not merged.
 
 `new` requires a supplied checkpoint key to be absent, or generates one when null.
@@ -221,7 +254,7 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v8`;
+- `schema_version`, exactly `vv-agent.checkpoint.v9`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
@@ -230,6 +263,9 @@ event cursor remain excluded.
 - `resume_attempt`, starting at one and increasing for each claimed recovery;
 - `cycle_index`, `status`, `messages`, `cycles`, `model_calls`, and
   `shared_state`;
+- `cancel_requested`, a required boolean cancellation signal. It is set by an
+  admitted live-claim cancel request and remains evidence on the resulting
+  cancellation terminal; all other new checkpoints start with `false`;
 - nullable `budget_usage`;
 - `event_cursor` and `event_outbox`;
 - `active_host_interaction`, the complete closed
@@ -290,8 +326,10 @@ transaction.
 all-or-none, and a terminal record cannot have an active claim.
 `reconciliation_required` requires at least one ambiguous journal entry and no
 claim. A running checkpoint may retain an ambiguous entry only while a recovery
-claim is actively resolving it. Terminal records have no active journals except
-an explicit operator-abort terminal, which retains its ambiguous evidence.
+claim is actively resolving it. Terminal records have no active journals. An
+operator-abort terminal retains each `ResumeObservation` as evidence beside
+the synthetic `tool_cancelled` closure, but does not claim that an unknown
+external effect succeeded or definitively failed.
 
 `deferred` requires at least one current-batch deferred tool journal entry and
 an empty claim tuple. It is not a generic claimable status. The only
@@ -325,6 +363,9 @@ Unknown required extensions block resume.
 Checkpoint journals contain only the active or not-yet-committed cycle. A
 successful cycle commit incorporates its messages, cycle record, and state
 into the ordinary checkpoint fields and clears the committed journals. The
+`commit_cycle` operation accepts only this successful outcome; cancellation,
+operator abort, and lease-loss closure use `finalize_claimed` when a claim is
+active.
 run-level `model_calls` ledger is retained independently, including attempts
 from an interrupted cycle. This bounds active journal growth without
 discarding cost evidence needed to resume or explain the run.
@@ -332,10 +373,13 @@ When `terminal_result` is present, its TaskTokenUsage `model_calls` array is
 exactly the same ledger and its aggregate fields are derived from that array.
 
 The current tool journal states are `planned`, `started`, `deferred`,
-`succeeded`, `failed`, and `ambiguous`. Admission may transition
-`started -> deferred` in `admit_deferred_batch`; a pre-admission crash instead
-persists `started -> ambiguous`. Definitive resolution transitions
-`deferred -> succeeded` for `SUCCESS` or `deferred -> failed` for `ERROR`.
+`succeeded`, `failed`, and `ambiguous`. `record_tool_receipt` transitions an
+ordinary `started` entry to `succeeded` or `failed` immediately and preserves
+the active claim. `admit_deferred_batch` accepts only still-deferred outcomes,
+transitions `started -> deferred`, and releases the batch claim once. A
+pre-admission crash instead persists `started -> ambiguous`. Definitive
+deferred resolution transitions `deferred -> succeeded` for `SUCCESS` or
+`deferred -> failed` for `ERROR`.
 `WAIT_RESPONSE`, `RUNNING`, and `PENDING_COMPRESS` cannot resolve a deferred
 entry. An early callback against an exact `started` entry is
 `deferred_resolution_not_admitted`: it creates no journal transition and no
@@ -354,9 +398,28 @@ A terminal reached while the current cycle still has a live claim uses
 `finalize_claimed`. The store compares both revision and claim token, writes
 the terminal receipt, and clears the claim atomically. Ordinary terminals clear
 the active journals because the terminal receipt is authoritative. An explicit
-operator-abort terminal preserves its ambiguous journal and
-`ResumeObservation`. A runtime must not clear a claim locally and then call the
-unclaimed `finalize`; that loses ownership proof between the two writes.
+operator-abort terminal emits `cycle_aborted`, closes unclosed tools with
+synthetic `tool_cancelled` failures, and retains their concrete
+`ResumeObservation` evidence in both the closed tool journal entry and
+`terminal_result.resume_observations`, a unique list sorted by operation
+identity. Each closure also stores the typed error
+object `{code: "tool_cancelled", message, retryable: false}`; a presence flag
+alone is not evidence. Lease-loss closure uses the same existing recovery
+claim plus the existing `finalize_claimed` operation with revision and cycle
+fences. The new owner atomically closes every unclosed tool and writes
+`cycle_aborted{reason: "lease_lost", logical_cycle}`; the stale owner writes
+nothing and an identical event replay writes nothing. A runtime must not clear
+a claim locally and then call the unclaimed `finalize`; that loses ownership
+proof between the two writes.
+
+The unclaimed `finalize` operation has two closed branches. Ordinary terminal
+finalization writes the terminal lifecycle with
+`terminal_result.resume_observations=[]` and no `cycle_aborted` event. An
+unclaimed `cancel`, `operator_abort`, or `lease_lost` may use that operation
+only when it supplies or derives a positive `logical_cycle` that still needs
+closure; the same CAS first closes every unclosed tool with the typed
+`tool_cancelled` failure, writes `cycle_aborted`, and then writes the terminal
+lifecycle. A claimed abort always uses `finalize_claimed`.
 
 ## Event Cursor
 
@@ -450,6 +513,21 @@ SHA-256 `request_digest`. States are:
    definitive result, and the current batch barrier remains unresolved;
 6. `ambiguous`: recovery observed `started` without a durable receipt.
 
+The active journal states are exactly `planned`, `started`, `deferred`, and
+`ambiguous`; the closed states are exactly `succeeded` and `failed`. A
+`tool_failed_tool_cancelled_closure` is a closed `failed` tool entry with
+`result=null`, the typed `error` object `{code, message, retryable}` whose
+code is `tool_cancelled`, and a closed `resume_observation` object. Unknown
+entry fields are rejected.
+
+State-dependent definitive receipts are closed tool-journal fields: `succeeded`
+requires `identity_key`, `result_digest`, and a complete `result`, with
+`error=null`; `failed` requires the same two receipt fields and a typed
+`error`, with `result=null`. Both digests are persisted 64-character lowercase
+SHA-256 values. The synthetic `tool_cancelled` closure carries the operation's
+`identity_key` for stable journal identity, but no `result_digest` or
+definitive receipt; it retains the typed `error` and `resume_observation`.
+
 Invalid journal entries fail with the stable error code recorded beside each
 invalid case in `operation_journal.json`; a parser message alone is not the
 cross-language contract.
@@ -460,11 +538,14 @@ commit. Progress writes keep the active claim and do not release its lease.
 Store implementations must prevent a heartbeat update from overwriting a
 concurrent journal progress write.
 
-For deferred tools, `admit_deferred_batch` atomically transitions
-`started -> deferred` while releasing the batch claim once; a pre-admission
-crash instead records `started -> ambiguous`. Definitive resolution then
-transitions `deferred -> succeeded` for `SUCCESS` or `deferred -> failed` for
-`ERROR`, releasing one barrier item in either case.
+For deferred tools, `admit_deferred_batch` atomically transitions only
+still-deferred `started` entries to `deferred` while releasing the batch claim
+once. It rejects completed outcomes and entries that already have a
+definitive receipt; those receipts were written by `record_tool_receipt` and
+must not be duplicated. A pre-admission crash instead records `started ->
+ambiguous`. Definitive resolution then transitions `deferred -> succeeded` for
+`SUCCESS` or `deferred -> failed` for `ERROR`, releasing one barrier item in
+either case.
 
 For a model operation, the journal stores `model_operation`, non-empty actual
 `backend`, non-empty actual `model`, and `call_id`. The `started` transition and pending
@@ -490,6 +571,13 @@ key. Operation id, cycle, and attempt are journal coordinates and do not enter
 the request digest. Retrying the same logical request increments `attempt`
 while preserving operation id, request digest, and idempotency key; a changed
 effective request creates a new journal entry.
+
+An ordinary receipt's sole lookup key is `identity_key`. Its exact closed
+identity input is the UTF-8 JCS object
+`{attempt, checkpoint_key, operation_id, request_digest, tool_call_id}` with
+no optional or unknown fields; `identity_key` is its lowercase SHA-256. The
+stored journal receipt persists `identity_key` and the sibling `result_digest`;
+neither is an additional index or table.
 
 `failed` is allowed only for a definitive outcome. A local failure before
 dispatch may move `planned` to `failed`, and an explicit provider/tool
@@ -552,39 +640,72 @@ reconciliation provider for one of these decisions:
 - `retry`: return it to `planned` using the same operation and idempotency keys;
 - `replay_success`: supply the externally verified response or tool result;
 - `record_failure`: supply a durable typed error;
-- `abort`: explicitly accept that the external outcome is unknown and end the
-  run as a typed operator failure while preserving the ambiguous journal and
-  `ResumeObservation` in the retained terminal checkpoint.
+- `abort`: explicitly accept that the external outcome is unknown, close the
+  logical cycle with `cycle_aborted{reason=operator_abort}`, and mark each
+  unclosed tool as a synthetic `failed`/`tool_cancelled` entry while retaining
+  its `ResumeObservation` evidence.
 
 Without a conclusive decision, the invocation returns the typed status
 `reconciliation_required` and interruption reason
 `resume_requires_reconciliation`. It has no completion reason and is not a
 terminal checkpoint. The checkpoint remains resumable and retains the
 ambiguous entry; it is not converted into a business completion or failure.
-Only the explicit `abort` decision makes that checkpoint terminal, and it does
-not rewrite the operation as a definitive `failed` receipt. `finalize`
-retains the ambiguous journal and observation for this terminal instead of
-clearing the unknown external outcome.
+Only the explicit `abort` decision makes that checkpoint terminal. It writes a
+durable `cycle_aborted` event, closes each unclosed tool as a synthetic failed
+`tool_cancelled` entry, and retains the observation of the unknown external
+outcome in each journal's `resume_observation` object and the terminal result's
+`resume_observations` list. The close is not an external success or failure
+proof. The same durable carriers are used for `cancelled` and `lease_lost`;
+only the `cycle_aborted.reason` differs.
+
+The pre-recovery state is the `started -> ambiguous` journal transition and
+has no failed receipt. A later default `surface_to_model` decision is a
+separate `ambiguous -> failed` projection with the typed
+`tool_outcome_unknown` error; it retains the same `ResumeObservation` and
+still is not proof of a definitive external outcome. The store-only terminal
+closures use `operator_abort_with_unknown_outcome` and
+`lease_lost_with_unknown_outcome` in the terminal error field. These codes
+record the operator/recovery decision while the closed journal entry and
+terminal `resume_observations` remain the authoritative unknown-effect
+evidence.
+
+The model-facing unknown-outcome projection uses the existing strict
+`ToolExecutionResult` fields `content`, `status_code`, `directive`, and
+`error_code`; it has no structured `resume_observation` field. The journal's
+`resume_observation` remains the authoritative structured evidence carrier.
 
 Tool retry is automatic only under `retry_idempotent_only` and explicit
 `supported` idempotency. The same idempotency key is reused. The framework does
 not infer safety from a tool name, arguments, task, or apparent read/write
-behavior. Unsupported or unknown tools still require reconciliation.
+behavior. Unsupported or unknown tools use the configured policy: the default
+`surface_to_model` policy closes the journal with a typed
+`tool_outcome_unknown` failure and retains the `ResumeObservation`, while
+`require_reconciliation` keeps the ambiguous entry suspended for an explicit
+decision.
 
-Model retry under `retry_with_duplicate_risk` is explicit and emits a duplicate
-request/cost risk observation. Provider-declared idempotency may eliminate the
-duplicate effect, but absence of that declaration never becomes an implicit
-guarantee.
+Model retry under `retry_with_duplicate_risk` is bounded to at most two
+attempts and emits a duplicate request/cost risk observation. Provider-declared
+idempotency may eliminate the duplicate effect, but absence of that declaration
+never becomes an implicit guarantee. The default tool ambiguity policy is
+`surface_to_model`: recovery atomically materializes a typed failed tool
+receipt with `error_code=tool_outcome_unknown`, keeps the `ResumeObservation`
+as evidence, and gives the model an explicit unknown-effect warning.
+`retry_idempotent_only` retries only when the tool declares supported
+idempotency, and `require_reconciliation` remains an explicit opt-in. No
+policy converts an unknown external effect into a successful result.
 
-The reconciliation provider is optional. Without one, the runtime applies
-`defer`, returns `reconciliation_required`, and leaves the durable ambiguity
-untouched. A distributed envelope resolves a reconciliation capability only
-when a reference is present.
+The reconciliation provider is optional. For an explicit
+`require_reconciliation` policy, absence of a provider applies `defer`, returns
+`reconciliation_required`, and leaves the durable ambiguity untouched. The
+default `surface_to_model` policy does not require a provider: it closes the
+started tool as the typed unknown-outcome failure described above. A
+distributed envelope resolves a reconciliation capability only when a
+reference is present.
 
 Deferred tool admission and resolution are a separate current checkpoint
-state. The core collects every current model-tool outcome while holding its
-claim and commits a mixed completed/deferred batch with one all-or-none
-`admit_deferred_batch` CAS and one claim release. A proven lost admission may
+state. The core records every ordinary definitive outcome immediately while
+holding its claim. It then commits only the still-deferred entries with one
+all-or-none `admit_deferred_batch` CAS and one claim release. A proven lost admission may
 use the `accept_deferred` reconciliation decision only under an active
 recovery claim; the controller aggregates the current-batch exact handles and
 commits audit/deferred events in one CAS. Otherwise a pre-admission crash
@@ -649,7 +770,7 @@ commit and outbox identities.
 ## Distributed Worker Response
 
 The distributed transport returns one closed current response object with
-`schema_version=vv-agent.distributed-worker-response.v3` and a required `type`
+`schema_version=vv-agent.distributed-worker-response.v4` and a required `type`
 discriminator. The only variants are:
 
 - `pending`, with no state fields, reports that no cycle commit and no response
@@ -700,8 +821,8 @@ callbacks return `superseded_delivery` without mutating authoritative state.
 
 `resume_requires_reconciliation` is a typed interruption reason with
 `AgentStatus.reconciliation_required`. The result retains the last committed
-messages, cycles, usage, budget, partial output, checkpoint key, and
-`ResumeObservation`. A committed terminal is always authoritative. A live
+messages, cycles, usage, budget, partial output, checkpoint key, and the
+`resume_observations` list. A committed terminal is always authoritative. A live
 claim remains an in-progress coordination result. An unresolved ambiguous
 operation is projected before a new cancellation, budget, or business terminal
 can hide its unknown external effect.
@@ -715,7 +836,9 @@ safe examples are defined in `app_server_observable.json`. It never exposes
 the run definition or digest, operation arguments, responses, extension state,
 or idempotency keys. Public `AgentResult` serialization uses the complete closed
 shape defined by `result_public.json`; App Server omits only fields that its
-current schema marks optional.
+current schema marks optional. The breaking `AgentResult` rename is version 6 of
+the public result wire; the public API inventory is
+`vv-agent-public-api-v6`/schema 6.
 
 App Server `checkpoint.status` is the persisted `AgentStatus`; it is distinct
 from App Server `TurnStatus`. For example, durable
@@ -768,7 +891,7 @@ background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
 closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
-part of the current checkpoint.v8 wire. This restriction is explicit rather than silently
+part of the current checkpoint.v9 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence

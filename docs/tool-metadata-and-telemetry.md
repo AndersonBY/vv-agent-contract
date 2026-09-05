@@ -1,6 +1,6 @@
 # Tool Metadata And Execution Telemetry
 
-Contract `8.1.2` defines one typed, task-neutral declaration for host policy,
+Contract `9.0.0` defines one typed, task-neutral declaration for host policy,
 tool-result retention, and
 execution telemetry. The framework does not inspect prompts, infer semantics
 from tool names or arguments, or decide whether a business answer is complete.

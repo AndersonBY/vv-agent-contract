@@ -84,6 +84,22 @@ optional observer. Local order is preserved, but only event ids provide
 identity. Durable replay and deduplication require `RunEventStore` and, where
 configured, the checkpoint event outbox.
 
+An ordinary definitive tool handler result is recorded through the
+`record_tool_receipt` checkpoint mutation before control returns to the cycle
+runner. The journal receipt and `tool_call_completed` event share one revision
+CAS, and the active claim is retained. Its stable identity is
+`(checkpoint_key, operation_id, attempt, tool_call_id, request_digest)` and its
+canonical `result_digest` is the lowercase SHA-256 of the RFC 8785
+complete strict `vv-agent.tool-execution-result.v4` after canonical typed-writer
+normalization; an empty optional `metadata` map is omitted and every optional
+field present after normalization is included. Receipt lookup uses only the stable identity key and precedes
+revision fencing: the same
+identity and digest replay with zero writes even when `expected_revision` is
+stale; a different digest returns `tool_receipt_conflict` with zero writes.
+Replaying that receipt reuses the event identity without appending a duplicate
+event. Ordinary definitive receipts are serialized before the next ordinary
+handler result is admitted.
+
 `tool_call_deferred` records an admitted durable handle without a tool result;
 its cross-process form has `execution_started=true` and `duration_ms=null`.
 Normal resolution records only the ordinary `tool_call_completed` event after a
@@ -102,6 +118,20 @@ projected as visible assistant messages. Model tool-call progress may be
 projected as a tool-call delta. Actual execution continues to use
 `tool_call_started`, `tool_call_deferred`, and `tool_call_completed`. Hosts may
 suppress telemetry notifications without changing the underlying run.
+
+`cycle_aborted` is the durable lifecycle close for a cancelled, lease-lost, or
+operator-aborted logical cycle. It carries `reason` (`cancelled`, `lease_lost`,
+or `operator_abort`) and `logical_cycle = cycle_index + 1`, where
+`cycle_index` is the last committed cycle; the same close marks any unclosed
+tool journal entries as `failed` with the concrete error object
+`{code: "tool_cancelled", message, retryable: false}` and a
+`resume_observation` object containing `operation_id`, `operation_kind`,
+`cycle_index`, `state: "ambiguous"`, `risk`, and `idempotency_support`.
+The same observation is retained in the sorted unique
+`terminal_result.resume_observations` list.
+The event id is stable; an identical close replay writes zero rows and a
+different payload for the same id is `event_identity_conflict`. It never
+asserts that an unknown external effect succeeded.
 
 ## Executable Evidence
 

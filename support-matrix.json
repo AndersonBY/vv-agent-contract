@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "contract_version": "8.1.2",
-  "status": "verified",
+  "contract_version": "9.0.0",
+  "status": "pending-adoption",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "ff9745757b5be5ee149637c7487b727b36f35475"
+      "status": "pending-adoption",
+      "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "5d9152fe2ac74946ee09fdd2da0210d5c20ebf5e"
+      "status": "pending-adoption",
+      "verified_revision": null
     }
   },
-  "adoption_note": "v8.1.2 passed the paired implementation snapshots and cross-language producer gates.",
-  "last_verified_at": "2026-09-05T02:24:33Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/33938139743"
+  "adoption_note": "9.0.0 is a breaking lifecycle release: Python and Rust must adopt the strict receipt digest, finalize_claimed abort closure, and resume_observations terminal wire before verification.",
+  "last_verified_at": null,
+  "cross_repository_run": null
 }
