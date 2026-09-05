@@ -1,5 +1,25 @@
 # Changelog
 
+## 10.0.0 — pending adoption
+
+- Advanced the closed RunEvent discriminator to v5 and the public API
+  inventory to `vv-agent-public-api-v7`/schema 7. The AgentResult/result-public
+  wire remains v6 and the distributed worker response remains v4.
+- Required live-claim cancellation to emit a complete top-level typed
+  `run_state_changed` transition with
+  `cancel_requested: {from: false, to: true}`.
+- Defined a distinct repeated live-cancel command as an atomic applied no-op
+  receipt: checkpoint revision, claim, lease, event outbox, and wake outbox
+  remain unchanged, with zero-write same-command replay and no duplicate
+  state event.
+- Standardized completed-outcome rejection at `admit_deferred_batch` on
+  `deferred_admission_completed_outcome_invalid`; definitive receipts are not
+  rewritten by deferred admission.
+
+This release remains `pending-adoption` until both language implementations
+pin the same contract revision and pass their real producer and cross-language
+quality gates.
+
 ## 9.0.0 — pending adoption
 
 - Added durable per-tool receipts that persist the journal entry and

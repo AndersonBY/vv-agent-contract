@@ -24,6 +24,19 @@ class ContractError(RuntimeError):
     pass
 
 
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def strict_json_loads(source: str) -> Any:
+    return json.loads(source, object_pairs_hook=reject_duplicate_keys)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -34,8 +47,8 @@ def sha256_file(path: Path) -> str:
 
 def load_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        return strict_json_loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
         raise ContractError(f"cannot read valid JSON from {path}: {exc}") from exc
 
 
@@ -113,8 +126,8 @@ def validate_fixture_syntax(fixtures: Path, intentional_invalid: Any) -> None:
                 if not line.strip():
                     raise ContractError(f"blank JSONL record in {path}:{line_number}")
                 try:
-                    json.loads(line)
-                except json.JSONDecodeError as exc:
+                    strict_json_loads(line)
+                except ValueError as exc:
                     if line_number not in allowed_invalid.get(relative, set()):
                         raise ContractError(f"invalid JSONL record in {path}:{line_number}: {exc}") from exc
                     observed_invalid.setdefault(relative, set()).add(line_number)

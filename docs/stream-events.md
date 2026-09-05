@@ -13,9 +13,14 @@ typed sequence, and `RunEventStore` provides replay under its declared failure
 policy. There is no public runtime-log callback and no public provider-payload
 callback.
 
-The only current event discriminator is `version=v4`. Missing, stale `v3`,
+The only current event discriminator is `version=v5`. Missing, stale `v4`,
 unknown, malformed, and future versions are rejected without a compatibility
 decoder.
+
+The live-claim cancellation transition is a complete `run_state_changed`
+event with the top-level typed field
+`cancel_requested: {from: false, to: true}`. The field is not carried in
+`metadata`; its object is closed and accepts no additional members.
 
 Observer failure is isolated from execution. A configured event store remains
 separate: fail-open stores report and continue, while an explicitly selected

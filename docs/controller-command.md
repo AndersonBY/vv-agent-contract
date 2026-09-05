@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `9.0.0` defines one task-neutral, closed admission seam for durable
+Contract `10.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -83,6 +83,13 @@ The owning worker may still perform its fenced progress CAS and one definitive
 `record_tool_receipt`: revision then advances normally for those mutations,
 the signal remains true, and the following renewal returns
 `cancel_requested` without duplicating the event or receipt.
+The canonical event wire places the typed transition at the top level as
+`cancel_requested: {from: false, to: true}`; a metadata carrier is invalid.
+A distinct cancel command received after the signal is already true returns
+an applied command receipt from an atomic no-op: revision, claim, lease, event
+outbox, and wake outbox are unchanged and no second `run_state_changed` event
+is written. Replaying that command identity returns the retained receipt with
+zero writes.
 For `lease_lost`, a new recovery claim plus the existing `finalize_claimed`
 operation supplies revision and cycle fences; the old owner
 writes nothing. Their observations remain evidence, so no unknown external
@@ -151,7 +158,7 @@ mutates the host-interaction notification.
 `HostInteractionRequest.prompt` is a closed credential-redacted string capped
 at 65,536 UTF-8 bytes. The strict codec rejects credentials, external
 locators, transport metadata, unknown fields, and over-limit content before
-the CAS. The event is canonical RunEvent v4 `host_interaction_requested` and
+the CAS. The event is canonical RunEvent v5 `host_interaction_requested` and
 the producer outbox action is `host_interaction_notification` to the observer,
 never `recovery_dispatch`.
 
@@ -227,7 +234,7 @@ ordinary continue/claim rejects or routes to the dedicated
 operation locks the checkpoint and record together, validates every fence,
 obtains the checkpoint execution claim with `claimed_cycle=cycle_index+1`,
 performs the transient `resolved_claimed` phase, injects the exact response,
-appends the complete RunEvent v4 `host_interaction_response_consumed`, marks
+appends the complete RunEvent v5 `host_interaction_response_consumed`, marks
 the record consumed, increments to
 `consume_revision = admission_revision + 1` (9 -> 10 is an example), releases
 the record claim, and retains the checkpoint execution claim for the next
@@ -288,7 +295,7 @@ retained `logical_cycle`. The response admission snapshot is
 there is no consumed event or marker yet. The recovery worker calls the
 dedicated combined operation with the admission revision fence. It obtains a
 checkpoint execution claim and record phase together, injects the exact
-message once, appends the complete RunEvent v4
+message once, appends the complete RunEvent v5
 `host_interaction_response_consumed`, and commits
 `consume_revision=admission_revision+1` before any model/tool operation. The
 record claim is released while the checkpoint execution claim remains held

@@ -105,7 +105,7 @@ are hard recovery barriers. One recovery worker calls
 `claim_and_consume_host_interaction_response(envelope)`, which locks the
 checkpoint and record together with `claim_mode=recovery` and the authoritative
 pre-claim `resume_attempt`, obtains the checkpoint execution claim,
-injects the message, records the complete RunEvent v4
+injects the message, records the complete RunEvent v5
 `host_interaction_response_consumed`, and commits
 `consume_revision=admission_revision+1` (9 -> 10 is an example) before model or
 tool work. The combined CAS releases the transient record claim while retaining

@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 9.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 10.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -77,7 +77,7 @@ After an ordinary tool handler returns a definitive `SUCCESS` or `ERROR`
 result, the framework performs `record_tool_receipt` before returning control
 to the cycle runner. One atomic progress mutation transitions the matching
 `started` journal entry to `succeeded` or `failed`, appends the corresponding
-RunEvent v4 `tool_call_completed` outbox entry, and increments `revision`.
+RunEvent v5 `tool_call_completed` outbox entry, and increments `revision`.
 The active claim and lease remain owned by the worker. Repeating the same
 receipt identity is an idempotent replay with no second event or revision;
 conflicting identity or result is rejected. The stable identity tuple is
@@ -443,7 +443,7 @@ tools use the same preflight. There is no `outbox_full` rejection after an
 external effect; an equivalent independent outbox store is valid only when it
 also has no fixed capacity cap. Every entry has exactly `event_id`,
 `payload_digest`, `state`, `event`, and `cursor`, and contains one
-complete canonical event accepted by the current RunEvent v4 decoder. A
+complete canonical event accepted by the current RunEvent v5 decoder. A
 type-only placeholder, partial payload, non-current event spelling, missing or
 unknown event field, or wrong event version is invalid. The embedded RunEvent
 `event_id` must exactly equal the enclosing outbox `event_id`, and the payload
@@ -837,8 +837,8 @@ the run definition or digest, operation arguments, responses, extension state,
 or idempotency keys. Public `AgentResult` serialization uses the complete closed
 shape defined by `result_public.json`; App Server omits only fields that its
 current schema marks optional. The breaking `AgentResult` rename is version 6 of
-the public result wire; the public API inventory is
-`vv-agent-public-api-v6`/schema 6.
+the public result wire; the public API inventory is now
+`vv-agent-public-api-v7`/schema 7 for the RunEvent v5 boundary.
 
 App Server `checkpoint.status` is the persisted `AgentStatus`; it is distinct
 from App Server `TurnStatus`. For example, durable
