@@ -124,6 +124,29 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 10.0.0
+
+`10.0.0` is a major forward-only lifecycle release. It advances the closed
+RunEvent discriminator from v4 to v5 and the public API inventory from
+`vv-agent-public-api-v6`/schema 6 to `vv-agent-public-api-v7`/schema 7. The
+AgentResult/result-public wire remains v6 and the distributed worker response
+remains v4 because their shapes do not change. Current readers reject v4, v6,
+and any other stale, unknown, malformed, or future RunEvent discriminator.
+
+- a live-claim cancel emits a complete `run_state_changed` event with the
+  top-level typed field `cancel_requested: {from: false, to: true}`;
+- a distinct cancel command received after that signal is already true writes
+  one applied command receipt as an atomic no-op: revision, claim, lease,
+  event outbox, and wake outbox remain unchanged, and replaying that command
+  identity is zero-write without another state event;
+- `admit_deferred_batch` rejects a completed outcome with the canonical typed
+  error `deferred_admission_completed_outcome_invalid` and never rewrites its
+  definitive receipt.
+
+The support matrix remains `pending-adoption` until both implementations pin
+the same 10.0.0 revision and pass real producer, full repository, and
+cross-language gates.
+
 ## Release Note: 9.0.0
 
 `9.0.0` is a major forward-only lifecycle release. It upgrades the checkpoint

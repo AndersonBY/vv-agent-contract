@@ -356,7 +356,7 @@
     "event": "tool_call_completed",
     "atomic_writes": [
       "tool journal receipt",
-      "RunEvent v4 outbox entry",
+      "RunEvent v5 outbox entry",
       "checkpoint revision"
     ],
     "claim_preserved": true,
@@ -658,7 +658,10 @@
     ],
     "unknown_fields": "reject",
     "ordinary_receipt_fields": {
-      "persisted_in_journal": ["identity_key", "result_digest"],
+      "persisted_in_journal": [
+        "identity_key",
+        "result_digest"
+      ],
       "derived": [],
       "additional_index_or_table": false,
       "identity_key_shape": "64 lowercase hexadecimal SHA-256",
@@ -668,22 +671,36 @@
       "succeeded_definitive_receipt": {
         "kind": "tool",
         "state": "succeeded",
-        "required_fields": ["identity_key", "result_digest", "result"],
+        "required_fields": [
+          "identity_key",
+          "result_digest",
+          "result"
+        ],
         "result": "complete strict ToolExecutionResult",
         "error": null
       },
       "failed_definitive_receipt": {
         "kind": "tool",
         "state": "failed",
-        "required_fields": ["identity_key", "result_digest", "error"],
+        "required_fields": [
+          "identity_key",
+          "result_digest",
+          "error"
+        ],
         "result": null,
         "error": "typed journal error {code, message, retryable}"
       },
       "tool_cancelled_closure": {
         "kind": "tool",
         "state": "failed",
-        "required_fields": ["identity_key", "error", "resume_observation"],
-        "forbidden_fields": ["result_digest"],
+        "required_fields": [
+          "identity_key",
+          "error",
+          "resume_observation"
+        ],
+        "forbidden_fields": [
+          "result_digest"
+        ],
         "identity_key": "operation identity only; no definitive receipt",
         "result": null,
         "error": "typed tool_cancelled error"
@@ -710,9 +727,15 @@
       ],
       "state": "failed",
       "result": null,
-      "forbidden_fields": ["result_digest"],
+      "forbidden_fields": [
+        "result_digest"
+      ],
       "identity_key": "operation identity only; no definitive receipt",
-      "error_shape": ["code", "message", "retryable"],
+      "error_shape": [
+        "code",
+        "message",
+        "retryable"
+      ],
       "error_code": "tool_cancelled",
       "resume_observation": "closed vv-agent.resume-observation.v1 object",
       "unknown_fields": "reject"
@@ -720,7 +743,7 @@
   },
   "cycle_abort_rules": {
     "event": "cycle_aborted",
-    "event_version": "v4",
+    "event_version": "v5",
     "reasons": [
       "cancelled",
       "lease_lost",
@@ -1002,7 +1025,12 @@
       ],
       "model_visible_projection": {
         "wire_schema": "vv-agent.tool-execution-result.v4",
-        "fields": ["content", "status_code", "directive", "error_code"],
+        "fields": [
+          "content",
+          "status_code",
+          "directive",
+          "error_code"
+        ],
         "structured_resume_observation": false
       },
       "model_warning": true
@@ -1012,7 +1040,11 @@
       "error_code": "tool_cancelled",
       "synthetic_failure": true,
       "definitive_external_outcome": false,
-      "error_fields": ["code", "message", "retryable"],
+      "error_fields": [
+        "code",
+        "message",
+        "retryable"
+      ],
       "resume_observation_carriers": [
         "tool_journal_entry.resume_observation",
         "terminal_result.resume_observations"
@@ -1541,7 +1573,7 @@
         "result": null,
         "error": {
           "code": "provider_rejected",
-        "message": "rejected",
+          "message": "rejected",
           "retryable": false
         }
       }

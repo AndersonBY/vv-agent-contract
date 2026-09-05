@@ -1,5 +1,5 @@
 {
-  "contract": "vv-agent-public-api-v6",
+  "contract": "vv-agent-public-api-v7",
   "domains": [
     {
       "capabilities": [
@@ -1066,7 +1066,7 @@
       "id": "runtime_backend"
     }
   ],
-  "schema_version": 6,
+  "schema_version": 7,
   "surfaces": [
     {
       "id": "agent",

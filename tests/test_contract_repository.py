@@ -103,11 +103,27 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "9.0.0")
+        self.assertEqual(report["version"], "10.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
         self.assertEqual(report["adoption_status"], matrix["status"])
+
+    def test_json_duplicate_object_keys_are_rejected(self) -> None:
+        duplicate = '{"revision_rules":{"admit_deferred_batch_deferred_only":true,"admit_deferred_batch_deferred_only":false}}'
+        with self.assertRaisesRegex(ValueError, "duplicate JSON object key"):
+            contractctl.strict_json_loads(duplicate)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "duplicate.json"
+            path.write_text(duplicate, encoding="utf-8")
+            with self.assertRaisesRegex(contractctl.ContractError, "cannot read valid JSON"):
+                contractctl.load_json(path)
+            path.unlink()
+            jsonl = Path(temporary) / "duplicate.jsonl"
+            jsonl.write_text(duplicate + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(contractctl.ContractError, "invalid JSONL record"):
+                contractctl.validate_fixture_syntax(Path(temporary), {})
 
     def test_model_settings_fixture_has_one_explicit_current_shape(self) -> None:
         fixture = json.loads((ROOT / "fixtures/model_settings.json").read_text(encoding="utf-8"))
@@ -240,7 +256,7 @@ class ContractRepositoryTests(unittest.TestCase):
             {"event_id", "payload_digest", "state", "event", "cursor"},
         )
         self.assertEqual(entry["event_id"], event["event_id"])
-        self.assertEqual(event["version"], "v4")
+        self.assertEqual(event["version"], "v5")
         self.assertTrue(
             {"version", "type", "event_id", "run_id", "trace_id", "created_at"}.issubset(
                 event
@@ -253,7 +269,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(outbox_contract["capacity_failure_after_external_effect"])
         self.assertFalse(outbox_contract["admission_or_resolution_rejects_for_capacity"])
 
-    def test_all_current_run_event_fixtures_use_v4_only(self) -> None:
+    def test_all_current_run_event_fixtures_use_v5_only(self) -> None:
         for name in (
             "run_events.jsonl",
             "budget_events.jsonl",
@@ -268,20 +284,56 @@ class ContractRepositoryTests(unittest.TestCase):
                 .splitlines()
             ]
             self.assertTrue(records, name)
-            self.assertEqual({record["version"] for record in records}, {"v4"}, name)
+            self.assertEqual({record["version"] for record in records}, {"v5"}, name)
 
         invalid = json.loads(
             (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(invalid["rules"]["version"], "v4")
+        self.assertEqual(invalid["rules"]["version"], "v5")
         rejected = {case["id"]: case["input"] for case in invalid["reject"]}
-        self.assertEqual(rejected["stale_version"]["version"], "v3")
-        self.assertEqual(rejected["unknown_version"]["version"], "v5")
-        self.assertEqual(rejected["future_version"]["version"], "v5")
-        canonical_cycle_aborts = [
+        self.assertEqual(rejected["stale_version"]["version"], "v4")
+        self.assertEqual(rejected["unknown_version"]["version"], "v6")
+        self.assertEqual(rejected["future_version"]["version"], "v6")
+        events = [
             json.loads(line)
             for line in (ROOT / "fixtures/run_events.jsonl").read_text(encoding="utf-8").splitlines()
-            if json.loads(line).get("type") == "cycle_aborted"
+        ]
+        live_cancel = next(
+            event for event in events if event["event_id"] == "evt_run_state_changed_live_cancel"
+        )
+        self.assertEqual(live_cancel["type"], "run_state_changed")
+        self.assertEqual(
+            live_cancel["cancel_requested"], {"from": False, "to": True}
+        )
+        self.assertNotIn("metadata", live_cancel)
+        run_state_rules = invalid["rules"]["run_state_changed_fields"]
+        self.assertEqual(run_state_rules["cancel_requested"]["placement"], "top_level")
+        self.assertEqual(
+            run_state_rules["cancel_requested"]["transition"],
+            {"from": False, "to": True},
+        )
+        self.assertEqual(
+            run_state_rules["cancel_requested_carrier"],
+            "top-level typed field only; metadata.cancel_requested is rejected",
+        )
+        self.assertTrue(
+            {
+                "run_state_changed_live_cancel_missing_cancel_requested",
+                "run_state_changed_live_cancel_malformed_cancel_requested",
+                "run_state_changed_live_cancel_metadata_carrier",
+                "run_state_changed_live_cancel_unknown_cancel_requested_field",
+            }.issubset(rejected)
+        )
+        invalid_cases = {case["id"]: case for case in invalid["reject"]}
+        for case_name in (
+            "run_state_changed_live_cancel_missing_cancel_requested",
+            "run_state_changed_live_cancel_malformed_cancel_requested",
+            "run_state_changed_live_cancel_metadata_carrier",
+            "run_state_changed_live_cancel_unknown_cancel_requested_field",
+        ):
+            self.assertEqual(invalid_cases[case_name]["error"], "event_fields_invalid")
+        canonical_cycle_aborts = [
+            event for event in events if event.get("type") == "cycle_aborted"
         ]
         self.assertEqual(len(canonical_cycle_aborts), 3)
         for cycle_abort in canonical_cycle_aborts:
@@ -345,7 +397,7 @@ class ContractRepositoryTests(unittest.TestCase):
             .read_text(encoding="utf-8")
             .splitlines()
         ]
-        self.assertEqual({event["version"] for event in configured_events}, {"v4"})
+        self.assertEqual({event["version"] for event in configured_events}, {"v5"})
 
     def test_memory_capacity_contract_locks_default_clamp_and_observability(self) -> None:
         fixture = json.loads(
@@ -876,7 +928,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "9.0.0")
+        self.assertEqual(fixture["contract_version"], "10.0.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -1061,13 +1113,23 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(batch["example"]["ordinary_receipt_order"], ["call_b"])
         self.assertEqual(batch["example"]["admission_deferred_only_order"], ["call_a", "call_c"])
         self.assertTrue(batch["barrier"]["claimable_statuses_exclude_deferred"])
-        self.assertEqual(batch["mixed_completed_and_deferred"]["completed_outcome_admission"], "reject_deferred_admission_completed_outcome")
+        self.assertEqual(batch["mixed_completed_and_deferred"]["completed_outcome_admission"], "deferred_admission_completed_outcome_invalid")
+        completed_admission_case = next(
+            case
+            for case in fixture["invalid_cases"]
+            if case["name"] == "admission_contains_definitive_outcome"
+        )
+        self.assertEqual(
+            completed_admission_case["expected_error"],
+            "deferred_admission_completed_outcome_invalid",
+        )
+        self.assertEqual(completed_admission_case["writes"], [])
         self.assertEqual(batch["admission_cas"]["revision_increment"], 1)
         mixed_expected = fixture["canonical_cases"][2]["expected"]
         self.assertEqual(mixed_expected["ordinary_receipt_revision_increment"], 1)
         self.assertEqual(mixed_expected["admission_revision_increment"], 1)
         self.assertEqual(mixed_expected["total_revision_increment"], 2)
-        self.assertEqual(fixture["events_and_outbox"]["run_event_schema_version"], "v4")
+        self.assertEqual(fixture["events_and_outbox"]["run_event_schema_version"], "v5")
         self.assertEqual(fixture["distributed"]["driver_wait_reason"], "deferred_pending")
         self.assertFalse(fixture["distributed"]["new_worker_response_variant"])
         self.assertEqual(fixture["distributed"]["pending_semantics"], "no cycle commit and no response result were returned by this delivery attempt")
@@ -1525,8 +1587,8 @@ class ContractRepositoryTests(unittest.TestCase):
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(public_api["contract"], "vv-agent-public-api-v6")
-        self.assertEqual(public_api["schema_version"], 6)
+        self.assertEqual(public_api["contract"], "vv-agent-public-api-v7")
+        self.assertEqual(public_api["schema_version"], 7)
         capabilities = {
             item["id"]
             for domain in public_api["domains"]
@@ -2990,7 +3052,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(producer["operation"], "producer_admission")
         self.assertIn("checkpoint.active_host_interaction", producer["same_transaction"])
         self.assertIn("host_interaction_notification_outbox row", producer["same_transaction"])
-        self.assertIn("host_interaction_requested RunEvent v4 outbox row", producer["same_transaction"])
+        self.assertIn("host_interaction_requested RunEvent v5 outbox row", producer["same_transaction"])
         self.assertIn("controller command receipt", producer["excludes"])
         self.assertIn("controller recovery wake outbox", producer["excludes"])
         self.assertEqual(response["operation"], "controller_response_admission")
@@ -4383,6 +4445,10 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(
             fixture["revision_rules"]["cancel_requested_cannot_be_cleared_by_claimed_progress_or_receipt"]
         )
+        self.assertEqual(
+            fixture["revision_rules"]["admit_deferred_batch_completed_outcome_error"],
+            "deferred_admission_completed_outcome_invalid",
+        )
         self.assertFalse(fixture["revision_rules"]["heartbeat_requires_revision"])
         self.assertTrue(fixture["revision_rules"]["outbox_bounded_by_lifecycle_not_fixed_cardinality_or_bytes"])
         self.assertTrue(fixture["revision_rules"]["outbox_preflight_before_first_external_tool_effect"])
@@ -5361,7 +5427,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "9.0.0")
+        self.assertEqual(fixture["contract_version"], "10.0.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -5534,7 +5600,7 @@ class ContractRepositoryTests(unittest.TestCase):
             [
                 "checkpoint.active_host_interaction",
                 "host_interaction_records row",
-                "host_interaction_requested RunEvent v4 outbox row",
+                "host_interaction_requested RunEvent v5 outbox row",
                 "host_interaction_notification_outbox row",
                 "active claim release",
                 "checkpoint revision",
@@ -5607,7 +5673,7 @@ class ContractRepositoryTests(unittest.TestCase):
         ]
         requested = next(event for event in events if event["type"] == "host_interaction_requested")
         consumed = next(event for event in events if event["type"] == "host_interaction_response_consumed")
-        self.assertEqual(requested["version"], "v4")
+        self.assertEqual(requested["version"], "v5")
         self.assertEqual(requested["prompt"], "Choose an approved option.")
         self.assertEqual(consumed["consumed_revision"], 10)
         self.assertEqual(consumed["resume_attempt"], 3)
@@ -5684,7 +5750,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(cross_impl["expected"]["resume_attempt_after"], 3)
         self.assertEqual(cross_impl["expected"]["next_envelope"]["resume_attempt"], 3)
         event_types = {event["type"] for event in events}
-        self.assertTrue(all(event["version"] == "v4" for event in events))
+        self.assertTrue(all(event["version"] == "v5" for event in events))
         self.assertTrue(all(event.get("event_id") for event in events))
         self.assertTrue(fixture["event_outbox_contract"]["all_entries_are_complete_run_events"])
         self.assertNotIn(
@@ -5802,7 +5868,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             [case["id"] for case in fixture["fault_matrix"]],
-            [f"C{index}" for index in range(1, 21)],
+            [f"C{index}" for index in range(1, 22)],
         )
         worker = fixture["worker_observation"]
         self.assertEqual(worker["worker_response_schema"], "vv-agent.distributed-worker-response.v4")
@@ -5943,6 +6009,29 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(continuation["event_outbox"].count("tool_call_completed"), 1)
         self.assertEqual(continuation["duplicate_event_count"], 0)
         self.assertEqual(continuation["receipt_count"], 1)
+        repeated_cancel = control_cases["C21"]
+        self.assertTrue(repeated_cancel["before"]["checkpoint"]["cancel_requested"])
+        self.assertTrue(repeated_cancel["after"]["claim_lease_unchanged"])
+        self.assertEqual(repeated_cancel["after"]["checkpoint"]["revision"], 60)
+        self.assertEqual(repeated_cancel["after"]["receipt_observation"], "applied")
+        self.assertEqual(repeated_cancel["after"]["receipt_write_count"], 1)
+        self.assertEqual(repeated_cancel["after"]["receipt"]["resulting_revision"], 60)
+        self.assertEqual(
+            repeated_cancel["after"]["same_command_replay"]["receipt"],
+            repeated_cancel["after"]["receipt"],
+        )
+        self.assertEqual(repeated_cancel["after"]["event_outbox"], ["run_state_changed"])
+        self.assertEqual(repeated_cancel["after"]["wake_outbox"], [])
+        self.assertEqual(repeated_cancel["after"]["duplicate_event_count"], 0)
+        self.assertEqual(
+            repeated_cancel["after"]["same_command_replay"],
+            {
+                "writes": 0,
+                "revision": 60,
+                "duplicate_event_count": 0,
+                "receipt": repeated_cancel["after"]["receipt"],
+            },
+        )
         operation_journal = json.loads(
             (ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8")
         )

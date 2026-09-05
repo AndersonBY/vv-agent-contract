@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `9.0.0` defines one task-neutral boundary for a tool whose external
+Contract `10.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -89,6 +89,10 @@ tool-call order, but they do not release the deferred barrier. If the CAS fails
 or the process crashes before it, every started entry not covered by a durable
 receipt or deferred admission is treated as ambiguous; neither a generated
 completed result nor a generated handle is silently assumed.
+
+An admission containing a completed outcome is rejected with the single typed
+error `deferred_admission_completed_outcome_invalid`. An outcome already
+covered by `record_tool_receipt` is never rewritten by admission.
 
 The admission CAS is the only place that releases the claim for the batch. A
 partial journal/event write is invalid. A post-CAS crash replays the exact

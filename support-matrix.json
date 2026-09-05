@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "9.0.0",
+  "contract_version": "10.0.0",
   "status": "pending-adoption",
   "implementations": {
     "python": {
@@ -16,7 +16,7 @@
       "verified_revision": null
     }
   },
-  "adoption_note": "9.0.0 is a breaking lifecycle release: Python and Rust must adopt the strict receipt digest, finalize_claimed abort closure, and resume_observations terminal wire before verification.",
+  "adoption_note": "10.0.0 is a breaking lifecycle release: Python and Rust must adopt RunEvent v5 top-level typed live-cancel transitions, applied no-op receipts for repeated live cancellation, and deferred admission rejection of completed outcomes, together with the existing durable lifecycle obligations before verification.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

@@ -258,10 +258,10 @@
     "event_outbox": [
       {
         "event_id": "evt_model_call_started_2",
-        "payload_digest": "b9da671a4f12d0053589a57b377b9c5670cbf5be28f55917402019ff0e24436e",
+        "payload_digest": "b4aaae6cfaedc11d7db7023415a0c6d6e445856a4ebebfb58f417a8032f60eec",
         "state": "pending",
         "event": {
-          "version": "v4",
+          "version": "v5",
           "type": "model_call_started",
           "event_id": "evt_model_call_started_2",
           "run_id": "run_01JZCHECKPOINT",
@@ -428,8 +428,16 @@
     "running_with_ambiguous_journal_requires_active_recovery_claim": true,
     "terminal_result_requires_no_active_journal": true,
     "terminal_journal_state_rule": {
-      "active_states": ["planned", "started", "deferred", "ambiguous"],
-      "closed_states": ["succeeded", "failed"],
+      "active_states": [
+        "planned",
+        "started",
+        "deferred",
+        "ambiguous"
+      ],
+      "closed_states": [
+        "succeeded",
+        "failed"
+      ],
       "terminal_allows_closed_entries": true,
       "terminal_forbids_active_entries": true
     },
@@ -505,7 +513,10 @@
         "status",
         "active_host_interaction"
       ],
-      "status_values": ["running", "host_interaction"],
+      "status_values": [
+        "running",
+        "host_interaction"
+      ],
       "active_host_interaction": "same_closed_shape_or_null",
       "unknown_fields": "reject"
     },
@@ -521,9 +532,24 @@
       "schema": "vv-agent.host-interaction-notification.v1",
       "independent_table": "host_interaction_notification_outbox",
       "strict_sanitized_payload": true,
-      "payload_required_fields": ["schema_version", "notification_id", "record_id", "interaction_id", "logical_cycle", "status", "wait_reason", "prompt"],
+      "payload_required_fields": [
+        "schema_version",
+        "notification_id",
+        "record_id",
+        "interaction_id",
+        "logical_cycle",
+        "status",
+        "wait_reason",
+        "prompt"
+      ],
       "wait_reason": "host_interaction",
-      "states": ["pending", "claimed", "delivered", "ambiguous", "aborted"],
+      "states": [
+        "pending",
+        "claimed",
+        "delivered",
+        "ambiguous",
+        "aborted"
+      ],
       "claim_owner_attempt_lease_fenced": true,
       "same_id_same_digest_replay_zero_write": true,
       "same_id_different_digest_conflict_zero_write": true,
@@ -535,7 +561,7 @@
           "same_transaction": [
             "checkpoint.active_host_interaction",
             "host_interaction_records row",
-            "host_interaction_requested RunEvent v4 outbox row",
+            "host_interaction_requested RunEvent v5 outbox row",
             "host_interaction_notification_outbox row",
             "active claim release",
             "checkpoint revision"
@@ -574,7 +600,11 @@
       },
       "ambiguous_resolution": {
         "operation": "reconcile_host_interaction_notification(notification_id, payload_digest, outcome)",
-        "outcomes": ["delivered", "retry", "abort"],
+        "outcomes": [
+          "delivered",
+          "retry",
+          "abort"
+        ],
         "retry_reuses_identity_and_digest": true,
         "abort_requires_reason": true,
         "reaper_routes_ambiguous_to_reconciliation": true,
@@ -582,13 +612,13 @@
       },
       "run_state_changed_after_suspend_is_separate_and_does_not_mutate_host_payload": true
     },
-      "suspended_origin_running_resume_wakes": true,
-      "suspended_origin_host_interaction_resume_waits_without_response": true,
-      "suspended_origin_host_interaction_resume_wakes_when_response_pending": true,
-      "response_while_suspended_host_origin_keeps_suspended_until_resume": true,
-  "producer_cas": {
+    "suspended_origin_running_resume_wakes": true,
+    "suspended_origin_host_interaction_resume_waits_without_response": true,
+    "suspended_origin_host_interaction_resume_wakes_when_response_pending": true,
+    "response_while_suspended_host_origin_keeps_suspended_until_resume": true,
+    "producer_cas": {
       "requires_active_claim": true,
-    "writes_in_one_cas": [
+      "writes_in_one_cas": [
         "status=host_interaction",
         "active_host_interaction (complete strict request)",
         "host_interaction_record",
@@ -598,24 +628,24 @@
         "claim_token=null",
         "claimed_cycle=null",
         "lease_expires_at_ms=null",
-      "revision=revision+1"
-    ],
-    "transaction_boundary": {
-      "operation": "producer_admission",
-      "same_transaction": [
-        "checkpoint.active_host_interaction",
-        "host_interaction_records row",
-        "host_interaction_requested RunEvent v4 outbox row",
-        "host_interaction_notification_outbox row",
-        "active claim release",
-        "checkpoint revision"
+        "revision=revision+1"
       ],
-      "excludes": [
-        "controller command receipt",
-        "controller recovery wake outbox",
-        "notification claim/deliver/reconcile lifecycle"
-      ]
-    },
+      "transaction_boundary": {
+        "operation": "producer_admission",
+        "same_transaction": [
+          "checkpoint.active_host_interaction",
+          "host_interaction_records row",
+          "host_interaction_requested RunEvent v5 outbox row",
+          "host_interaction_notification_outbox row",
+          "active claim release",
+          "checkpoint revision"
+        ],
+        "excludes": [
+          "controller command receipt",
+          "controller recovery wake outbox",
+          "notification claim/deliver/reconcile lifecycle"
+        ]
+      },
       "external_effect_inside_transaction": false,
       "claim_release_is_atomic": true,
       "replay_after_claim_release": "same identity and request digest is zero-write; a different binding or digest is conflict"
@@ -627,11 +657,19 @@
     "full_resolved_response_required": true,
     "response_digest_only_is_invalid": true,
     "recovery_consumption": {
-      "hard_barrier_states": ["resolved_pending", "resolved_claimed"],
+      "hard_barrier_states": [
+        "resolved_pending",
+        "resolved_claimed"
+      ],
       "ordinary_continue_or_claim": "reject or route to claim_and_consume_host_interaction_response",
       "operation": "claim_and_consume_host_interaction_response(envelope)",
       "state_transition": "resolved_pending -> resolved_claimed (transactional phase) -> consumed in the same checkpoint CAS",
-      "claim_fences": ["checkpoint execution claim token", "claimed_cycle=cycle_index+1", "record attempt", "lease_expires_at_ms"],
+      "claim_fences": [
+        "checkpoint execution claim token",
+        "claimed_cycle=cycle_index+1",
+        "record attempt",
+        "lease_expires_at_ms"
+      ],
       "record_only_claim_forbidden": true,
       "revision_semantics": {
         "numbers_are_examples": true,
@@ -670,7 +708,10 @@
       "injection_is_exactly_once": true,
       "crash_before_commit_rolls_back_both_claims": true,
       "stale_envelope_writes_nothing": true,
-      "consumed_marker": ["host_interaction_response_consumed event", "consumed_revision"],
+      "consumed_marker": [
+        "host_interaction_response_consumed event",
+        "consumed_revision"
+      ],
       "cleanup": "retain consumed marker through next committed cycle or terminal acknowledgement; explicit checkpoint deletion cascades it"
     }
   },
@@ -1449,10 +1490,10 @@
         "event_outbox": [
           {
             "event_id": "evt_model_call_started_2",
-            "payload_digest": "b9da671a4f12d0053589a57b377b9c5670cbf5be28f55917402019ff0e24436e",
+            "payload_digest": "b4aaae6cfaedc11d7db7023415a0c6d6e445856a4ebebfb58f417a8032f60eec",
             "state": "pending",
             "event": {
-              "version": "v4",
+              "version": "v5",
               "type": "model_call_started",
               "event_id": "evt_model_call_started_2",
               "run_id": "run_01JZCHECKPOINT",

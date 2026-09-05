@@ -148,9 +148,12 @@ and other provider field names remain inside adapter input and
 
 ## Events And Streaming
 
-RunEvent v4 is a closed, typed wire. Every event requires `version=v4`,
+RunEvent v5 is a closed, typed wire. Every event requires `version=v5`,
 identity, and a finite non-negative `created_at` in Unix seconds. Approval
 resolution carries exactly one `action` value.
+The live-claim cancellation transition is represented only by the top-level
+typed field `cancel_requested: {from: false, to: true}` on its complete
+`run_state_changed` event; metadata carriers and unknown members are rejected.
 
 `model_call_started`, `model_call_completed`, and `model_call_failed` expose
 the task-neutral model-operation lifecycle. They replace `llm_started` and
@@ -220,7 +223,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `9.0.0` applies the sparse bounded-result rules in
+Contract `10.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
