@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `11.0.0` defines one task-neutral boundary for a tool whose external
+Contract `12.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -171,6 +171,18 @@ other four fields come from the retained handle. Status, result digest,
 suffixes, and version markers are excluded. Same identity and result replays
 reuse the retained event ID with zero writes; a different result remains
 `deferred_resolution_conflict`.
+
+An `ERROR` resolution retains the complete canonical result in both the
+resolved journal entry and the tombstone; its digest covers that result. Any
+`OperationError` exposed alongside the journal entry is only the normalized
+diagnostic projection of that result and is never the replay or `Message`
+source. Recovery reads the result directly after digest verification, including
+its metadata, directive, and any legal truncation pointer.
+The projection uses the single rule in
+`operation_journal.json#tool_journal_entry_wire.ordinary_failed_result_authority`:
+only a non-empty `result.error_code` is used for `code`, non-empty
+`result.content` is used for `message`, and boolean `result.metadata.retryable`
+is used for `retryable`; each otherwise uses its documented fallback.
 
 `duration_ms` is `null` for a cross-process resolution and
 `execution_started=true`; it measures no resolver-side execution. A normal

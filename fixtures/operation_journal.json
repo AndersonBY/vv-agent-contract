@@ -1,7 +1,7 @@
 {
   "contract": "operation_journal",
-  "schema_version": "vv-agent.operation-journal.v4",
-  "version": 4,
+  "schema_version": "vv-agent.operation-journal.v5",
+  "version": 5,
   "deferred_contract": "deferred_tool.json",
   "enums": {
     "kinds": [
@@ -379,6 +379,10 @@
     },
     "duplicate_same_identity": "replay_without_second_event_or_revision",
     "conflicting_identity_or_result": "reject_with_tool_receipt_conflict_without_write",
+    "failed_result_storage": "ordinary definitive ERROR receipts persist the complete result and its digest; OperationError is a normalized diagnostic projection",
+    "failed_result_recovery": "checkpoint and session resume reconstruct Message directly from the persisted result after digest verification",
+    "failed_result_metadata_and_directive_are_authoritative": true,
+    "synthetic_closure_exception": "tool_cancelled terminal closures persist result=null without a definitive result_digest",
     "ordinary_handler_serialization": "definitive receipts are committed by record_tool_receipt before the next ordinary tool handler result is admitted",
     "parallel_receipt_cas_retry_contract": false,
     "handler_return_is_not_success_proof_for_ambiguous_outcome": true
@@ -459,7 +463,8 @@
     "result_digest_role": "stored sibling value used for same-replay or typed conflict; it is not part of receipt lookup identity",
     "receipt_fields_persisted_in_journal": [
       "identity_key",
-      "result_digest"
+      "result_digest",
+      "result"
     ],
     "receipt_fields_derived": [],
     "golden_identity": {
@@ -577,6 +582,72 @@
           "error_code": "provider_rejected"
         },
         "rfc8785_sha256": "2d8705220d1451b55e13048c34abb630936e81917cfa87f2dbd815e05ec58987"
+      },
+      {
+        "name": "error_custom_metadata_non_default_directive",
+        "wire": {
+          "tool_call_id": "call_2",
+          "status_code": "ERROR",
+          "directive": "wait_user",
+          "content": "rejected",
+          "error_code": "provider_rejected",
+          "metadata": {
+            "provider": "gateway",
+            "retryable": false
+          }
+        },
+        "rfc8785_sha256": "3b398ff7e2a60d6ada6c071bf0371d1a14624450c959a292d2e360a0d9a96c79"
+      },
+      {
+        "name": "error_truncated_artifact",
+        "wire": {
+          "tool_call_id": "call-2-error-artifact",
+          "status_code": "ERROR",
+          "directive": "finish",
+          "content": "first rejection\n... output omitted; full text in artifact ...\nlast rejection",
+          "error_code": "provider_rejected",
+          "metadata": {
+            "provider": "gateway",
+            "retryable": false
+          },
+          "truncated": true,
+          "truncation_reason": "output_limit",
+          "original_bytes": 100000,
+          "visible_bytes": 76,
+          "artifact": {
+            "path": ".vv-agent/artifacts/task-7/call-2-error.txt",
+            "media_type": "text/plain",
+            "encoding": "utf-8",
+            "size_bytes": 100000,
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
+        },
+        "rfc8785_sha256": "893c32ebf158f17532ffe68c303145161703200556e2dcdcd06093460b67a9cd"
+      },
+      {
+        "name": "error_truncated_cursor",
+        "wire": {
+          "tool_call_id": "call-2-error-cursor",
+          "status_code": "ERROR",
+          "directive": "wait_user",
+          "content": "rejected slice",
+          "error_code": "provider_rejected",
+          "metadata": {
+            "provider": "gateway",
+            "retryable": false
+          },
+          "truncated": true,
+          "truncation_reason": "read_limit",
+          "original_bytes": 4096,
+          "visible_bytes": 14,
+          "cursor": {
+            "kind": "read_file",
+            "path": "logs/rejections.txt",
+            "offset_chars": 14,
+            "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+          }
+        },
+        "rfc8785_sha256": "b895bf9d50edeba752f42b9fa56cee599948b1707762745cbb093e32c083adcf"
       }
     ]
   },
@@ -609,6 +680,48 @@
         "writes": 0,
         "event_count": 1,
         "claim_preserved": true
+      }
+    },
+    {
+      "name": "unknown_outcome_receipt_crash_before_cycle_and_session_commit",
+      "identity_key": "f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743",
+      "result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
+      "event_id": "evt_receipt_f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743",
+      "event_payload": {
+        "version": "v5",
+        "type": "tool_call_completed",
+        "event_id": "evt_receipt_f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743",
+        "run_id": "run_unknown_outcome",
+        "trace_id": "trace_unknown_outcome",
+        "created_at": 1721120016.2,
+        "cycle_index": 1,
+        "tool_call_id": "call_2",
+        "tool_name": "write_record",
+        "operation_id": "op_tool_cycle_1_call_unknown",
+        "attempt": 1,
+        "status": "error",
+        "directive": "continue",
+        "error_code": "tool_outcome_unknown",
+        "execution_started": true,
+        "duration_ms": null
+      },
+      "event_payload_digest": "d68dcb08e8cc675d33752d12b67bfaf9c8dbae948e2c465b87363e695acdc6c5",
+      "resume_observation_preserved": true,
+      "crash_point": "after receipt CAS and event staging, before cycle/session commit",
+      "expected": {
+        "receipt_cas_writes": 1,
+        "event_count_after_receipt": 1,
+        "cycle_commit_before_crash": false,
+        "session_commit_before_crash": false,
+        "resume_message_source": "journal.result",
+        "resume_tool_calls": 0,
+        "resume_cycle_commit": 1,
+        "resume_session_commit": 1,
+        "resume_observation_preserved": true,
+        "same_identity_replay_writes": 0,
+        "same_identity_replay_duplicate_events": 0,
+        "replayed_event_id": "evt_receipt_f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743",
+        "replayed_event_payload_digest": "d68dcb08e8cc675d33752d12b67bfaf9c8dbae948e2c465b87363e695acdc6c5"
       }
     },
     {
@@ -672,10 +785,44 @@
       "failed"
     ],
     "unknown_fields": "reject",
+    "ordinary_failed_result_authority": {
+      "state": "failed",
+      "result": "complete strict vv-agent.tool-execution-result.v4 with status_code=ERROR",
+      "result_digest": "RFC 8785 lowercase SHA-256 of that complete result",
+      "error_type": "OperationError",
+      "error": "existing typed OperationError diagnostic projection only; never a recovery source",
+      "error_projection": {
+        "code": "non-empty result.error_code string, otherwise tool_operation_failed",
+        "message": "result.content when non-empty, otherwise tool operation failed",
+        "retryable": "result.metadata.retryable when boolean, otherwise false"
+      },
+      "consistency": "the persisted error must equal this projection of result; contradictory result/error pairs are invalid",
+      "resume_message_source": "journal.result directly after strict validation and result_digest verification",
+      "metadata_or_directive_guessing": false,
+      "directive_recovery": "after Message reconstruction, the resumed ordinary cycle processes result.directive through the existing path; wait_user remains terminal and no default directive is substituted",
+      "projection_cases": [
+        {
+          "name": "empty_error_code_uses_projection_fallbacks",
+          "result": {
+            "tool_call_id": "call_projection_fallback",
+            "content": "provider rejected without a typed code",
+            "status_code": "ERROR",
+            "directive": "continue",
+            "error_code": ""
+          },
+          "expected_error": {
+            "code": "tool_operation_failed",
+            "message": "provider rejected without a typed code",
+            "retryable": false
+          }
+        }
+      ]
+    },
     "ordinary_receipt_fields": {
       "persisted_in_journal": [
         "identity_key",
-        "result_digest"
+        "result_digest",
+        "result"
       ],
       "derived": [],
       "additional_index_or_table": false,
@@ -700,10 +847,28 @@
         "required_fields": [
           "identity_key",
           "result_digest",
+          "result",
           "error"
         ],
-        "result": null,
-        "error": "typed journal error {code, message, retryable}"
+        "result": "complete strict ToolExecutionResult with status_code ERROR",
+        "error": "OperationError {code, message, retryable} equal to ordinary_failed_result_authority.error_projection",
+        "forbidden_fields": [
+          "resume_observation"
+        ]
+      },
+      "tool_outcome_unknown_failed_receipt": {
+        "kind": "tool",
+        "state": "failed",
+        "required_fields": [
+          "identity_key",
+          "result_digest",
+          "result",
+          "error",
+          "resume_observation"
+        ],
+        "result": "same complete strict ToolExecutionResult with status_code ERROR as failed_definitive_receipt",
+        "error": "same OperationError projection as failed_definitive_receipt with code and result.error_code tool_outcome_unknown",
+        "resume_observation": "required unknown-effect evidence; not part of result or OperationError"
       },
       "tool_cancelled_closure": {
         "kind": "tool",
@@ -1009,11 +1174,9 @@
     }
   },
   "outcome_classification": {
-    "failed_requires_definitive_external_outcome": true,
-    "synthetic_unknown_outcome_failures_are_not_external_failure_proof": [
-      "tool_outcome_unknown",
-      "tool_cancelled"
-    ],
+    "ordinary_failed_requires_complete_recoverable_error_receipt": true,
+    "unknown_outcome_is_not_external_failure_proof": true,
+    "unknown_outcome_semantics": "ordinary ERROR receipt with resume_observation; neither proves an external side-effect outcome",
     "pre_dispatch_local_failure": "planned_to_failed",
     "explicit_provider_or_tool_rejection": "started_to_failed",
     "tool_execution_failed_after_started": "ambiguous_unless_the_adapter_proves_a_definitive_outcome",
@@ -1025,7 +1188,8 @@
     "surface_to_model": {
       "transition": "ambiguous_to_failed",
       "error_code": "tool_outcome_unknown",
-      "synthetic_failure": true,
+      "framework_materialized_result": true,
+      "resultless_closure": false,
       "definitive_external_outcome": false,
       "resume_observation_fields": [
         "operation_id",
@@ -1048,12 +1212,22 @@
         ],
         "structured_resume_observation": false
       },
+      "journal_closure": {
+        "entry": "tool_unknown_outcome_receipt",
+        "result_source": "entry.result",
+        "result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
+        "error_source": "entry.error, normalized from result",
+        "resume_source": "entry.result",
+        "resume_observation": "preserved as unknown-effect evidence",
+        "synthetic_closure": false
+      },
       "model_warning": true
     },
     "cycle_abort_tool_closure": {
       "state": "failed",
       "error_code": "tool_cancelled",
-      "synthetic_failure": true,
+      "framework_materialized_result": false,
+      "resultless_closure": true,
       "definitive_external_outcome": false,
       "error_fields": [
         "code",
@@ -1584,8 +1758,18 @@
         "idempotency_support": "unknown",
         "state": "failed",
         "identity_key": "00cf5ecff3e06ad4a401981b18668fe33a62733e44ad3909dfe1f00d0d0b427c",
-        "result_digest": "2d8705220d1451b55e13048c34abb630936e81917cfa87f2dbd815e05ec58987",
-        "result": null,
+        "result_digest": "3b398ff7e2a60d6ada6c071bf0371d1a14624450c959a292d2e360a0d9a96c79",
+        "result": {
+          "tool_call_id": "call_2",
+          "content": "rejected",
+          "status_code": "ERROR",
+          "directive": "wait_user",
+          "error_code": "provider_rejected",
+          "metadata": {
+            "provider": "gateway",
+            "retryable": false
+          }
+        },
         "error": {
           "code": "provider_rejected",
           "message": "rejected",
@@ -1630,11 +1814,53 @@
       }
     },
     {
+      "name": "tool_unknown_outcome_receipt",
+      "request_golden_case": "tool_write_record_call_2",
+      "entry": {
+        "kind": "tool",
+        "operation_id": "op_tool_cycle_1_call_unknown",
+        "cycle_index": 1,
+        "attempt": 1,
+        "request_digest": "6b05beb10de1bae7a2989e39294d4a1f02f4f4b357437bc198f47b6b7be85b49",
+        "tool_call_id": "call_2",
+        "tool_name": "write_record",
+        "arguments": {
+          "record_id": "42",
+          "value": "approved"
+        },
+        "idempotency_key": "idem_5a40b4f1",
+        "idempotency_support": "unknown",
+        "state": "failed",
+        "identity_key": "f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743",
+        "result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
+        "result": {
+          "tool_call_id": "call_2",
+          "content": "The tool outcome is unknown.",
+          "status_code": "ERROR",
+          "directive": "continue",
+          "error_code": "tool_outcome_unknown"
+        },
+        "error": {
+          "code": "tool_outcome_unknown",
+          "message": "The tool outcome is unknown.",
+          "retryable": false
+        },
+        "resume_observation": {
+          "operation_id": "op_tool_cycle_1_call_unknown",
+          "operation_kind": "tool",
+          "cycle_index": 1,
+          "state": "ambiguous",
+          "risk": "unknown_tool_side_effect",
+          "idempotency_support": "unknown"
+        }
+      }
+    },
+    {
       "name": "tool_unknown_idempotency",
       "request_golden_case": "tool_write_record_call_2",
       "entry": {
         "kind": "tool",
-        "operation_id": "op_tool_cycle_1_call_2",
+        "operation_id": "op_tool_cycle_1_call_unknown",
         "cycle_index": 1,
         "attempt": 1,
         "request_digest": "6b05beb10de1bae7a2989e39294d4a1f02f4f4b357437bc198f47b6b7be85b49",
@@ -1715,6 +1941,20 @@
       }
     },
     {
+      "name": "durable_failed_tool_result_is_replayed_from_result",
+      "entry": "tool_failed",
+      "policy": "require_reconciliation",
+      "expected": {
+        "decision": "replay",
+        "tool_calls": 0,
+        "message_source": "journal.result",
+        "result_bytes_preserved": true,
+        "metadata_or_directive_guessing": false,
+        "operation_error_used_for_recovery": false,
+        "event": "operation_replayed"
+      }
+    },
+    {
       "name": "started_model_default_bounded_duplicate_risk_retry",
       "entry": "model_started",
       "policy": "retry_with_duplicate_risk",
@@ -1790,12 +2030,13 @@
     {
       "name": "started_tool_surfaces_unknown_outcome_to_model_by_default",
       "entry": "tool_unknown_idempotency",
+      "receipt_entry": "tool_unknown_outcome_receipt",
       "policy": "surface_to_model",
       "expected": {
         "persisted_state": "failed",
         "failure_error_code": "tool_outcome_unknown",
         "resume_observation": {
-          "operation_id": "op_tool_cycle_1_call_2",
+          "operation_id": "op_tool_cycle_1_call_unknown",
           "operation_kind": "tool",
           "cycle_index": 1,
           "state": "ambiguous",
@@ -1805,6 +2046,9 @@
         "event": "tool_call_completed",
         "event_status": "error",
         "model_visible_error_code": "tool_outcome_unknown",
+        "result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
+        "event_id": "evt_receipt_f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743",
+        "message_source": "journal.result",
         "unknown_effect_warning": true,
         "tool_calls": 0,
         "silent_success": false
@@ -2257,6 +2501,99 @@
       "base_valid_entry": "tool_failed",
       "mutation": {
         "remove": "result_digest"
+      }
+    },
+    {
+      "name": "tool_failed_resume_observation_forbidden",
+      "error_code": "operation_resume_observation_forbidden",
+      "base_valid_entry": "tool_failed",
+      "mutation": {
+        "add": {
+          "resume_observation": {
+            "operation_id": "op_tool_cycle_1_call_2",
+            "operation_kind": "tool",
+            "cycle_index": 1,
+            "state": "ambiguous",
+            "risk": "unknown_tool_side_effect",
+            "idempotency_support": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "name": "tool_unknown_outcome_missing_resume_observation",
+      "error_code": "operation_resume_observation_required",
+      "base_valid_entry": "tool_unknown_outcome_receipt",
+      "mutation": {
+        "remove": "resume_observation"
+      }
+    },
+    {
+      "name": "tool_unknown_outcome_error_projection_mismatch",
+      "error_code": "operation_error_projection_mismatch",
+      "base_valid_entry": "tool_unknown_outcome_receipt",
+      "mutation": {
+        "replace": {
+          "error.retryable": true
+        }
+      }
+    },
+    {
+      "name": "tool_unknown_outcome_unknown_field",
+      "error_code": "operation_entry_unknown_field",
+      "base_valid_entry": "tool_unknown_outcome_receipt",
+      "mutation": {
+        "add": {
+          "future_field": true
+        }
+      }
+    },
+    {
+      "name": "tool_failed_missing_result",
+      "error_code": "operation_result_required",
+      "base_valid_entry": "tool_failed",
+      "mutation": {
+        "remove": "result"
+      }
+    },
+    {
+      "name": "tool_failed_null_result",
+      "error_code": "operation_result_required",
+      "base_valid_entry": "tool_failed",
+      "mutation": {
+        "replace": {
+          "result": null
+        }
+      }
+    },
+    {
+      "name": "tool_failed_success_status",
+      "error_code": "operation_failed_result_status_invalid",
+      "base_valid_entry": "tool_failed",
+      "mutation": {
+        "replace": {
+          "result.status_code": "SUCCESS"
+        }
+      }
+    },
+    {
+      "name": "tool_failed_result_digest_mismatch",
+      "error_code": "operation_result_digest_mismatch",
+      "base_valid_entry": "tool_failed",
+      "mutation": {
+        "replace": {
+          "result_digest": "2d8705220d1451b55e13048c34abb630936e81917cfa87f2dbd815e05ec58987"
+        }
+      }
+    },
+    {
+      "name": "tool_failed_error_projection_mismatch",
+      "error_code": "operation_error_projection_mismatch",
+      "base_valid_entry": "tool_failed",
+      "mutation": {
+        "replace": {
+          "error.retryable": true
+        }
       }
     },
     {

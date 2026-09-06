@@ -1,15 +1,21 @@
 {
   "contract": "checkpoint_codec",
-  "version": 9,
+  "version": 10,
   "discriminator": {
-    "required_value": "vv-agent.checkpoint.v9",
+    "required_value": "vv-agent.checkpoint.v10",
     "missing_or_unknown_error": "checkpoint_schema_unsupported"
   },
   "message_wire": {
     "type": "Message",
     "artifact_ref_preserved": true,
     "artifact_ref_omitted_when_absent": true,
-    "model_projection_strips_artifact_ref": true
+    "model_projection_strips_artifact_ref": true,
+    "failed_tool_recovery": {
+      "source": "tool_journal.result",
+      "digest_verified_before_message_conversion": true,
+      "metadata_or_directive_guessing": false,
+      "operation_error_is_not_recovery_source": true
+    }
   },
   "deferred_receipt_index": {
     "namespace": "deferred_resolution_receipts",
@@ -63,7 +69,7 @@
     ]
   },
   "canonical_checkpoint": {
-    "schema_version": "vv-agent.checkpoint.v9",
+    "schema_version": "vv-agent.checkpoint.v10",
     "run_definition_schema": "vv-agent.run-definition.v5",
     "run_definition": {
       "schema_version": "vv-agent.run-definition.v5",
@@ -1121,7 +1127,7 @@
     {
       "name": "minimal_running",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -1226,7 +1232,7 @@
     {
       "name": "reconciliation_required_retains_ambiguous_journal",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -1350,7 +1356,7 @@
     {
       "name": "claimed_active_cycle",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -1608,7 +1614,7 @@
     {
       "name": "acknowledged_terminal_is_retained",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -1746,7 +1752,7 @@
     {
       "name": "operator_abort_terminal_retains_closed_tool_entries",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -1883,8 +1889,18 @@
             "idempotency_support": "unknown",
             "state": "failed",
             "identity_key": "383032e0cb55edf40a2958cb23907deddc7c16e039ec54f7b8073cd9cd575d0d",
-            "result_digest": "2d8705220d1451b55e13048c34abb630936e81917cfa87f2dbd815e05ec58987",
-            "result": null,
+            "result_digest": "3b398ff7e2a60d6ada6c071bf0371d1a14624450c959a292d2e360a0d9a96c79",
+            "result": {
+              "tool_call_id": "call_2",
+              "content": "rejected",
+              "status_code": "ERROR",
+              "directive": "wait_user",
+              "error_code": "provider_rejected",
+              "metadata": {
+                "provider": "gateway",
+                "retryable": false
+              }
+            },
             "error": {
               "code": "provider_rejected",
               "message": "rejected",
@@ -1976,7 +1992,7 @@
     {
       "name": "unknown_optional_extension_is_preserved",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2089,11 +2105,11 @@
   ],
   "invalid_cases": [
     {
-      "name": "old_v8_schema_is_rejected_forward_only",
+      "name": "old_v9_schema_is_rejected_forward_only",
       "base_valid_case": "minimal_running",
       "mutation": {
         "replace": {
-          "schema_version": "vv-agent.checkpoint.v8"
+          "schema_version": "vv-agent.checkpoint.v9"
         }
       },
       "error": "checkpoint_schema_unsupported",
@@ -2137,7 +2153,7 @@
     {
       "name": "blank_checkpoint_key",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2243,7 +2259,7 @@
     {
       "name": "bad_definition_digest",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2349,7 +2365,7 @@
     {
       "name": "zero_resume_attempt",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2455,7 +2471,7 @@
     {
       "name": "partial_claim",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2561,7 +2577,7 @@
     {
       "name": "claimed_cycle_not_next",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2667,7 +2683,7 @@
     {
       "name": "terminal_with_claim",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2806,7 +2822,7 @@
     {
       "name": "journal_cycle_not_active",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -2928,7 +2944,7 @@
     {
       "name": "unknown_required_extension",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -3043,7 +3059,7 @@
     {
       "name": "invalid_extension_namespace",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",
@@ -3166,7 +3182,7 @@
     {
       "name": "unknown_top_level_is_rejected",
       "payload": {
-        "schema_version": "vv-agent.checkpoint.v9",
+        "schema_version": "vv-agent.checkpoint.v10",
         "run_definition_schema": "vv-agent.run-definition.v5",
         "run_definition": {
           "schema_version": "vv-agent.run-definition.v5",

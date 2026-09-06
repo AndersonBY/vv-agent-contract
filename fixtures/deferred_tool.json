@@ -1,7 +1,7 @@
 {
   "contract": "durable_deferred_tool",
   "schema_version": "vv-agent.durable-deferred-tool.v2",
-  "contract_version": "11.0.0",
+  "contract_version": "12.0.0",
   "scope": "framework_host_boundary_only",
   "versioning": {
     "forward_only": true,
@@ -240,7 +240,7 @@
     ]
   },
   "journal": {
-    "schema_version": "vv-agent.operation-journal.v4",
+    "schema_version": "vv-agent.operation-journal.v5",
     "states": [
       "planned",
       "started",
@@ -282,13 +282,21 @@
         "state": "succeeded",
         "result_required": true,
         "result_status": "SUCCESS",
+        "result_digest_required": true,
+        "result_digest_covers": "complete canonical ToolExecutionResult",
         "error_must_be_null": true
       },
       "failed": {
         "state": "failed",
-        "result_must_be_null": true,
+        "result_required": true,
+        "result_status": "ERROR",
+        "result_digest_required": true,
+        "result_digest_covers": "complete canonical ToolExecutionResult",
         "error_required": true,
-        "error_is_typed": true
+        "error_is_typed": true,
+        "error_is_projection_only": true,
+        "error_projection_source": "result",
+        "resume_source": "result, never error"
       }
     },
     "resolution_transitions": [
@@ -339,7 +347,9 @@
         "ERROR": {
           "journal_state": "failed",
           "event_status": "error",
-          "error_required": true
+          "error_required": true,
+          "result_required": true,
+          "result_digest_required": true
         }
       },
       "deferred_outcomes": "persist only deferred journal handles and tool_call_deferred events in this same batch CAS",
@@ -591,6 +601,10 @@
         "failed"
       ],
       "result_digest": "lowercase_sha256_of_rfc8785_canonical_typed_writer_result",
+      "failed_result_authority": "the complete ERROR result in the tombstone is authoritative for replay and Message recovery",
+      "operation_error_projection_source": "operation_journal.json#tool_journal_entry_wire.ordinary_failed_result_authority",
+      "operation_error_projection": "when a journal entry exposes OperationError, use the ordinary_failed_result_authority projection from operation_journal.json; it cannot replace the complete result",
+      "metadata_or_directive_guessing": false,
       "event_payload_digest": "lowercase_sha256_of_rfc8785_tool_call_completed_event",
       "same_store_atomicity": [
         "sqlite transaction",

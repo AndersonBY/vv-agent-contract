@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "11.0.0",
+  "contract_version": "12.0.0",
   "status": "pending-adoption",
   "implementations": {
     "python": {
@@ -16,7 +16,7 @@
       "verified_revision": null
     }
   },
-  "adoption_note": "11.0.0 is a breaking lifecycle release: Python and Rust must derive definitive ordinary and deferred tool receipt event IDs as evt_receipt_ plus the shared lowercase SHA-256 receipt identity key, preserve same-identity replay and tool_receipt_conflict semantics, and expose checkpoint-scoped controller wake reaping with explicit ambiguous-wake reconciliation before verification.",
+  "adoption_note": "12.0.0 is a breaking forward-only receipt recovery release: ordinary definitive ERROR receipts persist the complete result and digest, checkpoint and session resume derive Message directly from that result, and OperationError remains a normalized diagnostic projection. Only synthetic terminal tool_cancelled closures remain resultless and lack a definitive digest; model-visible tool_outcome_unknown receipts retain the complete result, digest, and resume_observation evidence. Python and Rust adoption is pending.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 11.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 12.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -11,7 +11,7 @@ can complete without its receipt becoming durable.
 
 ## Controller Commands
 
-The v9 controller seam is specified in `controller-command.md`. It admits one
+The v10 controller seam is specified in `controller-command.md`. It admits one
 closed `ControllerCommand` against a passive run handle and one checkpoint
 revision fence. `host_interaction` and `suspended` are non-terminal statuses;
 their command receipt and checkpoint revision are one CAS, and recovery keeps
@@ -49,7 +49,7 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v9` and
+suffix. Records require `schema_version=vv-agent.checkpoint.v10` and
 `run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
@@ -85,7 +85,8 @@ conflicting identity or result is rejected. The stable identity tuple is
 the stored `result_digest` is lowercase SHA-256 over the RFC 8785 canonical
 UTF-8 complete strict `vv-agent.tool-execution-result.v4` after the canonical
 typed-writer normalization: empty optional `metadata` is omitted and every
-optional field present after normalization is included. Receipt lookup is
+optional field present after normalization is included. The journal persists
+that complete `result` alongside `identity_key` and `result_digest`. Receipt lookup is
 keyed only by the stable identity tuple; the digest is a stored sibling value
 used to distinguish replay from conflict. A caller replaying the same identity
 and digest with a stale
@@ -99,6 +100,21 @@ the journal receipt itself; the ordinary receipt contract exposes no scan API.
 The resulting `tool_call_completed` event ID is exactly
 `evt_receipt_` plus `identity_key`; it contains no status, result digest,
 suffix, or version component and is reused by an identical replay.
+
+For an ordinary definitive `ERROR`, the complete `result` is persisted with
+`status_code=ERROR`, including custom metadata, a non-default directive, and
+legal artifact or cursor truncation fields. `result_digest` covers that exact
+result. The existing `OperationError {code, message, retryable}` is only the
+normalized diagnostic projection defined by
+`operation_journal.json#tool_journal_entry_wire.ordinary_failed_result_authority`;
+contradictory result/error pairs are invalid. Checkpoint and session recovery
+verify the digest and construct `Message` directly from `journal.result`; they
+do not infer metadata or directives from `OperationError`.
+After that strict result recovery, the resumed ordinary cycle processes the
+result's original directive through the existing directive path: `continue`
+proceeds, while `finish` and `wait_user` retain their existing terminal
+semantics. Receipt replay dispatches no tool or model call and does not replace
+the directive with a default.
 
 The top level has one exact current field set. Every listed field is present,
 including fields whose value may be null; readers do not synthesize omissions.
@@ -257,7 +273,7 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v9`;
+- `schema_version`, exactly `vv-agent.checkpoint.v10`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
@@ -503,7 +519,7 @@ process-local object is never serialized into the distributed envelope.
 
 ## Operation Journal
 
-`operation_journal.json` defines the current `vv-agent.operation-journal.v4`
+`operation_journal.json` defines the current `vv-agent.operation-journal.v5`
 model and tool entries. Every entry has a
 stable `operation_id`, positive `cycle_index`, `attempt`, `state`, and lowercase
 SHA-256 `request_digest`. States are:
@@ -525,11 +541,18 @@ entry fields are rejected.
 
 State-dependent definitive receipts are closed tool-journal fields: `succeeded`
 requires `identity_key`, `result_digest`, and a complete `result`, with
-`error=null`; `failed` requires the same two receipt fields and a typed
-`error`, with `result=null`. Both digests are persisted 64-character lowercase
-SHA-256 values. The synthetic `tool_cancelled` closure carries the operation's
-`identity_key` for stable journal identity, but no `result_digest` or
-definitive receipt; it retains the typed `error` and `resume_observation`.
+`error=null`; ordinary `failed` requires `identity_key`, `result_digest`, the
+complete `ERROR` `result`, and the typed `error` projection, with no
+`resume_observation`. A model-visible `tool_outcome_unknown` failed receipt
+uses those same fields and additionally requires `resume_observation` as
+unknown-effect evidence. Both digests are persisted 64-character lowercase
+SHA-256 values. Only synthetic terminal
+`tool_cancelled` closures carry the operation's `identity_key` for stable
+journal identity while retaining `result=null` and no definitive
+`result_digest`. A model-visible `tool_outcome_unknown` is an ordinary failed
+receipt with a complete `ERROR` result and definitive digest; its diagnostic
+`error` is projected from that result, while `resume_observation` remains the
+unknown-effect evidence.
 
 Invalid journal entries fail with the stable error code recorded beside each
 invalid case in `operation_journal.json`; a parser message alone is not the
@@ -579,18 +602,23 @@ An ordinary receipt's sole lookup key is `identity_key`. Its exact closed
 identity input is the UTF-8 JCS object
 `{attempt, checkpoint_key, operation_id, request_digest, tool_call_id}` with
 no optional or unknown fields; `identity_key` is its lowercase SHA-256. The
-stored journal receipt persists `identity_key` and the sibling `result_digest`;
-neither is an additional index or table. A definitive receipt event uses the
-same identity key as `evt_receipt_<identity_key>`; status, result digest,
-suffix, and version are excluded.
+stored journal receipt persists `identity_key`, its sibling `result_digest`,
+and the complete canonical `result`; none of these fields is an additional
+index or table. A definitive receipt event uses the same identity key as
+`evt_receipt_<identity_key>`; status, result digest, suffix, and version are
+excluded.
 
-`failed` is allowed only for a definitive outcome. A local failure before
-dispatch may move `planned` to `failed`, and an explicit provider/tool
-rejection may move `started` to `failed`. A timeout, cancellation, connection
-loss, or non-cooperative blocking-tool timeout after `started` is ambiguous
-unless the adapter can prove a definitive external outcome. Returning from a
-timeout wrapper does not prove that a worker thread or process stopped creating
-side effects.
+An ordinary `failed` receipt requires a complete recoverable `ERROR` result and
+definitive receipt. A local failure before dispatch may move `planned` to
+`failed`, and an explicit provider/tool rejection may move `started` to
+`failed` with definitive external-outcome evidence. A timeout, cancellation,
+connection loss, or non-cooperative blocking-tool timeout after `started`
+remains ambiguous unless the adapter can prove a definitive external outcome.
+The `surface_to_model` policy may close that ambiguity as `failed` with
+`tool_outcome_unknown` and a complete `ERROR` receipt for model continuity;
+that receipt and its `resume_observation` do not prove an external side effect
+outcome. Returning from a timeout wrapper does not prove that a worker thread
+or process stopped creating side effects.
 
 Approval, policy, and before-hook short circuits never write `started`.
 Approval-pending work may remain `planned`. The ordinary source `wait_user`
@@ -678,6 +706,9 @@ The model-facing unknown-outcome projection uses the existing strict
 `ToolExecutionResult` fields `content`, `status_code`, `directive`, and
 `error_code`; it has no structured `resume_observation` field. The journal's
 `resume_observation` remains the authoritative structured evidence carrier.
+The canonical `content` and `directive` are taken from the
+`tool_unknown_outcome_receipt.result` fixture entry and are preserved directly
+through recovery.
 
 Tool retry is automatic only under `retry_idempotent_only` and explicit
 `supported` idempotency. The same idempotency key is reused. The framework does
@@ -896,7 +927,7 @@ background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
 closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
-part of the current checkpoint.v9 wire. This restriction is explicit rather than silently
+part of the current checkpoint.v10 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence

@@ -405,6 +405,25 @@ for (const entryCase of operationJournal.valid_entries) {
     fail(`operation_journal/${entryCase.name}: request_digest mismatch`);
   }
 }
+for (const entryCase of operationJournal.valid_entries) {
+  const entry = entryCase.entry;
+  if (entry.kind !== "tool" || !["succeeded", "failed"].includes(entry.state)) {
+    continue;
+  }
+  if (entry.result === null) {
+    if (entryCase.name !== "tool_failed_tool_cancelled_closure" || "result_digest" in entry) {
+      fail(`operation_journal/${entryCase.name}: resultless closure shape mismatch`);
+    }
+    continue;
+  }
+  if (!entry.result || typeof entry.result !== "object" || typeof entry.result_digest !== "string") {
+    fail(`operation_journal/${entryCase.name}: result digest is required`);
+  }
+  const resultDigest = vectorValues(entry.result).sha256;
+  if (entry.result_digest !== resultDigest) {
+    fail(`operation_journal/${entryCase.name}: result_digest mismatch`);
+  }
+}
 if (WRITE) {
   fs.writeFileSync(
     path.join(ROOT, "fixtures", "operation_journal.json"),

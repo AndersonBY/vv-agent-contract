@@ -1,5 +1,27 @@
 # Changelog
 
+## 12.0.0 — pending adoption
+
+- Ordinary definitive `ERROR` tool receipts persist the complete canonical
+  `ToolExecutionResult` with `status_code=ERROR` in the existing journal
+  `result` field; `result_digest` covers that exact result.
+- Retained `OperationError` values are normalized diagnostic projections of
+  the result. Checkpoint and session recovery verify the digest and construct
+  `Message` directly from `journal.result`, preserving metadata, directive,
+  and legal truncation pointers without inference.
+- Synthetic terminal `tool_cancelled` closures remain the independent
+  resultless exception with no definitive `result_digest`; model-visible
+  `tool_outcome_unknown` receipts persist the complete `ERROR` result, digest,
+  and `resume_observation` evidence.
+- Advanced the operation-journal schema to v5 and checkpoint codec to v10;
+  public API, result-public, event, and distributed response shapes are
+  unchanged. No new projection, digest, table, index, API, compatibility
+  reader, or migration is introduced.
+
+This release remains `pending-adoption` until both language implementations
+pin the same contract revision and pass their real producer and cross-language
+quality gates.
+
 ## 11.0.0 — pending adoption
 
 - Defined one canonical definitive tool receipt event identity for ordinary

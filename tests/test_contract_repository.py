@@ -48,6 +48,64 @@ def receipt_event_id(
     return f"evt_receipt_{hashlib.sha256(canonical).hexdigest()}"
 
 
+def validate_strict_tool_execution_result(
+    result: dict[str, object],
+    fixture: dict[str, object],
+) -> None:
+    result_contract = fixture["result_contract"]
+    required = set(result_contract["required_fields"])
+    optional = set(result_contract["optional_fields"])
+    truncation_fields = {
+        "truncated",
+        "truncation_reason",
+        "original_bytes",
+        "visible_bytes",
+        "artifact",
+        "cursor",
+    }
+    artifact_pattern = re.compile(fixture["artifact_contract"]["path"]["pattern"])
+    keys = set(result)
+    if not required.issubset(keys) or not keys.issubset(required | optional):
+        raise ValueError("shape")
+    if any(result[key] is None for key in keys & optional):
+        raise ValueError("null optional")
+    if "error_code" in result and not isinstance(result["error_code"], str):
+        raise ValueError("error code")
+    if result.get("status_code") == "SUCCESS" and result.get("error_code") is not None:
+        raise ValueError("success error code")
+    if result.get("truncated") is not True:
+        if keys & truncation_fields:
+            raise ValueError("ordinary recovery fields")
+        return
+    for key in ("truncation_reason", "original_bytes", "visible_bytes"):
+        if key not in result:
+            raise ValueError("missing truncation field")
+    if result["visible_bytes"] != len(str(result["content"]).encode("utf-8")):
+        raise ValueError("visible bytes")
+    if int(result["visible_bytes"]) > int(result["original_bytes"]):
+        raise ValueError("size order")
+    reason = result["truncation_reason"]
+    if reason == "output_limit":
+        if "artifact" not in result or "cursor" in result:
+            raise ValueError("output recovery")
+        artifact = result["artifact"]
+        if not isinstance(artifact, dict) or not artifact_pattern.fullmatch(str(artifact["path"])):
+            raise ValueError("artifact path")
+    elif reason == "read_limit":
+        if "cursor" not in result or "artifact" in result:
+            raise ValueError("read recovery")
+        cursor = result["cursor"]
+        if not isinstance(cursor, dict) or set(cursor) != {
+            "kind",
+            "path",
+            "offset_chars",
+            "sha256",
+        }:
+            raise ValueError("cursor shape")
+    else:
+        raise ValueError("reason")
+
+
 class ContractRepositoryTests(unittest.TestCase):
     def test_cross_repository_checkout_keeps_contract_history(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
@@ -127,7 +185,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "11.0.0")
+        self.assertEqual(report["version"], "12.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -833,6 +891,10 @@ class ContractRepositoryTests(unittest.TestCase):
                 "include_present_optional_fields_after_normalization": True,
             },
         )
+        self.assertEqual(
+            fixture["result_contract"]["metadata"]["retryable"],
+            "boolean when present and retained in the canonical result",
+        )
         ordinary = fixture["canonical_results"]["ordinary"]
         self.assertEqual(
             set(ordinary),
@@ -841,6 +903,12 @@ class ContractRepositoryTests(unittest.TestCase):
         truncated = fixture["canonical_results"]["truncated_bash"]
         self.assertTrue(truncated["truncated"])
         self.assertTrue(truncated["artifact"]["path"].startswith(".vv-agent/artifacts/"))
+        truncated_error = fixture["canonical_results"]["truncated_error"]
+        self.assertEqual(truncated_error["status_code"], "ERROR")
+        self.assertEqual(truncated_error["directive"], "wait_user")
+        self.assertEqual(truncated_error["metadata"]["provider"], "gateway")
+        self.assertTrue(truncated_error["truncated"])
+        self.assertIn("artifact", truncated_error)
         self.assertEqual(fixture["read_file_contract"]["content_null"], False)
         self.assertEqual(
             fixture["cursor_contract"]["changed_source_error_code"], "stale_cursor"
@@ -858,61 +926,8 @@ class ContractRepositoryTests(unittest.TestCase):
             "success_result_has_non_null_error_code",
             {case["name"] for case in fixture["invalid_cases"]},
         )
-
-        required = set(fixture["result_contract"]["required_fields"])
-        optional = set(fixture["result_contract"]["optional_fields"])
-        truncation_fields = {
-            "truncated",
-            "truncation_reason",
-            "original_bytes",
-            "visible_bytes",
-            "artifact",
-            "cursor",
-        }
-        artifact_pattern = re.compile(fixture["artifact_contract"]["path"]["pattern"])
-
-        def validate_result(result: dict[str, object]) -> None:
-            keys = set(result)
-            if not required.issubset(keys) or not keys.issubset(required | optional):
-                raise ValueError("shape")
-            if any(result[key] is None for key in keys & optional):
-                raise ValueError("null optional")
-            if result.get("status_code") == "SUCCESS" and result.get("error_code") is not None:
-                raise ValueError("success error code")
-            if result.get("truncated") is not True:
-                if keys & truncation_fields:
-                    raise ValueError("ordinary recovery fields")
-                return
-            for key in ("truncation_reason", "original_bytes", "visible_bytes"):
-                if key not in result:
-                    raise ValueError("missing truncation field")
-            if result["visible_bytes"] != len(str(result["content"]).encode("utf-8")):
-                raise ValueError("visible bytes")
-            if int(result["visible_bytes"]) > int(result["original_bytes"]):
-                raise ValueError("size order")
-            reason = result["truncation_reason"]
-            if reason == "output_limit":
-                if "artifact" not in result or "cursor" in result:
-                    raise ValueError("output recovery")
-                artifact = result["artifact"]
-                if not isinstance(artifact, dict) or not artifact_pattern.fullmatch(str(artifact["path"])):
-                    raise ValueError("artifact path")
-            elif reason == "read_limit":
-                if "cursor" not in result or "artifact" in result:
-                    raise ValueError("read recovery")
-                cursor = result["cursor"]
-                if not isinstance(cursor, dict) or set(cursor) != {
-                    "kind",
-                    "path",
-                    "offset_chars",
-                    "sha256",
-                }:
-                    raise ValueError("cursor shape")
-            else:
-                raise ValueError("reason")
-
         for result in fixture["canonical_results"].values():
-            validate_result(result)
+            validate_strict_tool_execution_result(result, fixture)
 
         def mutate(base: dict[str, object], mutation: dict[str, object]) -> dict[str, object]:
             result = copy.deepcopy(base)
@@ -946,13 +961,13 @@ class ContractRepositoryTests(unittest.TestCase):
             with self.subTest(case=case["name"]):
                 candidate = mutate(fixture["canonical_results"][case["base"]], case["mutation"])
                 with self.assertRaises(ValueError):
-                    validate_result(candidate)
+                    validate_strict_tool_execution_result(candidate, fixture)
 
     def test_durable_deferred_tool_contract_is_closed_and_cas_recoverable(self) -> None:
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "11.0.0")
+        self.assertEqual(fixture["contract_version"], "12.0.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -1262,6 +1277,12 @@ class ContractRepositoryTests(unittest.TestCase):
 
         transitions = set(map(tuple, fixture["journal"]["resolution_transitions"]))
         self.assertEqual(transitions, {("deferred", "succeeded"), ("deferred", "failed")})
+        for state in ("succeeded", "failed"):
+            self.assertTrue(fixture["journal"]["resolved_entry_rules"][state]["result_digest_required"])
+            self.assertEqual(
+                fixture["journal"]["resolved_entry_rules"][state]["result_digest_covers"],
+                "complete canonical ToolExecutionResult",
+            )
         cas_writes = fixture["resolution"]["cas"]["write"]
         self.assertTrue(any("receipt" in item for item in cas_writes))
         self.assertTrue(any("outbox" in item for item in cas_writes))
@@ -1414,6 +1435,10 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             deferred["resolution"]["receipt_index"]["canonical_failed_entry"]["event_payload_digest"],
             by_name["failed_event_payload"]["rfc8785_sha256"],
+        )
+        self.assertEqual(
+            deferred["resolution"]["receipt_index"]["operation_error_projection_source"],
+            "operation_journal.json#tool_journal_entry_wire.ordinary_failed_result_authority",
         )
 
         def walk(value: object) -> None:
@@ -3516,7 +3541,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v9")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v10")
         self.assertIn("cancel_requested", fixture["required_fields"])
         self.assertIs(canonical["cancel_requested"], False)
         self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v5")
@@ -3537,7 +3562,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v9",
+                "required_value": "vv-agent.checkpoint.v10",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
@@ -3628,7 +3653,12 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertRegex(entry["result_digest"], r"^[0-9a-f]{64}$")
         self.assertIsNotNone(ordinary_entries[0]["result"])
         self.assertIsNone(ordinary_entries[0]["error"])
-        self.assertIsNone(ordinary_entries[1]["result"])
+        self.assertEqual(ordinary_entries[1]["result"]["status_code"], "ERROR")
+        self.assertEqual(ordinary_entries[1]["result"]["directive"], "wait_user")
+        self.assertEqual(
+            ordinary_entries[1]["result"]["metadata"],
+            {"provider": "gateway", "retryable": False},
+        )
         self.assertEqual(ordinary_entries[1]["error"]["code"], "provider_rejected")
         self.assertEqual(ordinary_entries[1]["error"]["message"], "rejected")
         closure_entry = operator_abort_terminal["tool_journal"][2]
@@ -3699,7 +3729,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertIs(claimed_cycle_case["payload"]["cancel_requested"], False)
         self.assertIn(
-            "old_v8_schema_is_rejected_forward_only",
+            "old_v9_schema_is_rejected_forward_only",
             {case["name"] for case in fixture["invalid_cases"]},
         )
         self.assertTrue(fixture["status_rules"]["old_checkpoint_discriminator_is_rejected_without_reader_fallback"])
@@ -3950,7 +3980,7 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertEqual(sum(sizes), expected_total)
             self.assertEqual(case["canonical_total_entries_utf8_bytes"], expected_total)
 
-    def test_invalid_current_v9_payloads_keep_required_checkpoint_shape(self) -> None:
+    def test_invalid_current_v10_payloads_keep_required_checkpoint_shape(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
         current = fixture["discriminator"]["required_value"]
         required = set(fixture["required_fields"])
@@ -4059,7 +4089,10 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(receipt_identity["receipt_primary_key"], "identity_key")
         self.assertNotIn("result_digest", receipt_identity["receipt_primary_key"])
         self.assertNotIn("receipt_index", receipt_identity)
-        self.assertEqual(receipt_identity["receipt_fields_persisted_in_journal"], ["identity_key", "result_digest"])
+        self.assertEqual(
+            receipt_identity["receipt_fields_persisted_in_journal"],
+            ["identity_key", "result_digest", "result"],
+        )
         self.assertEqual(receipt_identity["receipt_fields_derived"], [])
         self.assertNotIn("result_digest", receipt_identity["result_digest"]["required_fields"])
         self.assertNotIn("error", receipt_identity["result_digest"]["required_fields"])
@@ -4091,6 +4124,20 @@ class ContractRepositoryTests(unittest.TestCase):
                 sort_keys=True,
             ).encode("utf-8")
             self.assertEqual(hashlib.sha256(canonical).hexdigest(), vector["rfc8785_sha256"])
+        error_artifact = next(
+            vector for vector in receipt_identity["result_digest_vectors"] if vector["name"] == "error_truncated_artifact"
+        )["wire"]
+        self.assertEqual(error_artifact["status_code"], "ERROR")
+        self.assertEqual(error_artifact["truncation_reason"], "output_limit")
+        self.assertIn("artifact", error_artifact)
+        self.assertNotIn("cursor", error_artifact)
+        error_cursor = next(
+            vector for vector in receipt_identity["result_digest_vectors"] if vector["name"] == "error_truncated_cursor"
+        )["wire"]
+        self.assertEqual(error_cursor["status_code"], "ERROR")
+        self.assertEqual(error_cursor["truncation_reason"], "read_limit")
+        self.assertIn("cursor", error_cursor)
+        self.assertNotIn("artifact", error_cursor)
         self.assertEqual(
             receipt_identity["golden_result_digest"],
             receipt_identity["result_digest_vectors"][0]["rfc8785_sha256"],
@@ -4135,7 +4182,41 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             fixture["tool_journal_entry_wire"]["ordinary_receipt_fields"]["persisted_in_journal"],
-            ["identity_key", "result_digest"],
+            ["identity_key", "result_digest", "result"],
+        )
+        failed_authority = fixture["tool_journal_entry_wire"]["ordinary_failed_result_authority"]
+        self.assertEqual(failed_authority["result"], "complete strict vv-agent.tool-execution-result.v4 with status_code=ERROR")
+        self.assertEqual(failed_authority["error_type"], "OperationError")
+        self.assertEqual(
+            fixture["tool_journal_entry_wire"]["ordinary_failed_result_authority"]["error_projection"]["code"],
+            "non-empty result.error_code string, otherwise tool_operation_failed",
+        )
+        self.assertEqual(failed_authority["resume_message_source"], "journal.result directly after strict validation and result_digest verification")
+        self.assertFalse(failed_authority["metadata_or_directive_guessing"])
+        self.assertEqual(
+            failed_authority["directive_recovery"],
+            "after Message reconstruction, the resumed ordinary cycle processes result.directive through the existing path; wait_user remains terminal and no default directive is substituted",
+        )
+        projection_case = next(
+            case
+            for case in failed_authority["projection_cases"]
+            if case["name"] == "empty_error_code_uses_projection_fallbacks"
+        )
+        bounded_result_fixture = json.loads(
+            (ROOT / "fixtures/bounded_tool_result.json").read_text(encoding="utf-8")
+        )
+        validate_strict_tool_execution_result(projection_case["result"], bounded_result_fixture)
+        self.assertEqual(projection_case["result"]["status_code"], "ERROR")
+        self.assertEqual(projection_case["result"]["directive"], "continue")
+        self.assertEqual(projection_case["result"]["error_code"], "")
+        self.assertNotIn("metadata", projection_case["result"])
+        self.assertEqual(
+            projection_case["expected_error"],
+            {
+                "code": "tool_operation_failed",
+                "message": projection_case["result"]["content"],
+                "retryable": False,
+            },
         )
         self.assertFalse(
             fixture["tool_journal_entry_wire"]["ordinary_receipt_fields"]["additional_index_or_table"]
@@ -4148,7 +4229,15 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(
             state_fields["failed_definitive_receipt"]["required_fields"],
-            ["identity_key", "result_digest", "error"],
+            ["identity_key", "result_digest", "result", "error"],
+        )
+        self.assertEqual(
+            state_fields["failed_definitive_receipt"]["forbidden_fields"],
+            ["resume_observation"],
+        )
+        self.assertEqual(
+            state_fields["tool_outcome_unknown_failed_receipt"]["required_fields"],
+            ["identity_key", "result_digest", "result", "error", "resume_observation"],
         )
         self.assertEqual(
             state_fields["tool_cancelled_closure"]["forbidden_fields"],
@@ -4168,6 +4257,18 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertRegex(closure["identity_key"], r"^[0-9a-f]{64}$")
         self.assertNotIn("result_digest", closure)
         self.assertEqual(closure["resume_observation"]["operation_id"], closure["operation_id"])
+        unknown_receipt = next(
+            case for case in fixture["valid_entries"] if case["name"] == "tool_unknown_outcome_receipt"
+        )["entry"]
+        unknown_started = next(
+            case for case in fixture["valid_entries"] if case["name"] == "tool_unknown_idempotency"
+        )["entry"]
+        self.assertEqual(unknown_started["operation_id"], unknown_receipt["operation_id"])
+        self.assertEqual(unknown_receipt["result"]["status_code"], "ERROR")
+        self.assertEqual(unknown_receipt["result"]["directive"], "continue")
+        self.assertEqual(unknown_receipt["result_digest"], "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7")
+        self.assertEqual(unknown_receipt["error"]["code"], "tool_outcome_unknown")
+        self.assertEqual(unknown_receipt["resume_observation"]["state"], "ambiguous")
         succeeded_receipt = next(
             case for case in fixture["valid_entries"] if case["name"] == "tool_succeeded"
         )["entry"]
@@ -4181,9 +4282,16 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIsNotNone(succeeded_receipt["result"])
         self.assertIsNone(succeeded_receipt["error"])
         self.assertEqual(failed_receipt["state"], "failed")
-        self.assertIsNone(failed_receipt["result"])
+        self.assertEqual(failed_receipt["result"]["status_code"], "ERROR")
+        self.assertEqual(failed_receipt["result"]["directive"], "wait_user")
+        self.assertEqual(
+            failed_receipt["result"]["metadata"],
+            {"provider": "gateway", "retryable": False},
+        )
         self.assertEqual(failed_receipt["error"]["code"], "provider_rejected")
-        self.assertEqual(failed_receipt["error"]["message"], error_empty_metadata["reader_input"]["content"])
+        self.assertEqual(failed_receipt["error"]["message"], failed_receipt["result"]["content"])
+        self.assertEqual(failed_receipt["error"]["retryable"], failed_receipt["result"]["metadata"]["retryable"])
+        self.assertNotIn("resume_observation", failed_receipt)
         for case in fixture["valid_entries"]:
             entry = case["entry"]
             if entry.get("kind") != "tool" or entry.get("state") not in {"succeeded", "failed"}:
@@ -4219,7 +4327,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 ).encode("utf-8")
                 self.assertEqual(hashlib.sha256(result_bytes).hexdigest(), entry["result_digest"])
             elif case["name"] != "tool_failed_tool_cancelled_closure":
-                self.assertEqual(entry["result_digest"], error_empty_metadata["rfc8785_sha256"])
+                self.assertIsNotNone(entry["result"], case["name"])
         invalid_entries = {case["name"]: case for case in fixture["invalid_entries"]}
         self.assertEqual(
             invalid_entries["tool_failed_tool_cancelled_closure_missing_resume_observation"]["error_code"],
@@ -4236,6 +4344,48 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             invalid_entries["tool_failed_missing_result_digest"]["error_code"],
             "operation_result_digest_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_resume_observation_forbidden"]["error_code"],
+            "operation_resume_observation_forbidden",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_resume_observation_forbidden"]["mutation"]["add"][
+                "resume_observation"
+            ]["operation_id"],
+            failed_receipt["operation_id"],
+        )
+        self.assertEqual(
+            invalid_entries["tool_unknown_outcome_missing_resume_observation"]["error_code"],
+            "operation_resume_observation_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_unknown_outcome_error_projection_mismatch"]["error_code"],
+            "operation_error_projection_mismatch",
+        )
+        self.assertEqual(
+            invalid_entries["tool_unknown_outcome_unknown_field"]["error_code"],
+            "operation_entry_unknown_field",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_missing_result"]["error_code"],
+            "operation_result_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_null_result"]["error_code"],
+            "operation_result_required",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_success_status"]["error_code"],
+            "operation_failed_result_status_invalid",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_result_digest_mismatch"]["error_code"],
+            "operation_result_digest_mismatch",
+        )
+        self.assertEqual(
+            invalid_entries["tool_failed_error_projection_mismatch"]["error_code"],
+            "operation_error_projection_mismatch",
         )
         self.assertEqual(
             invalid_entries["tool_failed_missing_error"]["error_code"],
@@ -4258,6 +4408,27 @@ class ContractRepositoryTests(unittest.TestCase):
             receipt_cases["same_identity_different_result_is_typed_conflict"]["expected"]["error"],
             "tool_receipt_conflict",
         )
+        unknown_receipt_case = receipt_cases["unknown_outcome_receipt_crash_before_cycle_and_session_commit"]
+        self.assertEqual(
+            hashlib.sha256(
+                json.dumps(
+                    unknown_receipt_case["event_payload"],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest(),
+            unknown_receipt_case["event_payload_digest"],
+        )
+        self.assertEqual(
+            unknown_receipt_case["expected"]["same_identity_replay_writes"],
+            0,
+        )
+        self.assertEqual(unknown_receipt_case["expected"]["resume_tool_calls"], 0)
+        self.assertEqual(
+            unknown_receipt_case["expected"]["replayed_event_payload_digest"],
+            unknown_receipt_case["event_payload_digest"],
+        )
         self.assertEqual(
             receipt_cases["crash_after_receipt_stale_replay"]["event_id"],
             f"evt_receipt_{receipt_cases['crash_after_receipt_stale_replay']['identity_key']}",
@@ -4277,6 +4448,17 @@ class ContractRepositoryTests(unittest.TestCase):
             ],
         )
         self.assertFalse(receipt_cases["two_definitive_results_are_serialized"]["expected"]["parallel_cas_retry"])
+        self.assertEqual(
+            recovery["durable_failed_tool_result_is_replayed_from_result"]["expected"]["message_source"],
+            "journal.result",
+        )
+        self.assertFalse(
+            recovery["durable_failed_tool_result_is_replayed_from_result"]["expected"]["metadata_or_directive_guessing"]
+        )
+        unknown_recovery = recovery["started_tool_surfaces_unknown_outcome_to_model_by_default"]["expected"]
+        self.assertEqual(unknown_recovery["result_digest"], "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7")
+        self.assertEqual(unknown_recovery["message_source"], "journal.result")
+        self.assertEqual(unknown_recovery["event_id"], "evt_receipt_f0054bb9d98890a43e6d2e21566a27bf9393ec2cd6855d8ed61aa4548c6a8743")
         self.assertEqual(
             fixture["resume_observation"]["canonical_durable_carriers"],
             [
@@ -4471,13 +4653,22 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["outcome_classification"]["surface_to_model"]["error_code"],
             "tool_outcome_unknown",
         )
-        self.assertTrue(fixture["outcome_classification"]["surface_to_model"]["synthetic_failure"])
+        self.assertTrue(fixture["outcome_classification"]["surface_to_model"]["framework_materialized_result"])
+        self.assertFalse(fixture["outcome_classification"]["surface_to_model"]["resultless_closure"])
+        self.assertFalse(fixture["outcome_classification"]["cycle_abort_tool_closure"]["framework_materialized_result"])
+        self.assertTrue(fixture["outcome_classification"]["cycle_abort_tool_closure"]["resultless_closure"])
         self.assertFalse(
             fixture["outcome_classification"]["surface_to_model"]["definitive_external_outcome"]
         )
+        self.assertTrue(
+            fixture["outcome_classification"][
+                "ordinary_failed_requires_complete_recoverable_error_receipt"
+            ]
+        )
+        self.assertTrue(fixture["outcome_classification"]["unknown_outcome_is_not_external_failure_proof"])
         self.assertEqual(
-            fixture["outcome_classification"]["synthetic_unknown_outcome_failures_are_not_external_failure_proof"],
-            ["tool_outcome_unknown", "tool_cancelled"],
+            fixture["outcome_classification"]["unknown_outcome_semantics"],
+            "ordinary ERROR receipt with resume_observation; neither proves an external side-effect outcome",
         )
         self.assertEqual(
             recovery["started_model_default_bounded_duplicate_risk_retry"]["expected"]["attempt"],
@@ -4980,10 +5171,72 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(golden["out_of_scope_excluded"], ["cmd-e"])
         self.assertEqual(golden["non_returned"], ["cmd-c", "cmd-d"])
 
+    def test_checkpoint_store_retains_failed_deferred_tombstone_for_replay(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_store.json").read_text(encoding="utf-8"))
+        replay = fixture["failed_tool_receipt_recovery"]["deferred_failed_tombstone_replay"]
+        self.assertEqual(
+            fixture["failed_tool_receipt_recovery"]["operation_error_projection_source"],
+            "operation_journal.json#tool_journal_entry_wire.ordinary_failed_result_authority",
+        )
+        self.assertEqual(replay["message_source"], "retained_tombstone.result")
+        self.assertEqual(replay["result_status"], "ERROR")
+        self.assertEqual(replay["tool_calls_on_replay"], 0)
+        self.assertEqual(replay["same_handle_same_result_replay"]["writes"], 0)
+        self.assertTrue(replay["same_handle_same_result_replay"]["event_id_preserved"])
+        self.assertTrue(replay["same_handle_same_result_replay"]["event_payload_digest_preserved"])
+
+    def test_checkpoint_resume_named_result_sources_match_operation_journal(self) -> None:
+        checkpoint = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
+        operation = json.loads((ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8"))
+        entries = {case["name"]: case["entry"] for case in operation["valid_entries"]}
+
+        def named_sources(value: object, path: tuple[object, ...] = ()):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    child_path = path + (key,)
+                    if isinstance(child, str):
+                        entry_name, separator, suffix = child.rpartition(".")
+                        if separator and suffix == "result" and entry_name in entries:
+                            yield child_path, child, value
+                    yield from named_sources(child, child_path)
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    yield from named_sources(child, path + (index,))
+
+        runner_identities: dict[str, list[tuple[str, dict[str, object]]]] = {}
+        for runner_case in checkpoint["runner_cases"]:
+            initial_journal = runner_case.get("run", {}).get("initial_journal")
+            if not isinstance(initial_journal, dict):
+                continue
+            for _, source, _ in named_sources(runner_case.get("expected", {})):
+                entry_name = source.rsplit(".", 1)[0]
+                runner_identities.setdefault(entry_name, []).append(
+                    (runner_case["name"], initial_journal)
+                )
+
+        references = list(named_sources(checkpoint))
+        self.assertTrue(references)
+        for path, source, owner in references:
+            entry_name = source.rsplit(".", 1)[0]
+            entry = entries[entry_name]
+            self.assertIsInstance(entry.get("operation_id"), str, path)
+            self.assertIsInstance(entry.get("tool_call_id"), str, path)
+            self.assertIsInstance(entry.get("tool_name"), str, path)
+            self.assertIsInstance(entry.get("result_digest"), str, path)
+            self.assertEqual(entry["result"].get("tool_call_id"), entry["tool_call_id"], path)
+            digest = owner.get("result_digest")
+            if digest is None and owner.get("journal_result") == source:
+                digest = owner.get("journal_result_digest")
+            self.assertEqual(digest, entry["result_digest"], path)
+            for case_name, initial_journal in runner_identities.get(entry_name, []):
+                for field in ("operation_id", "tool_call_id", "tool_name"):
+                    self.assertEqual(initial_journal.get(field), entry[field], f"{case_name}: {field}")
+
     def test_checkpoint_resume_fixture_covers_all_fault_boundaries(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
-        self.assertEqual(fixture["version"], 9)
-        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v9")
+        operation_fixture = json.loads((ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8"))
+        self.assertEqual(fixture["version"], 10)
+        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v10")
         self.assertIn("cancel_requested", fixture["checkpoint_wire"]["required_fields"])
         self.assertEqual(
             fixture["cycle_semantics"]["cycle_aborted_cycle_index_relation"],
@@ -4994,6 +5247,9 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["ambiguity_phases"]["post_recovery_surface_to_model"]["error_code"],
             "tool_outcome_unknown",
         )
+        self.assertTrue(fixture["ambiguity_phases"]["post_recovery_surface_to_model"]["failed_receipt_written"])
+        self.assertTrue(fixture["ambiguity_phases"]["post_recovery_surface_to_model"]["model_surface"])
+        self.assertFalse(fixture["ambiguity_phases"]["pre_recovery"]["model_surface"])
         self.assertEqual(
             fixture["ambiguity_phases"]["post_recovery_surface_to_model"]["resume_observation_carrier"],
             "tool_journal_entry.resume_observation",
@@ -5016,6 +5272,43 @@ class ContractRepositoryTests(unittest.TestCase):
             ["status", "result_digest", "suffix", "version_marker"],
         )
         self.assertTrue(fixture["ordinary_tool_receipt_semantics"]["receipt_first"])
+        failed_result = fixture["ordinary_tool_receipt_semantics"]["failed_result"]
+        self.assertEqual(failed_result["status_code"], "ERROR")
+        self.assertEqual(failed_result["persisted_field"], "tool_journal.result")
+        self.assertEqual(failed_result["resume_message_source"], "tool_journal.result")
+        self.assertFalse(failed_result["metadata_or_directive_guessing"])
+        self.assertEqual(
+            fixture["fault_matrix"][6]["failed_receipt_result_source"],
+            "tool_journal.result",
+        )
+        self.assertEqual(
+            fixture["fault_matrix"][6]["failed_receipt_result_digest"],
+            "3b398ff7e2a60d6ada6c071bf0371d1a14624450c959a292d2e360a0d9a96c79",
+        )
+        self.assertFalse(fixture["fault_matrix"][6]["cycle_commit_before_crash"])
+        self.assertFalse(fixture["fault_matrix"][6]["session_commit_before_crash"])
+        self.assertEqual(fixture["fault_matrix"][6]["recovery_tool_calls"], 0)
+        self.assertEqual(
+            next(
+                case for case in fixture["runner_cases"]
+                if case["name"] == "durable_failed_tool_receipt_replays_without_call"
+            )["expected"]["message"],
+            {"role": "tool", "content": "rejected", "tool_call_id": "call_2"},
+        )
+        failed_replay = next(
+            case for case in fixture["runner_cases"]
+            if case["name"] == "durable_failed_tool_receipt_replays_without_call"
+        )["expected"]
+        self.assertEqual(failed_replay["status"], "wait_user")
+        self.assertEqual(failed_replay["completion_reason"], "wait_user")
+        self.assertEqual(failed_replay["directive"], "wait_user")
+        self.assertEqual(failed_replay["model_steps"], 0)
+        self.assertEqual(failed_replay["model_dispatches"], 0)
+        self.assertEqual(failed_replay["tool_calls"], 0)
+        self.assertEqual(
+            failed_replay["event_append_after_receipt_crash"],
+            "same tool_call_completed identity, zero duplicate append",
+        )
         self.assertEqual(
             fixture["ordinary_tool_receipt_semantics"]["stale_same_identity_same_result"],
             "zero_write_replay",
@@ -5056,28 +5349,31 @@ class ContractRepositoryTests(unittest.TestCase):
             cases["started_model_default_retry_with_duplicate_risk"]["expected"]["max_attempts"],
             2,
         )
-        self.assertEqual(
-            cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"][
-                "model_visible_error_code"
-            ],
-            "tool_outcome_unknown",
-        )
-        self.assertEqual(
-            cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"][
-                "journal_state"
-            ],
-            "failed",
-        )
+        unknown_case = cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]
+        unknown_expected = unknown_case["expected"]
+        unknown_post = unknown_expected["post_recovery_surface"]
+        unknown_pre = unknown_expected["pre_recovery"]
+        unknown_receipt = next(
+            case for case in operation_fixture["valid_entries"] if case["name"] == "tool_unknown_outcome_receipt"
+        )["entry"]
+        self.assertEqual(unknown_case["run"]["initial_journal"]["operation_id"], unknown_receipt["operation_id"])
+        self.assertEqual(unknown_case["run"]["initial_journal"]["tool_call_id"], unknown_receipt["tool_call_id"])
+        self.assertEqual(unknown_post["result_source"], "tool_unknown_outcome_receipt.result")
+        self.assertEqual(unknown_post["result_digest"], unknown_receipt["result_digest"])
+        self.assertEqual(unknown_post["tool_journal_resume_observation"]["operation_id"], unknown_receipt["operation_id"])
+        self.assertEqual(unknown_receipt["result"]["tool_call_id"], unknown_case["run"]["initial_journal"]["tool_call_id"])
+        self.assertEqual(unknown_post["model_visible_error_code"], "tool_outcome_unknown")
+        self.assertEqual(unknown_post["journal_state"], "failed")
+        self.assertNotIn("model_visible_error_code", unknown_pre)
+        self.assertFalse(unknown_pre["model_surface"])
         self.assertFalse(
-            cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"][
-                "definitive_external_outcome"
-            ]
+            unknown_post["definitive_external_outcome"]
         )
         self.assertEqual(matrix[20]["pre_recovery"]["journal_state"], "ambiguous")
         self.assertFalse(matrix[20]["pre_recovery"]["failed_receipt_written"])
         self.assertEqual(matrix[20]["post_recovery_surface"]["journal_state"], "failed")
         self.assertEqual(matrix[20]["post_recovery_surface"]["error_code"], "tool_outcome_unknown")
-        default_observation = cases["ambiguous_tool_surfaces_unknown_outcome_by_default"]["expected"]
+        default_observation = unknown_post
         self.assertEqual(
             set(default_observation["tool_journal_resume_observation"]),
             {
@@ -5101,10 +5397,10 @@ class ContractRepositoryTests(unittest.TestCase):
             matrix_by_id["F18"]["closure"]["event_order"],
             ["operation_ambiguous", "cycle_aborted", "run_state_changed", "run_failed"],
         )
+        timeout_case = cases["started_timeout_or_tool_execution_failed_remains_ambiguous"]["expected"]
+        self.assertNotIn("model_visible_error_code", timeout_case["pre_recovery"])
         self.assertEqual(
-            cases["started_timeout_or_tool_execution_failed_remains_ambiguous"]["expected"][
-                "model_visible_error_code"
-            ],
+            timeout_case["post_recovery_surface"]["model_visible_error_code"],
             "tool_outcome_unknown",
         )
         self.assertFalse(
@@ -5627,7 +5923,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "11.0.0")
+        self.assertEqual(fixture["contract_version"], "12.0.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -6530,7 +6826,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_records (", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_notification_outbox (", sql)
         self.assertIn("response_digest TEXT", sql)
-        self.assertIn("strict v9 codec", sql)
+        self.assertIn("strict v10 codec", sql)
         self.assertIn("model_call_journal", sql)
         self.assertNotIn("deferred_resolution_receipts" + " TEXT NOT NULL", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS deferred_resolution_receipts (", sql)
@@ -6568,7 +6864,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v9",
+                    "vv-agent.checkpoint.v10",
                     "vv-agent.run-definition.v5",
                     "{}",
                     "task-1",

@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `11.0.0` defines one task-neutral, closed admission seam for durable
+Contract `12.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -164,7 +164,7 @@ never `recovery_dispatch`.
 
 ## Checkpoint state and cycle terminology
 
-The v9 checkpoint discriminator is `vv-agent.checkpoint.v9`; no v8 reader,
+The v10 checkpoint discriminator is `vv-agent.checkpoint.v10`; no v9 reader,
 namespace probe, or migration fallback exists. A checkpoint always persists
 the complete strict `active_host_interaction` request (including prompt and
 schema discriminator) and `suspended_origin`, both closed objects or null:
@@ -364,7 +364,7 @@ reconcile protocol. Delivery is at-least-once and observer deduplication is
 required; an uncertain callback is ambiguous, not exactly-once. The reaper
 routes ambiguous rows to explicit delivered/retry/abort reconciliation and
 never blind-retries them. It is never reused as a recovery wake. SQLite only enforces scalar
-lifecycle relations; strict v9 codec validation owns nested JSON shape and
+lifecycle relations; strict v10 codec validation owns nested JSON shape and
 UTF-8/digest limits.
 Redis must expose equivalent replay, conflict, stale, lease, and ambiguity
 semantics.

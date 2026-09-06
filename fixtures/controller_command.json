@@ -1,12 +1,12 @@
 {
-  "contract_version": "11.0.0",
+  "contract_version": "12.0.0",
   "schema_version": "vv-agent.controller-command.v1",
   "scope": {
     "task_neutral": true,
     "deferred_resolution_is_separate": true,
     "terminal_successor_is_separate": true,
     "ask_user_terminal_semantics_unchanged": true,
-    "checkpoint_schema": "vv-agent.checkpoint.v9",
+    "checkpoint_schema": "vv-agent.checkpoint.v10",
     "cancel_requested_field": "required boolean",
     "cycle_aborted_event": "RunEvent v5",
     "forbidden_wire_members": [

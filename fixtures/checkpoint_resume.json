@@ -1,7 +1,7 @@
 {
   "contract": "checkpoint_resume",
-  "version": 9,
-  "checkpoint_schema": "vv-agent.checkpoint.v9",
+  "version": 10,
+  "checkpoint_schema": "vv-agent.checkpoint.v10",
   "run_definition_schema": "vv-agent.run-definition.v5",
   "checkpoint_wire": {
     "required_fields": [
@@ -11,7 +11,7 @@
     ],
     "active_host_interaction": "complete closed vv-agent.host-interaction-request.v1 object including prompt or null; restored before wake after crash",
     "suspended_origin": "closed {status, active_host_interaction} object or null",
-    "old_discriminator": "vv-agent.checkpoint.v8",
+    "old_discriminator": "vv-agent.checkpoint.v9",
     "old_discriminator_error": "checkpoint_schema_unsupported",
     "forward_only_reader": true
   },
@@ -51,8 +51,12 @@
     "post_recovery_surface_to_model": {
       "input_state": "ambiguous",
       "durable_state": "failed",
+      "failed_receipt_written": true,
+      "model_surface": true,
       "error_code": "tool_outcome_unknown",
       "resume_observation_carrier": "tool_journal_entry.resume_observation",
+      "journal_result": "tool_unknown_outcome_receipt.result",
+      "journal_result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
       "definitive_external_outcome": false
     }
   },
@@ -80,6 +84,14 @@
       "version_marker"
     ],
     "result_digest": "RFC 8785 canonical complete_tool_execution_result after strict typed-writer normalization followed by lowercase SHA-256",
+    "failed_result": {
+      "status_code": "ERROR",
+      "persisted_field": "tool_journal.result",
+      "diagnostic_projection": "OperationError {code, message, retryable} derived from result and never used for recovery",
+      "resume_message_source": "tool_journal.result",
+      "metadata_or_directive_guessing": false,
+      "result_error_consistency": "error must equal the normalized projection of result"
+    },
     "receipt_first": true,
     "stale_same_identity_same_result": "zero_write_replay",
     "different_result": "tool_receipt_conflict with zero writes",
@@ -127,7 +139,11 @@
     "host_interaction_notification_delivery": "at_least_once_with_observer_deduplication",
     "host_interaction_notification_ambiguity": {
       "operation": "reconcile_host_interaction_notification(notification_id, payload_digest, outcome)",
-      "outcomes": ["delivered", "retry", "abort"],
+      "outcomes": [
+        "delivered",
+        "retry",
+        "abort"
+      ],
       "reaper": "retry pending or expired claimed; route ambiguous to explicit reconciliation; retain aborted as terminal audit",
       "blind_retry_ambiguous": false
     },
@@ -607,6 +623,78 @@
       }
     },
     {
+      "name": "durable_failed_tool_receipt_replays_without_call",
+      "run": {
+        "agent": {
+          "name": "checkpoint-agent",
+          "instructions": "Use available tools and return the model response.",
+          "model": "scripted"
+        },
+        "input": "process item 42",
+        "run_config": {
+          "max_cycles": 3,
+          "no_tool_policy": "finish",
+          "checkpoint_config": {
+            "key": "case-key/failed",
+            "resume_policy": "resume_if_present",
+            "store": {
+              "kind": "in_memory"
+            }
+          }
+        },
+        "initial_journal": {
+          "kind": "tool",
+          "operation_id": "op_tool_cycle_1_call_2",
+          "state": "failed",
+          "cycle_index": 1,
+          "attempt": 1,
+          "request_digest": "6b05beb10de1bae7a2989e39294d4a1f02f4f4b357437bc198f47b6b7be85b49",
+          "tool_name": "write_record",
+          "tool_call_id": "call_2",
+          "idempotency_key": "idem_5a40b4f1",
+          "idempotency_support": "unknown",
+          "result_digest": "3b398ff7e2a60d6ada6c071bf0371d1a14624450c959a292d2e360a0d9a96c79",
+          "result": {
+            "tool_call_id": "call_2",
+            "content": "rejected",
+            "status_code": "ERROR",
+            "directive": "wait_user",
+            "error_code": "provider_rejected",
+            "metadata": {
+              "provider": "gateway",
+              "retryable": false
+            }
+          },
+          "error": {
+            "code": "provider_rejected",
+            "message": "rejected",
+            "retryable": false
+          }
+        },
+        "model_steps": []
+      },
+      "expected": {
+        "status": "wait_user",
+        "completion_reason": "wait_user",
+        "model_steps": 0,
+        "model_dispatches": 0,
+        "tool_calls": 0,
+        "replayed_tool_results": 1,
+        "directive": "wait_user",
+        "message_source": "journal.result",
+        "message": {
+          "role": "tool",
+          "content": "rejected",
+          "tool_call_id": "call_2"
+        },
+        "replayed_result_relation": "byte_equal",
+        "metadata_or_directive_guessing": false,
+        "operation_error_used_for_recovery": false,
+        "session_commit_after_receipt_crash": "one replayed message then one commit",
+        "event_append_after_receipt_crash": "same tool_call_completed identity, zero duplicate append"
+      }
+    },
+    {
       "name": "ordinary_tool_receipt_precedes_deferred_batch_admission",
       "run": {
         "initial_journal": {
@@ -621,8 +709,13 @@
           "directive": "continue"
         },
         "batch": {
-          "outcomes": ["completed", "deferred"],
-          "admission_inputs": ["deferred"]
+          "outcomes": [
+            "completed",
+            "deferred"
+          ],
+          "admission_inputs": [
+            "deferred"
+          ]
         }
       },
       "expected": {
@@ -659,28 +752,43 @@
           "kind": "tool",
           "state": "started",
           "cycle_index": 1,
+          "operation_id": "op_tool_cycle_1_call_unknown",
           "tool_name": "write_record",
-          "tool_call_id": "call_1",
+          "tool_call_id": "call_2",
           "idempotency_support": "unknown"
         }
       },
       "expected": {
         "status": "running",
         "tool_calls": 0,
-        "journal_state": "failed",
-        "failure_error_code": "tool_outcome_unknown",
-        "tool_journal_resume_observation": {
-          "operation_id": "op_tool_cycle_1_call_1",
-          "operation_kind": "tool",
-          "cycle_index": 1,
-          "state": "ambiguous",
-          "risk": "unknown_tool_side_effect",
-          "idempotency_support": "unknown"
+        "pre_recovery": {
+          "journal_state": "ambiguous",
+          "failed_receipt_written": false,
+          "model_surface": false
+        },
+        "post_recovery_surface": {
+          "input_state": "ambiguous",
+          "journal_state": "failed",
+          "failed_receipt_written": true,
+          "failure_error_code": "tool_outcome_unknown",
+          "result_source": "tool_unknown_outcome_receipt.result",
+          "result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
+          "tool_journal_resume_observation": {
+            "operation_id": "op_tool_cycle_1_call_unknown",
+            "operation_kind": "tool",
+            "cycle_index": 1,
+            "state": "ambiguous",
+            "risk": "unknown_tool_side_effect",
+            "idempotency_support": "unknown"
+          },
+          "event": "tool_call_completed",
+          "event_status": "error",
+          "model_visible_error_code": "tool_outcome_unknown",
+          "message_source": "journal.result",
+          "tool_calls_after_recovery": 0,
+          "definitive_external_outcome": false
         },
         "terminal_result_resume_observations_field": "resume_observations",
-        "event": "tool_call_completed",
-        "event_status": "error",
-        "model_visible_error_code": "tool_outcome_unknown",
         "unknown_effect_warning": true,
         "definitive_external_outcome": false,
         "silent_success": false
@@ -693,8 +801,10 @@
           "kind": "tool",
           "state": "started",
           "cycle_index": 1,
-          "tool_name": "remote_write",
-          "tool_call_id": "call-unknown"
+          "operation_id": "op_tool_cycle_1_call_unknown",
+          "tool_name": "write_record",
+          "tool_call_id": "call_2",
+          "idempotency_support": "unknown"
         },
         "observed_outcomes": [
           "timeout",
@@ -703,10 +813,22 @@
         "adapter_proves_definitive_outcome": false
       },
       "expected": {
-        "journal_state": "ambiguous",
-        "failed_receipt_written": false,
-        "unknown_external_effect": true,
-        "model_visible_error_code": "tool_outcome_unknown"
+        "pre_recovery": {
+          "journal_state": "ambiguous",
+          "failed_receipt_written": false,
+          "model_surface": false
+        },
+        "post_recovery_surface": {
+          "input_state": "ambiguous",
+          "journal_state": "failed",
+          "failed_receipt_written": true,
+          "result_source": "tool_unknown_outcome_receipt.result",
+          "result_digest": "6d2369de4c6a281cf0a7123684764a2b982a887ef2e710abcfc30a0355c0acc7",
+          "model_visible_error_code": "tool_outcome_unknown",
+          "message_source": "journal.result",
+          "definitive_external_outcome": false
+        },
+        "unknown_external_effect": true
       }
     },
     {
@@ -1340,8 +1462,15 @@
     {
       "id": "F7",
       "point": "after_tool_receipt_before_cycle_commit",
-      "durable_state": "tool_succeeded",
-      "resume": "replay_receipt",
+      "durable_state": "tool_succeeded_or_failed_with_definitive_result",
+      "resume": "replay_receipt_from_journal_result",
+      "failed_receipt_result_source": "tool_journal.result",
+      "failed_receipt_result_digest": "3b398ff7e2a60d6ada6c071bf0371d1a14624450c959a292d2e360a0d9a96c79",
+      "failed_receipt_operation_error_is_not_recovery_source": true,
+      "cycle_commit_before_crash": false,
+      "session_commit_before_crash": false,
+      "recovery_commits": "one cycle/session commit after the byte-equal result is converted to Message",
+      "recovery_tool_calls": 0,
       "ambiguity": false
     },
     {
@@ -1472,7 +1601,10 @@
       "resume": "cycle_aborted_reason_cancelled_closes_unclosed_tools",
       "ambiguity": true,
       "cancel_requested_revision_increment": 0,
-      "cancel_requested_transition": {"from": false, "to": true},
+      "cancel_requested_transition": {
+        "from": false,
+        "to": true
+      },
       "closure": {
         "cycle_aborted_event_id": "evt_cycle_aborted_cancelled",
         "tool_state": "failed",
@@ -1583,10 +1715,10 @@
     "controller_command_conflict_zero_write": true,
     "controller_command_stale_fence_zero_write": true,
     "controller_command_ambiguity_remains_explicit_during_cancel": true,
-    "controller_command_deferred_barrier_precedes_control": true
-    ,"host_interaction_claim_release_is_atomic": true
-    ,"controller_command_suspend_cancel_abort_do_not_wake": true
-    ,"controller_command_replay_after_revision_advance_is_idempotent": true
+    "controller_command_deferred_barrier_precedes_control": true,
+    "host_interaction_claim_release_is_atomic": true,
+    "controller_command_suspend_cancel_abort_do_not_wake": true,
+    "controller_command_replay_after_revision_advance_is_idempotent": true
   },
   "terminal_precedence": [
     "committed_terminal",

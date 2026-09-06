@@ -223,10 +223,17 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `11.0.0` applies the sparse bounded-result rules in
+Contract `12.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
+Ordinary definitive `ERROR` receipts persist the complete result and digest;
+the existing `OperationError` is a normalized diagnostic projection only, and
+checkpoint/session recovery derives `Message` directly from the result. Only
+synthetic terminal `tool_cancelled` closures remain resultless and have no
+definitive result digest. A model-visible `tool_outcome_unknown` is an ordinary
+failed receipt with the complete `ERROR` result and digest; its
+`resume_observation` remains the unknown-effect evidence.
 
 Microcompaction is candidate-aware and performs one plan/application pass per
 cycle. Every replaced result is first persisted under
@@ -294,7 +301,7 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v9` and embed an exact
+Checkpoint records require `vv-agent.checkpoint.v10` and embed an exact
 `vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.

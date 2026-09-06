@@ -124,6 +124,36 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 12.0.0
+
+`12.0.0` is a major forward-only receipt-recovery release. It advances the
+operation-journal schema to `vv-agent.operation-journal.v5` and the checkpoint
+codec to `vv-agent.checkpoint.v10`:
+
+- ordinary definitive `ERROR` receipts persist the complete strict
+  `vv-agent.tool-execution-result.v4` in the existing journal `result` field;
+  `result_digest` is the RFC 8785/SHA-256 digest of that exact result,
+  including metadata, directive, and legal artifact or cursor truncation
+  fields;
+- the existing `OperationError {code, message, retryable}` is only a
+  normalized diagnostic projection of that result. Its values must be
+  consistent with the result and it is never a recovery source;
+- checkpoint and session resume verify the digest and derive `Message` directly
+  from `journal.result`, with no metadata or directive guessing;
+- only synthetic terminal `tool_cancelled` closures remain an independent
+  exception with `result=null` and no definitive `result_digest`; a
+  model-visible `tool_outcome_unknown` is an ordinary failed receipt with the
+  complete `ERROR` result and digest, plus retained `resume_observation`
+  evidence;
+- deferred ERROR tombstones retain their complete result and digest under the
+  existing receipt index. No new projection, digest, table, index, API,
+  compatibility reader, or migration is introduced. Public API v7,
+  result-public v6, RunEvent v5, and distributed response v4 remain unchanged.
+
+The support matrix is `pending-adoption` with null implementation revisions
+until both language implementations pin this contract revision and pass real
+producer, full repository, and cross-language gates.
+
 ## Release Note: 11.0.0
 
 `11.0.0` is a major forward-only lifecycle release. It defines the canonical

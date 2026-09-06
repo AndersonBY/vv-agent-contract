@@ -1,14 +1,14 @@
 {
   "contract": "checkpoint_store",
-  "version": 9,
-  "checkpoint_schema": "vv-agent.checkpoint.v9",
+  "version": 10,
+  "checkpoint_schema": "vv-agent.checkpoint.v10",
   "run_definition_schema": "vv-agent.run-definition.v5",
   "checkpoint_state_columns": {
     "active_host_interaction": "complete closed vv-agent.host-interaction-request.v1 JSON object (including prompt and schema_version) or null",
     "suspended_origin": "closed JSON origin object or null",
     "crash_reload": "load both fields and host_interaction_records before deciding whether to wake or wait",
     "cancel_requested": "required boolean cancellation signal",
-    "old_schema": "vv-agent.checkpoint.v8 is rejected; no fallback reader"
+    "old_schema": "vv-agent.checkpoint.v9 is rejected; no fallback reader"
   },
   "resume_observation": {
     "schema_version": "vv-agent.resume-observation.v1",
@@ -26,6 +26,32 @@
     ],
     "boolean_presence_is_not_evidence": true,
     "unknown_fields": "reject"
+  },
+  "failed_tool_receipt_recovery": {
+    "journal_result_required": true,
+    "journal_result_status": "ERROR",
+    "result_digest_covers": "complete vv-agent.tool-execution-result.v4",
+    "message_source": "journal.result",
+    "operation_error_role": "diagnostic projection only",
+    "operation_error_projection_source": "operation_journal.json#tool_journal_entry_wire.ordinary_failed_result_authority",
+    "metadata_or_directive_guessing": false,
+    "new_table_or_index": false,
+    "deferred_failed_tombstone_replay": {
+      "source": "deferred_tool.json#resolution.receipt_index.canonical_failed_entry",
+      "receipt_status": "failed",
+      "result_status": "ERROR",
+      "result_digest": "9e8ca700c26ce409e6d2ebb9b0946e7535d95a0a50deaac5d6cfc0ba166db441",
+      "event_id": "evt_receipt_198edf3b52ef10a16463dcef708dbc3e48fde821ac2a4d53d2d1ac7480c63201",
+      "event_payload_digest": "8ddb2448266bc79914a7ad5b5cd8aef4eb7fe5cc5e099f57f974e88fa0b0c669",
+      "message_source": "retained_tombstone.result",
+      "tool_calls_on_replay": 0,
+      "same_handle_same_result_replay": {
+        "writes": 0,
+        "duplicate_events": 0,
+        "event_id_preserved": true,
+        "event_payload_digest_preserved": true
+      }
+    }
   },
   "deferred_contract": "deferred_tool.json",
   "deferred_receipt_index": {
