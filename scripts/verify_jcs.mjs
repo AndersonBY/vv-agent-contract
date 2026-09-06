@@ -71,8 +71,26 @@ function vectorValues(value) {
   };
 }
 
+function receiptEventId(identity) {
+  return `evt_receipt_${vectorValues(identity).sha256}`;
+}
+
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, "fixtures", name), "utf8"));
+}
+
+function readJsonlFixture(name) {
+  return fs
+    .readFileSync(path.join(ROOT, "fixtures", name), "utf8")
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line, index) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        fail(`${name}:${index + 1}: invalid JSONL record`);
+      }
+    });
 }
 
 function writeGeneratedFields(name, vectors, valueField) {
@@ -394,6 +412,12 @@ if (WRITE) {
     "utf8",
   );
 }
+for (const vector of operationJournal.receipt_identity?.identity_vectors ?? []) {
+  const expected = vectorValues(vector.object).sha256;
+  if (vector.identity_key !== expected) {
+    fail(`operation_journal/${vector.name}: identity_key mismatch`);
+  }
+}
 
 const checkpoint = readFixture("checkpoint_codec.json");
 for (const vector of checkpoint.extension_limits.canonicalization_vectors) {
@@ -427,6 +451,22 @@ if (checkpointOutboxChanged) {
 const checkpointStore = readFixture("checkpoint_store.json");
 for (const vector of checkpointStore.event_payload_digest.golden_cases) {
   verifyVector(`checkpoint_event/${vector.name}`, vector.event, vector);
+}
+const retainedDeferredReceipt = checkpointStore.deferred_cases
+  ?.find((entry) => entry.name === "terminal_checkpoint_replays_retained_deferred_receipt")
+  ?.initial?.receipt_index?.entries?.[0];
+if (retainedDeferredReceipt) {
+  const handle = retainedDeferredReceipt.handle;
+  const identity = {
+    attempt: handle.attempt,
+    checkpoint_key: handle.checkpoint_key,
+    operation_id: handle.operation_id,
+    request_digest: handle.request_digest,
+    tool_call_id: retainedDeferredReceipt.result.tool_call_id,
+  };
+  if (retainedDeferredReceipt.event_id !== receiptEventId(identity)) {
+    fail("checkpoint_store/retained_deferred_receipt: receipt event_id mismatch");
+  }
 }
 
 const deferredTool = readFixture("deferred_tool.json");
@@ -477,6 +517,54 @@ function verifyDeferredHandleProvenance(value) {
   for (const item of Object.values(value)) verifyDeferredHandleProvenance(item);
 }
 verifyDeferredHandleProvenance(deferredTool);
+for (const name of ["canonical_entry", "canonical_failed_entry"]) {
+  const receipt = deferredTool.resolution.receipt_index[name];
+  const handle = receipt.handle;
+  const identity = {
+    attempt: handle.attempt,
+    checkpoint_key: handle.checkpoint_key,
+    operation_id: handle.operation_id,
+    request_digest: handle.request_digest,
+    tool_call_id: receipt.result.tool_call_id,
+  };
+  if (receipt.event_id !== receiptEventId(identity)) {
+    fail(`deferred_tool/${name}: receipt event_id mismatch`);
+  }
+}
+const deferredEventRecords = [
+  ...readJsonlFixture("run_events.jsonl"),
+  ...readJsonlFixture("resume_events.jsonl"),
+];
+const deferredHandles = new Map(
+  deferredEventRecords
+    .filter((record) => record.type === "tool_call_deferred" && record.handle?.operation_id)
+    .map((record) => [record.handle.operation_id, record.handle]),
+);
+for (const record of deferredEventRecords) {
+  if (
+    record.type !== "tool_call_completed"
+    || !deferredHandles.has(record.operation_id)
+  ) {
+    continue;
+  }
+  const handle = deferredHandles.get(record.operation_id);
+  if (!handle) {
+    fail(`deferred event/${record.operation_id}: missing paired handle identity`);
+  }
+  const identity = {
+    attempt: handle.attempt,
+    checkpoint_key: handle.checkpoint_key,
+    operation_id: record.operation_id,
+    request_digest: handle.request_digest,
+    tool_call_id: record.tool_call_id,
+  };
+  if (record.attempt !== handle.attempt) {
+    fail(`deferred event/${record.operation_id}: attempt does not match handle`);
+  }
+  if (record.event_id !== receiptEventId(identity)) {
+    fail(`deferred event/${record.operation_id}: receipt event_id mismatch`);
+  }
+}
 if (WRITE) {
   fs.writeFileSync(
     path.join(ROOT, "fixtures", "deferred_tool.json"),
@@ -486,6 +574,21 @@ if (WRITE) {
 }
 
 const controllerCommand = readFixture("controller_command.json");
+const c18Receipt = controllerCommand.fault_matrix
+  ?.find((entry) => entry.id === "C18")
+  ?.after?.continuation?.record_tool_receipt;
+if (c18Receipt) {
+  const identity = {
+    attempt: c18Receipt.attempt,
+    checkpoint_key: c18Receipt.checkpoint_key,
+    operation_id: c18Receipt.operation_id,
+    request_digest: c18Receipt.request_digest,
+    tool_call_id: c18Receipt.tool_call_id,
+  };
+  if (c18Receipt.event_id !== receiptEventId(identity)) {
+    fail("controller_command/C18: receipt event_id mismatch");
+  }
+}
 const producerDigest = controllerCommand.host_interaction_producer?.request_wire?.request_digest?.golden;
 if (!producerDigest) {
   fail("controller_command: missing host interaction producer digest vector");

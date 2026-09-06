@@ -124,6 +124,33 @@ The support matrix is `pending-adoption` until both implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
+## Release Note: 11.0.0
+
+`11.0.0` is a major forward-only lifecycle release. It defines the canonical
+event identity for every definitive ordinary or deferred tool receipt:
+
+- `identity_key` is the lowercase hexadecimal SHA-256 of the RFC 8785 UTF-8
+  closed object `{attempt, checkpoint_key, operation_id, request_digest,
+  tool_call_id}` already used by receipt identity;
+- the definitive `tool_call_completed` event ID is exactly
+  `evt_receipt_` followed by that `identity_key`; status, result digest,
+  arbitrary suffixes, and version markers are not part of the ID;
+- same-identity same-result replay returns the retained receipt and reuses its
+  event ID with zero writes, while same-identity different-result remains the
+  typed `tool_receipt_conflict` with zero writes;
+- controller wake recovery is exposed as the checkpoint-scoped
+  `reap_controller_command_wakes(checkpoint_key, now_ms)` method, returning
+  only pending or expired-claimed `recovery_dispatch` wakes in stable
+  `(expected_revision, command_id)` order and requiring explicit reconciliation
+  for ambiguous rows;
+- ordinary and deferred receipt producers, retained deferred tombstones, and
+  event payload golden vectors use the same derivation. No historical ID alias,
+  reader, or migration is part of the current contract.
+
+The support matrix remains `pending-adoption` until both implementations pin
+the same 11.0.0 revision and pass real producer, full repository, and
+cross-language gates.
+
 ## Release Note: 10.0.0
 
 `10.0.0` is a major forward-only lifecycle release. It advances the closed

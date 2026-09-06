@@ -72,6 +72,13 @@
       "tool_call_id",
       "request_digest"
     ],
+    "event_id": "evt_receipt_<identity_key>",
+    "event_id_excludes": [
+      "status",
+      "result_digest",
+      "suffix",
+      "version_marker"
+    ],
     "result_digest": "RFC 8785 canonical complete_tool_execution_result after strict typed-writer normalization followed by lowercase SHA-256",
     "receipt_first": true,
     "stale_same_identity_same_result": "zero_write_replay",

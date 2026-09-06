@@ -951,6 +951,14 @@
           "internal_receipt_fields_not_app_server": ["handle", "commandDigest", "resultingRevision", "outboxState", "leaseOwner"]
         },
         {
+          "id": "runtime_backend.reap_controller_command_wakes",
+          "python": "vv_agent.runtime.CheckpointStore.reap_controller_command_wakes",
+          "rust": "vv_agent::CheckpointStore::reap_controller_command_wakes",
+          "signature": "reap_controller_command_wakes(checkpoint_key, now_ms)",
+          "return": "list[controller command wake outbox records]",
+          "contract": "fixtures/checkpoint_store.json#controller_command_wake_reaper"
+        },
+        {
           "id": "runtime_backend.host_interaction_request",
           "python": "vv_agent.runtime.HostInteractionRequest",
           "rust": "vv_agent::HostInteractionRequest",

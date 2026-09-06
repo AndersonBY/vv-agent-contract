@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `10.0.0` defines one task-neutral boundary for a tool whose external
+Contract `11.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -164,7 +164,13 @@ retention lifetime, including retained terminal state, and is deleted together
 with explicit checkpoint cleanup. Capacity cannot first fail after the
 external effect because the receipt index write is part of the same atomic
 resolution transaction and has no post-effect bounded receipt-index capacity
-admission.
+admission. The completion event ID is exactly `evt_receipt_<identity_key>`,
+using the same closed receipt identity object as ordinary receipts; for a
+deferred tombstone, `tool_call_id` comes from the definitive result while the
+other four fields come from the retained handle. Status, result digest,
+suffixes, and version markers are excluded. Same identity and result replays
+reuse the retained event ID with zero writes; a different result remains
+`deferred_resolution_conflict`.
 
 `duration_ms` is `null` for a cross-process resolution and
 `execution_started=true`; it measures no resolver-side execution. A normal

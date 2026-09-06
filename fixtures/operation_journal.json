@@ -354,6 +354,7 @@
       "succeeded_or_failed"
     ],
     "event": "tool_call_completed",
+    "event_id": "evt_receipt_<identity_key>",
     "atomic_writes": [
       "tool journal receipt",
       "RunEvent v5 outbox entry",
@@ -406,6 +407,14 @@
       "digest": "lowercase SHA-256"
     },
     "identity_key": "sha256_rfc8785_canonical_identity_tuple",
+    "event_id": {
+      "format": "evt_receipt_<identity_key>",
+      "source": "the same identity_key used for receipt lookup",
+      "status_included": false,
+      "result_digest_included": false,
+      "suffix_included": false,
+      "version_marker_included": false
+    },
     "claim_and_revision_excluded_from_identity": true,
     "result_digest": {
       "field": "result_digest",
@@ -576,6 +585,7 @@
       "name": "crash_after_receipt_stale_replay",
       "identity_key": "d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
       "result_digest": "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2",
+      "event_id": "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
       "caller_expected_revision": 3,
       "durable_revision": 4,
       "expected": {
@@ -590,6 +600,7 @@
       "name": "same_identity_different_result_is_typed_conflict",
       "identity_key": "d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
       "result_digest": "7096ef2f8ada6f95271d648fc88280f3d59598704c14e250f17a02b851127056",
+      "event_id": "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
       "caller_expected_revision": 3,
       "durable_revision": 4,
       "expected": {
@@ -615,6 +626,10 @@
           "tool_call_started",
           "tool_call_completed",
           "tool_call_completed"
+        ],
+        "event_ids": [
+          "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
+          "evt_receipt_00cf5ecff3e06ad4a401981b18668fe33a62733e44ad3909dfe1f00d0d0b427c"
         ],
         "claim_preserved": true,
         "parallel_cas_retry": false

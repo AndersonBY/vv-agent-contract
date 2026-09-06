@@ -1,6 +1,6 @@
 # Prompt Bundles And Bounded Tool Results
 
-Contract `10.0.0` defines one resolved prompt representation, one sparse
+Contract `11.0.0` defines one resolved prompt representation, one sparse
 bounded-result extension, and the current artifact-backed Message and
 microcompaction behavior. These are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's

@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 10.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 11.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -96,6 +96,9 @@ handler results are serialized through this mutation; the contract does not
 add a parallel receipt CAS-retry protocol. A definitive receipt is therefore
 never deferred to the later batch barrier. Identity and digest are read from
 the journal receipt itself; the ordinary receipt contract exposes no scan API.
+The resulting `tool_call_completed` event ID is exactly
+`evt_receipt_` plus `identity_key`; it contains no status, result digest,
+suffix, or version component and is reused by an identical replay.
 
 The top level has one exact current field set. Every listed field is present,
 including fields whose value may be null; readers do not synthesize omissions.
@@ -577,7 +580,9 @@ identity input is the UTF-8 JCS object
 `{attempt, checkpoint_key, operation_id, request_digest, tool_call_id}` with
 no optional or unknown fields; `identity_key` is its lowercase SHA-256. The
 stored journal receipt persists `identity_key` and the sibling `result_digest`;
-neither is an additional index or table.
+neither is an additional index or table. A definitive receipt event uses the
+same identity key as `evt_receipt_<identity_key>`; status, result digest,
+suffix, and version are excluded.
 
 `failed` is allowed only for a definitive outcome. A local failure before
 dispatch may move `planned` to `failed`, and an explicit provider/tool

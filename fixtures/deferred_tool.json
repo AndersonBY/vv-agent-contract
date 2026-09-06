@@ -1,7 +1,7 @@
 {
   "contract": "durable_deferred_tool",
   "schema_version": "vv-agent.durable-deferred-tool.v2",
-  "contract_version": "10.0.0",
+  "contract_version": "11.0.0",
   "scope": "framework_host_boundary_only",
   "versioning": {
     "forward_only": true,
@@ -554,6 +554,29 @@
       "retained_after_terminal": true,
       "cleanup_with_checkpoint": true,
       "key": "sha256_rfc8785_canonical_exact_deferred_handle",
+      "event_identity": {
+        "identity_fields": [
+          "checkpoint_key",
+          "operation_id",
+          "attempt",
+          "tool_call_id",
+          "request_digest"
+        ],
+        "object_fields": [
+          "attempt",
+          "checkpoint_key",
+          "operation_id",
+          "request_digest",
+          "tool_call_id"
+        ],
+        "tool_call_id_source": "definitive result.tool_call_id",
+        "event_id_format": "evt_receipt_<identity_key>",
+        "identity_key": "lowercase_sha256_of_rfc8785_utf8_closed_identity_object",
+        "status_included": false,
+        "result_digest_included": false,
+        "suffix_included": false,
+        "version_marker_included": false
+      },
       "tombstone_entry_required_fields": [
         "handle_key",
         "handle",
@@ -605,7 +628,7 @@
           "value": {
             "version": "v5",
             "type": "tool_call_completed",
-            "event_id": "evt_deferred_call_a_completed",
+            "event_id": "evt_receipt_761282370942a5226ada55ccc3583dfbf3367913ac482753f2c7acce0ddb57c7",
             "run_id": "run_deferred",
             "trace_id": "trace_deferred",
             "created_at": 1721120014.9,
@@ -620,7 +643,7 @@
             "execution_started": true,
             "duration_ms": null
           },
-          "rfc8785_sha256": "2d468d875e96e43aebd7a20fb67238bb03d1f1cd4fa94e87f345fc69703034de"
+          "rfc8785_sha256": "9ad19bf201a72fbcdde83dcc724325cb0f2ebf68458f1ba6bd16c0ae1c5d8a12"
         },
         {
           "name": "failed_event_payload",
@@ -628,7 +651,7 @@
           "value": {
             "version": "v5",
             "type": "tool_call_completed",
-            "event_id": "evt_deferred_call_c_failed",
+            "event_id": "evt_receipt_198edf3b52ef10a16463dcef708dbc3e48fde821ac2a4d53d2d1ac7480c63201",
             "run_id": "run_deferred",
             "trace_id": "trace_deferred",
             "created_at": 1721120015.1,
@@ -643,7 +666,7 @@
             "execution_started": true,
             "duration_ms": null
           },
-          "rfc8785_sha256": "f104cb952cd5272ab819d7782255b9f9f1f8c10756d88f4cc7b569b343b2f78f"
+          "rfc8785_sha256": "8ddb2448266bc79914a7ad5b5cd8aef4eb7fe5cc5e099f57f974e88fa0b0c669"
         }
       ],
       "tombstone_entry": {
@@ -651,7 +674,7 @@
         "handle_type": "exact DeferredToolHandle",
         "result": "canonical definitive ToolExecutionResult",
         "result_digest": "lowercase_sha256_of_rfc8785_canonical_typed_writer_result",
-        "event_id": "stable tool_call_completed event identity",
+        "event_id": "evt_receipt_<identity_key>",
         "event_payload_digest": "lowercase_sha256_of_rfc8785_tool_call_completed_event",
         "receipt_status": "succeeded or failed"
       },
@@ -671,8 +694,8 @@
           "directive": "continue"
         },
         "result_digest": "e1d3c7718358362eb4c604562f9fa25a49b1c95e03e79602ca2a967d60e131c8",
-        "event_id": "evt_deferred_call_a_completed",
-        "event_payload_digest": "2d468d875e96e43aebd7a20fb67238bb03d1f1cd4fa94e87f345fc69703034de",
+        "event_id": "evt_receipt_761282370942a5226ada55ccc3583dfbf3367913ac482753f2c7acce0ddb57c7",
+        "event_payload_digest": "9ad19bf201a72fbcdde83dcc724325cb0f2ebf68458f1ba6bd16c0ae1c5d8a12",
         "receipt_status": "succeeded"
       },
       "canonical_failed_entry": {
@@ -692,8 +715,8 @@
           "error_code": "provider_rejected"
         },
         "result_digest": "9e8ca700c26ce409e6d2ebb9b0946e7535d95a0a50deaac5d6cfc0ba166db441",
-        "event_id": "evt_deferred_call_c_failed",
-        "event_payload_digest": "f104cb952cd5272ab819d7782255b9f9f1f8c10756d88f4cc7b569b343b2f78f",
+        "event_id": "evt_receipt_198edf3b52ef10a16463dcef708dbc3e48fde821ac2a4d53d2d1ac7480c63201",
+        "event_payload_digest": "8ddb2448266bc79914a7ad5b5cd8aef4eb7fe5cc5e099f57f974e88fa0b0c669",
         "receipt_status": "failed"
       },
       "same_callback_identity": "handle exact equality plus canonical result and digest equality",
