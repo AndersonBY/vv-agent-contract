@@ -1,5 +1,26 @@
 # Changelog
 
+## 11.0.0 — pending adoption
+
+- Defined one canonical definitive tool receipt event identity for ordinary
+  and deferred `tool_call_completed` receipts: `evt_receipt_` followed by the
+  shared receipt `identity_key`.
+- Reused the closed RFC 8785 receipt identity object
+  `{attempt, checkpoint_key, operation_id, request_digest, tool_call_id}`;
+  status, result digest, suffixes, and version markers do not affect the
+  event ID.
+- Required same-identity same-result replays to retain and reuse the event
+  ID with zero writes, while same-identity different-result calls remain
+  `tool_receipt_conflict` with zero writes.
+- Scoped controller wake reaping to
+  `CheckpointStore.reap_controller_command_wakes(checkpoint_key, now_ms)` with
+  stable `(expected_revision, command_id)` ordering and explicit ambiguous-wake
+  reconciliation.
+
+This release remains `pending-adoption` until both language implementations
+pin the same contract revision and pass their real producer and cross-language
+quality gates.
+
 ## 10.0.0 — pending adoption
 
 - Advanced the closed RunEvent discriminator to v5 and the public API

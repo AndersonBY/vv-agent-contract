@@ -75,6 +75,78 @@
       "last_error"
     ]
   },
+  "controller_command_wake_reaper": {
+    "public_signature": "reap_controller_command_wakes(checkpoint_key, now_ms)",
+    "python": "CheckpointStore.reap_controller_command_wakes(checkpoint_key, now_ms)",
+    "rust": "CheckpointStore::reap_controller_command_wakes(checkpoint_key, now_ms)",
+    "return": "list[controller command wake outbox records]",
+    "input": {
+      "checkpoint_key": "the exact checkpoint scope; never a global scan",
+      "now_ms": "the caller's Unix-millisecond lease clock"
+    },
+    "uses_existing_controller_command_receipt_index": true,
+    "candidate_filter": {
+      "outbox_action": "recovery_dispatch",
+      "state": ["pending", "claimed with lease_expires_at_ms <= now_ms"]
+    },
+    "expired_claim_reset": "each expired claimed candidate is reset to pending by its existing single-row CAS before it is returned; claim_token and lease_expires_at_ms are cleared",
+    "return_order": ["expected_revision", "command_id"],
+    "ambiguous": "never returned or blind-retried; explicit controller wake reconciliation is required",
+    "returns": "only matching checkpoint recovery wakes that are pending after selection or an expired-claim reset",
+    "wire_unchanged": true,
+    "new_index_or_state": false,
+    "golden_cases": [
+      {
+        "name": "scope_filter_reset_and_expected_revision_order",
+        "checkpoint_key": "tenant-7/run-42",
+        "now_ms": 100,
+        "candidates": [
+          {
+            "command_id": "cmd-b",
+            "checkpoint_key": "tenant-7/run-42",
+            "expected_revision": 9,
+            "outbox_action": "recovery_dispatch",
+            "outbox_state": "pending"
+          },
+          {
+            "command_id": "cmd-a",
+            "checkpoint_key": "tenant-7/run-42",
+            "expected_revision": 8,
+            "outbox_action": "recovery_dispatch",
+            "outbox_state": "claimed",
+            "lease_expires_at_ms": 100
+          },
+          {
+            "command_id": "cmd-c",
+            "checkpoint_key": "tenant-7/run-42",
+            "expected_revision": 7,
+            "outbox_action": "recovery_dispatch",
+            "outbox_state": "claimed",
+            "lease_expires_at_ms": 101
+          },
+          {
+            "command_id": "cmd-d",
+            "checkpoint_key": "tenant-7/run-42",
+            "expected_revision": 6,
+            "outbox_action": "recovery_dispatch",
+            "outbox_state": "ambiguous"
+          },
+          {
+            "command_id": "cmd-e",
+            "checkpoint_key": "tenant-7/run-43",
+            "expected_revision": 1,
+            "outbox_action": "recovery_dispatch",
+            "outbox_state": "pending"
+          }
+        ],
+        "expired_claim_reset": ["cmd-a"],
+        "returned_command_ids": ["cmd-a", "cmd-b"],
+        "ambiguous_excluded": ["cmd-d"],
+        "non_returned": ["cmd-c", "cmd-d"],
+        "out_of_scope_excluded": ["cmd-e"]
+      }
+    ]
+  },
   "host_interaction_record_index": {
     "independent": true,
     "required": true,
@@ -257,6 +329,16 @@
     {
       "name": "resolve_controller_command",
       "atomic": "admit command and return a durable wake-or-no-wake decision from the retained receipt; admission_revision=expected_revision+1 persists the full resolved_pending interaction record before return, while claim_and_consume_host_interaction_response commits consume_revision=admission_revision+1 before model/tool (8->9->10 is an example only)"
+    },
+    {
+      "name": "reap_controller_command_wakes",
+      "atomic": "scope to checkpoint_key, select only recovery_dispatch rows that are pending or claimed with lease_expires_at_ms <= now_ms, reset each expired claim through its existing single-row CAS, then return pending wakes sorted by expected_revision and command_id; never return or blind-retry ambiguous rows",
+      "public_signature": "reap_controller_command_wakes(checkpoint_key, now_ms)",
+      "python": "CheckpointStore.reap_controller_command_wakes(checkpoint_key, now_ms)",
+      "rust": "CheckpointStore::reap_controller_command_wakes(checkpoint_key, now_ms)",
+      "return": "list[controller command wake outbox records]",
+      "wire_unchanged": true,
+      "new_index_or_state": false
     },
     {
       "name": "claim_and_consume_host_interaction_response",
@@ -544,7 +626,8 @@
         "tool_call_id": "call_b",
         "status_code": "SUCCESS",
         "revision": 4,
-        "event": "tool_call_completed"
+        "event": "tool_call_completed",
+        "event_id": "evt_receipt_73041a2eb8733ffd19508c1cae206b709503b008ccf1032e074aece50886360a"
       },
       "operation": {
         "kind": "admit_deferred_batch",
@@ -576,6 +659,7 @@
         ],
         "ordinary_receipt_event_type": "tool_call_completed",
         "ordinary_receipt_revision": 4,
+        "ordinary_receipt_event_id": "evt_receipt_73041a2eb8733ffd19508c1cae206b709503b008ccf1032e074aece50886360a",
         "completed_journal_state": "succeeded_before_admission",
         "deferred_journal_count": 2,
         "claim_release_count": 1,
@@ -594,7 +678,8 @@
         "status_code": "ERROR",
         "error_code": "provider_rejected",
         "revision": 4,
-        "event": "tool_call_completed"
+        "event": "tool_call_completed",
+        "event_id": "evt_receipt_73041a2eb8733ffd19508c1cae206b709503b008ccf1032e074aece50886360a"
       },
       "operation": {
         "kind": "admit_deferred_batch",
@@ -615,6 +700,7 @@
         "status": "deferred",
         "ordinary_receipt_event_type": "tool_call_completed",
         "ordinary_receipt_revision": 4,
+        "ordinary_receipt_event_id": "evt_receipt_73041a2eb8733ffd19508c1cae206b709503b008ccf1032e074aece50886360a",
         "completed_journal_state": "failed_before_admission",
         "completed_error_code": "provider_rejected",
         "deferred_journal_count": 2,
@@ -848,8 +934,8 @@
                 "directive": "continue"
               },
               "result_digest": "e1d3c7718358362eb4c604562f9fa25a49b1c95e03e79602ca2a967d60e131c8",
-              "event_id": "evt_deferred_call_a_completed",
-              "event_payload_digest": "1e6ea40f88bd8a6c61d032f289202e3f1648347e553cab24ef8411de0424fbaf",
+              "event_id": "evt_receipt_761282370942a5226ada55ccc3583dfbf3367913ac482753f2c7acce0ddb57c7",
+              "event_payload_digest": "9ad19bf201a72fbcdde83dcc724325cb0f2ebf68458f1ba6bd16c0ae1c5d8a12",
               "receipt_status": "succeeded",
               "handle_key": "5be3ae2193b49698a007a5a0d332ea5481f38475ac97ec36efc0e017e5aee82a"
             }
@@ -1272,6 +1358,7 @@
         "revision": 4,
         "tool_journal_state": "succeeded",
         "outbox_event_types": ["tool_call_started", "tool_call_completed"],
+        "receipt_event_id": "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
         "result_digest": "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2",
         "claim_token": "owner-tools",
         "claimed_cycle": 1,
@@ -1286,7 +1373,7 @@
         "status": "running",
         "claim_token": "owner-tools",
         "tool_journal_state": "succeeded",
-        "receipt_event_id": "evt_tool_receipt_1",
+        "receipt_event_id": "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
         "receipt_identity_key": "d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
         "receipt_result_digest": "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2"
       },
@@ -1326,7 +1413,7 @@
         "claim_token": "owner-tools",
         "claimed_cycle": 1,
         "tool_journal_state": "succeeded",
-        "receipt_event_id": "evt_tool_receipt_1",
+        "receipt_event_id": "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
         "receipt_identity_key": "d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
         "receipt_result_digest": "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2"
       },
@@ -1454,6 +1541,10 @@
           "tool_call_started",
           "tool_call_completed",
           "tool_call_completed"
+        ],
+        "receipt_event_ids": [
+          "evt_receipt_d4b806a61fedb3c00ed151b519bc35481f19514cc49f35416e2961311201f949",
+          "evt_receipt_00cf5ecff3e06ad4a401981b18668fe33a62733e44ad3909dfe1f00d0d0b427c"
         ],
         "claim_token": "owner-tools",
         "parallel_cas_retry": false
@@ -2493,7 +2584,7 @@
     "reaper": {
       "admissible_states": ["pending", "claimed_expired"],
       "ambiguous_is_reconciliation_only": true,
-      "batch_order": "canonical_command_id_order",
+      "batch_order": "expected_revision_then_command_id",
       "resume_and_response_only": true,
       "producer_notification_is_not_recovery_dispatch": true,
       "suspend_cancel_abort_never_wake": true

@@ -1,5 +1,5 @@
 {
-  "contract_version": "10.0.0",
+  "contract_version": "11.0.0",
   "schema_version": "vv-agent.controller-command.v1",
   "scope": {
     "task_neutral": true,
@@ -2480,6 +2480,7 @@
             "request_digest": "cc94008fb3960d6728cc88e405d5b35d273890f9d9d0de8a01cdc964e44d46cf",
             "identity_key": "955b7c93c5ae07537d1ec16c9523a9733e72f4c46267dc17bc7c5695759c3094",
             "result_digest": "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2",
+            "event_id": "evt_receipt_955b7c93c5ae07537d1ec16c9523a9733e72f4c46267dc17bc7c5695759c3094",
             "after_revision": 62,
             "writes": 1,
             "event": "tool_call_completed",

@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `10.0.0` defines one task-neutral, closed admission seam for durable
+Contract `11.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -260,8 +260,17 @@ stable `outbox_id`, owner token, lease, attempt, delivery timestamp, and last
 error. Claim and completion are CAS-fenced by owner token and attempt. A
 reaper retries pending or expired claimed rows with the same `command_id`;
 uncertain external publication becomes `ambiguous` and is reconciled rather
-than blindly duplicated. A byte-identical replay returns the retained receipt,
-does not increment revision, and does not create a second wake.
+than blindly duplicated. The cross-language checkpoint API is
+`CheckpointStore.reap_controller_command_wakes(checkpoint_key, now_ms)`.
+It scopes selection to the exact `checkpoint_key`, considers only
+`outbox_action=recovery_dispatch` rows that are already `pending` or have an
+expired claimed lease, and resets each expired claim through the existing
+single-row CAS before returning it as `pending`. Returned wakes are sorted by
+`expected_revision` and then `command_id`. `ambiguous` rows are never returned
+or blindly retried; they require explicit controller-wake reconciliation. This
+method does not add an index, state, or wire field. A byte-identical replay
+returns the retained receipt, does not increment revision, and does not create
+a second wake.
 
 Errors are strict and observable: `controller_command_digest_invalid`,
 `controller_command_conflict`, `controller_command_stale`,

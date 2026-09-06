@@ -18,10 +18,34 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "clients"))
-
 import contract_snapshot  # noqa: E402
 import contractctl  # noqa: E402
 import record_adoption  # noqa: E402
+
+
+def receipt_event_id(
+    *,
+    checkpoint_key: str,
+    operation_id: str,
+    attempt: int,
+    tool_call_id: str,
+    request_digest: str,
+) -> str:
+    identity = {
+        "attempt": attempt,
+        "checkpoint_key": checkpoint_key,
+        "operation_id": operation_id,
+        "request_digest": request_digest,
+        "tool_call_id": tool_call_id,
+    }
+    canonical = json.dumps(
+        identity,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return f"evt_receipt_{hashlib.sha256(canonical).hexdigest()}"
 
 
 class ContractRepositoryTests(unittest.TestCase):
@@ -103,7 +127,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "10.0.0")
+        self.assertEqual(report["version"], "11.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -928,7 +952,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "10.0.0")
+        self.assertEqual(fixture["contract_version"], "11.0.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -1292,6 +1316,28 @@ class ContractRepositoryTests(unittest.TestCase):
             "attempt",
             "request_digest",
         }
+        event_identity = deferred["resolution"]["receipt_index"]["event_identity"]
+        self.assertEqual(
+            event_identity["identity_fields"],
+            ["checkpoint_key", "operation_id", "attempt", "tool_call_id", "request_digest"],
+        )
+        self.assertEqual(
+            event_identity["object_fields"],
+            ["attempt", "checkpoint_key", "operation_id", "request_digest", "tool_call_id"],
+        )
+        self.assertEqual(event_identity["tool_call_id_source"], "definitive result.tool_call_id")
+        self.assertEqual(event_identity["event_id_format"], "evt_receipt_<identity_key>")
+        self.assertEqual(
+            event_identity["identity_key"],
+            "lowercase_sha256_of_rfc8785_utf8_closed_identity_object",
+        )
+        for field in (
+            "status_included",
+            "result_digest_included",
+            "suffix_included",
+            "version_marker_included",
+        ):
+            self.assertFalse(event_identity[field])
 
         def assert_handle(value: object) -> None:
             self.assertIsInstance(value, dict)
@@ -1328,6 +1374,16 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertIn(receipt["result"]["status_code"], {"SUCCESS", "ERROR"})
             self.assertRegex(receipt["result_digest"], r"^[0-9a-f]{64}$")
             self.assertRegex(receipt["event_payload_digest"], r"^[0-9a-f]{64}$")
+            self.assertEqual(
+                receipt["event_id"],
+                receipt_event_id(
+                    checkpoint_key=receipt["handle"]["checkpoint_key"],
+                    operation_id=receipt["handle"]["operation_id"],
+                    attempt=receipt["handle"]["attempt"],
+                    tool_call_id=receipt["result"]["tool_call_id"],
+                    request_digest=receipt["handle"]["request_digest"],
+                ),
+            )
             self.assertEqual(
                 receipt["receipt_status"],
                 "succeeded" if receipt["result"]["status_code"] == "SUCCESS" else "failed",
@@ -1396,6 +1452,17 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(terminal_replay["expected"]["decision_kind"], "replayed")
         self.assertTrue(terminal_replay["expected"]["receipt_present"])
         self.assertEqual(terminal_replay["expected"]["revision_increment"], 0)
+        retained_receipt = terminal_replay["initial"]["receipt_index"]["entries"][0]
+        self.assertEqual(
+            retained_receipt["event_id"],
+            receipt_event_id(
+                checkpoint_key=retained_receipt["handle"]["checkpoint_key"],
+                operation_id=retained_receipt["handle"]["operation_id"],
+                attempt=retained_receipt["handle"]["attempt"],
+                tool_call_id=retained_receipt["result"]["tool_call_id"],
+                request_digest=retained_receipt["handle"]["request_digest"],
+            ),
+        )
 
         event_records = []
         for name in ("run_events.jsonl", "resume_events.jsonl"):
@@ -1406,6 +1473,7 @@ class ContractRepositoryTests(unittest.TestCase):
             )
         deferred_events = [record for record in event_records if record["type"] == "tool_call_deferred"]
         self.assertGreaterEqual(len(deferred_events), 2)
+        handle_by_operation = {event["operation_id"]: event["handle"] for event in deferred_events}
         for event in deferred_events:
             assert_handle(event["handle"])
             self.assertEqual(event["operation_id"], event["handle"]["operation_id"])
@@ -1421,7 +1489,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertGreaterEqual(len(resolved), 1)
         self.assertEqual(
             {record["event_id"] for record in resolved},
-            {"evt_deferred_resolved", "evt_deferred_resolved_1"},
+            {"evt_receipt_bae4d36f43dd8fd46a5c4dbbc2c04e66d35b4d18a29357e409d87641038f9c34"},
         )
         for record in resolved:
             self.assertTrue(record["execution_started"])
@@ -1434,6 +1502,18 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(len(failed_resolved), 1)
         self.assertEqual(failed_resolved[0]["status"], "error")
         self.assertEqual(failed_resolved[0]["error_code"], "provider_rejected")
+        for record in [*resolved, *failed_resolved]:
+            handle = handle_by_operation[record["operation_id"]]
+            self.assertEqual(
+                record["event_id"],
+                receipt_event_id(
+                    checkpoint_key=handle["checkpoint_key"],
+                    operation_id=record["operation_id"],
+                    attempt=record["attempt"],
+                    tool_call_id=record["tool_call_id"],
+                    request_digest=handle["request_digest"],
+                ),
+            )
 
     def test_no_duplicate_deferred_tool_result_status_or_old_reader(self) -> None:
         current_files = [
@@ -1452,6 +1532,12 @@ class ContractRepositoryTests(unittest.TestCase):
             '"' + "DE" + "FERRED" + '"',
             "vv-agent.deferred-tool-handle." + "v1",
             "vv-agent.tool-execution-result." + "v3",
+            "evt_tool_receipt_1",
+            "evt_deferred_call_a_completed",
+            "evt_deferred_call_c_failed",
+            "evt_deferred_resolved",
+            "evt_deferred_resolved_1",
+            "evt_deferred_error_completed",
         ]
         for value in forbidden:
             self.assertNotIn(value, text)
@@ -2716,7 +2802,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 177)
+        self.assertEqual(len(capabilities), 178)
         self.assertTrue(
             {
                 "runtime_backend.host_interaction_request",
@@ -2724,6 +2810,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "runtime_backend.produce_host_interaction",
                 "runtime_backend.resolve_controller_command",
                 "runtime_backend.controller_command_resolution",
+                "runtime_backend.reap_controller_command_wakes",
             }.issubset(capabilities)
         )
         self.assertIn("tools.message", capabilities)
@@ -3902,6 +3989,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(receipt["allowed_status_codes"], ["SUCCESS", "ERROR"])
         self.assertEqual(receipt["journal_transition"], ["started", "succeeded_or_failed"])
         self.assertEqual(receipt["event"], "tool_call_completed")
+        self.assertEqual(receipt["event_id"], "evt_receipt_<identity_key>")
         self.assertTrue(receipt["claim_preserved"])
         self.assertEqual(
             receipt["receipt_first"]["lookup_order"],
@@ -3931,6 +4019,17 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(identity_input["closed"])
         self.assertEqual(identity_input["optional_fields"], [])
         self.assertEqual(identity_input["unknown_fields"], "reject")
+        self.assertEqual(
+            fixture["receipt_identity"]["event_id"],
+            {
+                "format": "evt_receipt_<identity_key>",
+                "source": "the same identity_key used for receipt lookup",
+                "status_included": False,
+                "result_digest_included": False,
+                "suffix_included": False,
+                "version_marker_included": False,
+            },
+        )
         for vector in fixture["receipt_identity"]["identity_vectors"]:
             object_wire = json.dumps(
                 vector["object"],
@@ -4158,6 +4257,24 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             receipt_cases["same_identity_different_result_is_typed_conflict"]["expected"]["error"],
             "tool_receipt_conflict",
+        )
+        self.assertEqual(
+            receipt_cases["crash_after_receipt_stale_replay"]["event_id"],
+            f"evt_receipt_{receipt_cases['crash_after_receipt_stale_replay']['identity_key']}",
+        )
+        self.assertEqual(
+            receipt_cases["same_identity_different_result_is_typed_conflict"]["event_id"],
+            receipt_cases["crash_after_receipt_stale_replay"]["event_id"],
+        )
+        self.assertEqual(
+            receipt_cases["two_definitive_results_are_serialized"]["expected"]["event_ids"],
+            [
+                f"evt_receipt_{identity_key}"
+                for identity_key in (
+                    fixture["receipt_identity"]["identity_vectors"][0]["identity_key"],
+                    fixture["receipt_identity"]["identity_vectors"][1]["identity_key"],
+                )
+            ],
         )
         self.assertFalse(receipt_cases["two_definitive_results_are_serialized"]["expected"]["parallel_cas_retry"])
         self.assertEqual(
@@ -4482,14 +4599,39 @@ class ContractRepositoryTests(unittest.TestCase):
             "5eeba4f574c9a063b13c194e0efe02828535706e0d3d72c6969bc18cb0ae32b2",
         )
         self.assertEqual(receipt["claim_token"], "owner-tools")
+        receipt_operation = cases["record_tool_receipt_preserves_claim"]["operation"]
+        self.assertEqual(
+            receipt["receipt_event_id"],
+            receipt_event_id(
+                checkpoint_key=cases["record_tool_receipt_preserves_claim"]["initial"]["checkpoint_key"],
+                operation_id=receipt_operation["operation_id"],
+                attempt=receipt_operation["attempt"],
+                tool_call_id=receipt_operation["tool_call_id"],
+                request_digest=receipt_operation["request_digest"],
+            ),
+        )
         duplicate = cases["record_tool_receipt_duplicate_is_zero_write"]
         self.assertTrue(duplicate["expected"]["replayed"])
         self.assertEqual(duplicate["operation"]["expected_revision"], 3)
         self.assertEqual(duplicate["expected"]["revision"], 4)
+        self.assertEqual(
+            duplicate["initial"]["receipt_event_id"],
+            receipt_event_id(
+                checkpoint_key=duplicate["initial"]["checkpoint_key"],
+                operation_id=duplicate["operation"]["operation_id"],
+                attempt=duplicate["operation"]["attempt"],
+                tool_call_id=duplicate["operation"]["tool_call_id"],
+                request_digest=duplicate["operation"]["request_digest"],
+            ),
+        )
         conflict = cases["record_tool_receipt_conflicting_result_is_typed_zero_write"]
         self.assertEqual(conflict["expected"]["error"], "tool_receipt_conflict")
         self.assertFalse(conflict["expected"]["updated"])
         self.assertEqual(conflict["expected"]["duplicate_event_count"], 0)
+        self.assertEqual(
+            conflict["initial"]["receipt_event_id"],
+            duplicate["initial"]["receipt_event_id"],
+        )
         stale_owner = cases["record_tool_receipt_same_revision_wrong_claim_is_zero_write"]
         self.assertEqual(stale_owner["operation"]["expected_revision"], stale_owner["initial"]["revision"])
         self.assertNotEqual(stale_owner["operation"]["claim_token"], stale_owner["initial"]["claim_token"])
@@ -4499,6 +4641,20 @@ class ContractRepositoryTests(unittest.TestCase):
         serial = cases["record_two_definitive_tool_results_serially"]["expected"]
         self.assertEqual(serial["receipt_order"], ["call_1", "call_2"])
         self.assertEqual(serial["outbox_event_types"].count("tool_call_completed"), 2)
+        serial_case = cases["record_two_definitive_tool_results_serially"]
+        self.assertEqual(
+            serial["receipt_event_ids"],
+            [
+                receipt_event_id(
+                    checkpoint_key=serial_case["initial"]["checkpoint_key"],
+                    operation_id=operation["operation_id"],
+                    attempt=operation["attempt"],
+                    tool_call_id=operation["tool_call_id"],
+                    request_digest=operation["request_digest"],
+                )
+                for operation in serial_case["operations"]
+            ],
+        )
         self.assertFalse(serial["parallel_cas_retry"])
         ordinary_finalize = cases["terminal_finalize_without_claim"]["expected"]
         self.assertFalse(ordinary_finalize["cycle_aborted_event"])
@@ -4788,6 +4944,42 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(error_admission["expected"]["completed_journal_state"], "failed_before_admission")
         self.assertEqual(error_admission["expected"]["completed_error_code"], "provider_rejected")
 
+    def test_controller_command_wake_reaper_is_scoped_and_stably_ordered(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/checkpoint_store.json").read_text(encoding="utf-8"))
+        contract = fixture["controller_command_wake_reaper"]
+        self.assertEqual(
+            contract["public_signature"],
+            "reap_controller_command_wakes(checkpoint_key, now_ms)",
+        )
+        self.assertEqual(
+            contract["python"],
+            "CheckpointStore.reap_controller_command_wakes(checkpoint_key, now_ms)",
+        )
+        self.assertEqual(
+            contract["rust"],
+            "CheckpointStore::reap_controller_command_wakes(checkpoint_key, now_ms)",
+        )
+        self.assertEqual(contract["return"], "list[controller command wake outbox records]")
+        self.assertTrue(contract["uses_existing_controller_command_receipt_index"])
+        self.assertEqual(contract["candidate_filter"]["outbox_action"], "recovery_dispatch")
+        self.assertEqual(
+            contract["candidate_filter"]["state"],
+            ["pending", "claimed with lease_expires_at_ms <= now_ms"],
+        )
+        self.assertEqual(contract["return_order"], ["expected_revision", "command_id"])
+        self.assertIn("never returned", contract["ambiguous"])
+        self.assertFalse(contract["new_index_or_state"])
+        self.assertEqual(
+            fixture["controller_outbox_protocol"]["reaper"]["batch_order"],
+            "expected_revision_then_command_id",
+        )
+        golden = contract["golden_cases"][0]
+        self.assertEqual(golden["expired_claim_reset"], ["cmd-a"])
+        self.assertEqual(golden["returned_command_ids"], ["cmd-a", "cmd-b"])
+        self.assertEqual(golden["ambiguous_excluded"], ["cmd-d"])
+        self.assertEqual(golden["out_of_scope_excluded"], ["cmd-e"])
+        self.assertEqual(golden["non_returned"], ["cmd-c", "cmd-d"])
+
     def test_checkpoint_resume_fixture_covers_all_fault_boundaries(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
         self.assertEqual(fixture["version"], 9)
@@ -4814,6 +5006,14 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["ordinary_tool_receipt_semantics"]["identity_fields"],
             ["checkpoint_key", "operation_id", "attempt", "tool_call_id", "request_digest"],
+        )
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["event_id"],
+            "evt_receipt_<identity_key>",
+        )
+        self.assertEqual(
+            fixture["ordinary_tool_receipt_semantics"]["event_id_excludes"],
+            ["status", "result_digest", "suffix", "version_marker"],
         )
         self.assertTrue(fixture["ordinary_tool_receipt_semantics"]["receipt_first"])
         self.assertEqual(
@@ -5427,7 +5627,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "10.0.0")
+        self.assertEqual(fixture["contract_version"], "11.0.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -5899,6 +6099,27 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             runtime_capabilities["runtime_backend.controller_command_receipt"]["visibility"],
             "framework_public",
+        )
+        wake_reaper = runtime_capabilities["runtime_backend.reap_controller_command_wakes"]
+        self.assertEqual(
+            wake_reaper["python"],
+            "vv_agent.runtime.CheckpointStore.reap_controller_command_wakes",
+        )
+        self.assertEqual(
+            wake_reaper["rust"],
+            "vv_agent::CheckpointStore::reap_controller_command_wakes",
+        )
+        self.assertEqual(
+            wake_reaper["signature"],
+            "reap_controller_command_wakes(checkpoint_key, now_ms)",
+        )
+        self.assertEqual(
+            wake_reaper["return"],
+            "list[controller command wake outbox records]",
+        )
+        self.assertEqual(
+            wake_reaper["contract"],
+            "fixtures/checkpoint_store.json#controller_command_wake_reaper",
         )
         self.assertEqual(
             runtime_capabilities["runtime_backend.resolve_controller_command"]["signature"],

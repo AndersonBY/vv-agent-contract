@@ -101,9 +101,13 @@ field present after normalization is included. Receipt lookup uses only the stab
 revision fencing: the same
 identity and digest replay with zero writes even when `expected_revision` is
 stale; a different digest returns `tool_receipt_conflict` with zero writes.
-Replaying that receipt reuses the event identity without appending a duplicate
-event. Ordinary definitive receipts are serialized before the next ordinary
-handler result is admitted.
+The definitive event ID is exactly `evt_receipt_` plus the lowercase
+hexadecimal `identity_key`; the identity key is the RFC 8785 UTF-8 SHA-256 of
+the closed `{attempt, checkpoint_key, operation_id, request_digest,
+tool_call_id}` object. Status, result digest, suffixes, and version markers are
+excluded. Replaying that receipt reuses the event identity without appending a
+duplicate event. Ordinary definitive receipts are serialized before the next
+ordinary handler result is admitted.
 
 `tool_call_deferred` records an admitted durable handle without a tool result;
 its cross-process form has `execution_started=true` and `duration_ms=null`.

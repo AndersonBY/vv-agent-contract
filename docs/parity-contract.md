@@ -223,7 +223,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `10.0.0` applies the sparse bounded-result rules in
+Contract `11.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -325,7 +325,12 @@ zero-write replay, while a different digest is the typed
 serialized; the parity contract does not introduce a parallel CAS-retry
 abstraction. Identity and digest come from the journal receipt itself; no
 ordinary receipt scan API is part of the wire. `admit_deferred_batch` admits only outcomes that are still
-deferred and never rewrites an already receipted result.
+deferred and never rewrites an already receipted result. Every definitive
+receipt's `tool_call_completed` event ID is exactly
+`evt_receipt_<identity_key>`, where `identity_key` is the lowercase SHA-256
+of the RFC 8785 UTF-8 closed identity object; status, result digest, suffix,
+and version are excluded. Identical replays reuse that event ID with zero
+writes, while a different result remains `tool_receipt_conflict`.
 
 `cycle_aborted` is the durable lifecycle close for `cancelled`, `lease_lost`,
 and `operator_abort`. It carries the `logical_cycle`, closes any unclosed tool
