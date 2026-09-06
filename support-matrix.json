@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "12.0.0",
-  "status": "pending-adoption",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "pending-adoption",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "dcbe5f97c4011ab0bf35e882ea9824e730e25795"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "pending-adoption",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "cc423300f4dfabe755df626c16c3802d3a8456fd"
     }
   },
-  "adoption_note": "12.0.0 is a breaking forward-only receipt recovery release: ordinary definitive ERROR receipts persist the complete result and digest, checkpoint and session resume derive Message directly from that result, and OperationError remains a normalized diagnostic projection. Only synthetic terminal tool_cancelled closures remain resultless and lack a definitive digest; model-visible tool_outcome_unknown receipts retain the complete result, digest, and resume_observation evidence. Python and Rust adoption is pending.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v12.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-06T20:24:49Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34056866501"
 }
