@@ -111,6 +111,8 @@ jobs:
 
       - name: Run Python full gate
         working-directory: vv-agent
+        env:
+          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
         run: |
           uv sync --dev --extra s3
           uv run pytest
@@ -149,6 +151,29 @@ jobs:
             VV_AGENT_CROSS_RUNTIME_MODE=read_rust \
             uv run --directory vv-agent pytest \
               tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
+
+      - name: Verify cross-language Redis controller command
+        shell: bash
+        env:
+          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
+        run: |
+          set -euo pipefail
+          env_file="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-redis.XXXXXX")"
+          VV_AGENT_CROSS_REDIS_ENV_FILE="$env_file" \
+            VV_AGENT_CROSS_REDIS_MODE=write_python \
+            uv run --directory vv-agent pytest \
+              tests/test_runtime_controller.py::test_cross_runtime_redis_probe_from_environment
+          set -a
+          source "$env_file"
+          set +a
+          cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
+            --test controller_command \
+            controller_command_redis::redis_reads_python_seeded_host_receipt_and_notification_rows \
+            -- --exact --ignored
+          VV_AGENT_CROSS_REDIS_ENV_FILE="$env_file" \
+            VV_AGENT_CROSS_REDIS_MODE=read_python \
+            uv run --directory vv-agent pytest \
+              tests/test_runtime_controller.py::test_cross_runtime_redis_probe_from_environment
 
       - name: Record evidence
         shell: bash
