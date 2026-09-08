@@ -129,84 +129,6 @@ jobs:
           cargo check --examples
           cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Verify cross-language Redis controller
-        shell: bash
-        env:
-          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
-          VV_AGENT_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
-        run: |
-          set -euo pipefail
-          fixture_env="$(mktemp "$RUNNER_TEMP/vv-agent-cross-redis.XXXXXX")"
-          uv run --directory vv-agent python - <<'PY' > "$fixture_env"
-          import os
-          from uuid import uuid4
-
-          from tests.test_runtime_controller import _checkpoint, _host_response_command
-          from vv_agent.runtime.controller import HostInteractionAdmissionContext, HostInteractionRequest
-          from vv_agent.runtime.stores.redis import RedisCheckpointStore
-
-          redis_url = os.environ["VV_AGENT_TEST_REDIS_URL"]
-          store = RedisCheckpointStore(redis_url)
-          checkpoint_key = f"cross-redis-python-{uuid4().hex}"
-          checkpoint = _checkpoint(checkpoint_key)
-          assert store.create_checkpoint(checkpoint)
-          claimed = store.claim_checkpoint(
-              checkpoint_key,
-              1,
-              claim_token="cross-python-claim",
-              lease_expires_at_ms=10_000,
-              now_ms=1,
-              claim_mode="continue",
-          )
-          assert claimed is not None
-          request = HostInteractionRequest(
-              interaction_id=f"cross-interaction-{uuid4().hex}",
-              logical_cycle=1,
-              operation_id="cross-operation",
-              tool_call_id="cross-tool",
-              prompt="Cross-language host prompt",
-          )
-          outcome = store.produce_host_interaction(
-              request,
-              admission_context=HostInteractionAdmissionContext(
-                  checkpoint_key=checkpoint_key,
-                  claim_token="cross-python-claim",
-                  expected_revision=claimed.revision,
-                  claimed_cycle=1,
-                  now_ms=1,
-                  lease_expires_at_ms=10_000,
-              ),
-          )
-          command_id = f"cross-command-{uuid4().hex}"
-          command = _host_response_command(
-              store,
-              request,
-              key=checkpoint_key,
-              command_id=command_id,
-          )
-          assert store.resolve_controller_command(command).kind == "applied"
-          for name, value in {
-              "VV_AGENT_CROSS_REDIS_CHECKPOINT_KEY": checkpoint_key,
-              "VV_AGENT_CROSS_REDIS_INTERACTION_ID": request.interaction_id,
-              "VV_AGENT_CROSS_REDIS_NOTIFICATION_ID": outcome.notification_id,
-              "VV_AGENT_CROSS_REDIS_COMMAND_ID": command_id,
-              "VV_AGENT_CROSS_REDIS_REQUEST_DIGEST": request.request_digest or "",
-              "VV_AGENT_CROSS_REDIS_NOTIFICATION_DIGEST": outcome.notification_payload_digest,
-          }.items():
-              print(f"{name}={value}")
-          PY
-          set -a
-          source "$fixture_env"
-          set +a
-          cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-            --test controller_command \
-            controller_command_redis::redis_reads_python_seeded_host_receipt_and_notification_rows \
-            -- --exact --ignored --test-threads=1
-          cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-            --test checkpoint_core \
-            store_contract::redis_store_supports_claimed_finalize_and_event_delivery \
-            -- --exact --ignored --test-threads=1
-
       - name: Verify cross-language SQLite checkpoint
         shell: bash
         run: |
@@ -229,6 +151,34 @@ jobs:
             VV_AGENT_CROSS_RUNTIME_MODE=read_rust \
             uv run --directory vv-agent pytest \
               tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
+
+      - name: Verify cross-language Redis controller command
+        shell: bash
+        env:
+          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
+        run: |
+          set -euo pipefail
+          env_file="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-redis.XXXXXX")"
+          VV_AGENT_CROSS_REDIS_ENV_FILE="$env_file" \
+            VV_AGENT_CROSS_REDIS_MODE=write_python \
+            uv run --directory vv-agent pytest \
+              tests/test_runtime_controller.py::test_cross_runtime_redis_probe_from_environment
+          set -a
+          source "$env_file"
+          set +a
+          cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
+            --test controller_command \
+            controller_command_redis::redis_reads_python_seeded_host_receipt_and_notification_rows \
+            -- --exact --ignored
+          VV_AGENT_REDIS_URL="$VV_AGENT_TEST_REDIS_URL" \
+            cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
+              --test checkpoint_core \
+              store_contract::redis_store_supports_claimed_finalize_and_event_delivery \
+              -- --exact --ignored --test-threads=1
+          VV_AGENT_CROSS_REDIS_ENV_FILE="$env_file" \
+            VV_AGENT_CROSS_REDIS_MODE=read_python \
+            uv run --directory vv-agent pytest \
+              tests/test_runtime_controller.py::test_cross_runtime_redis_probe_from_environment
 
       - name: Record evidence
         shell: bash
