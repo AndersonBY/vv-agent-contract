@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "13.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "3e2c3dec846f1bbd7db12cd040844ded91b806bf"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "cd09c65792dc58c3aea5414cbd38fbed2b259127"
     }
   },
-  "adoption_note": "13.0.0 preserves application content verbatim in host interactions, checkpoints, events, and App Server prompts. Digests bind the original content. Declared platform credential slots and closed transport boundaries remain enforced. Paired local adoption is in progress; release and cross-repository evidence are pending.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v13.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-08T13:14:36Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34228847454"
 }
