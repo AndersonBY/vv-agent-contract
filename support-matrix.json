@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "14.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "9147788f26755bc044666e45c76ad7cf8d021003"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "1b1a97053f665db45b2db1569c1e1a23ed3b36b1"
     }
   },
-  "adoption_note": "Client-backed distributed recipes do not require a settings file; paired adoption is in progress.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v14.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-08T15:28:59Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34242956639"
 }
