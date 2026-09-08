@@ -185,7 +185,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "12.0.0")
+        self.assertEqual(report["version"], "13.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -967,7 +967,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/deferred_tool.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["schema_version"], "vv-agent.durable-deferred-tool.v2")
-        self.assertEqual(fixture["contract_version"], "12.0.0")
+        self.assertEqual(fixture["contract_version"], "13.0.0")
         self.assertEqual(
             fixture["status_domains"]["agent_status"],
             [
@@ -3058,8 +3058,8 @@ class ContractRepositoryTests(unittest.TestCase):
             "host_interaction_notification_outbox.payload",
         )
         self.assertEqual(
-            controller["credentialSanitizer"]["output"]["prompt"],
-            "Approve [credential redacted] at [external locator redacted]",
+            controller["hostPromptProjection"]["prompt"],
+            "unmodified prompt text",
         )
         self.assertTrue(controller["frameworkReceipt"]["visibility"] == "framework_public")
         self.assertNotIn("checkpointKey", controller["requestFields"])
@@ -3762,7 +3762,7 @@ class ContractRepositoryTests(unittest.TestCase):
             ],
         )
         self.assertEqual(active_wire["prompt_max_utf8_bytes"], 65536)
-        self.assertTrue(active_wire["content_policy"]["credential_redacted"])
+        self.assertTrue(active_wire["content_policy"]["content_preserved"])
         self.assertTrue(fixture["host_interaction_record"]["full_request_required"])
         self.assertTrue(fixture["host_interaction_record"]["full_resolved_response_required"])
         self.assertTrue(fixture["host_interaction_record"]["response_digest_only_is_invalid"])
@@ -5923,7 +5923,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "12.0.0")
+        self.assertEqual(fixture["contract_version"], "13.0.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -6020,7 +6020,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertTrue(producer["admission"]["claim_release_is_atomic"])
         self.assertFalse(producer["admission"]["external_effect_inside_transaction"])
         self.assertEqual(producer["request_wire"]["prompt_max_utf8_bytes"], 65536)
-        self.assertTrue(producer["request_wire"]["content_policy"]["credential_redacted"])
+        self.assertTrue(producer["request_wire"]["content_policy"]["content_preserved"])
         self.assertEqual(
             producer["admission"]["replay"]["same_interaction_identity_and_digest_after_claim_release"],
             "return retained outcome with zero writes",
@@ -6177,7 +6177,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/run_events_invalid.json").read_text(encoding="utf-8")
         )["rules"]["host_interaction_fields"]
         self.assertEqual(event_rules["unknown_fields"], "reject")
-        self.assertEqual(event_rules["prompt_and_response_digest"], "strict credential-redacted UTF-8 content; max 65536 bytes")
+        self.assertEqual(event_rules["prompt_and_response_digest"], "opaque UTF-8 content; max 65536 bytes")
         rejected_event_names = {
             case["id"]
             for case in json.loads(

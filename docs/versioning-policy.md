@@ -56,6 +56,20 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 13.0.0
+
+`13.0.0` defines application content as opaque UTF-8 text and JSON values.
+Host requests, responses, checkpoints, events, and App Server prompt projections
+preserve that content verbatim. Their existing digests cover the original bytes
+under the canonical encoding. Content is not classified by key names, assignment
+syntax, credential-like vocabulary, or URL parameters.
+
+Declared platform credential slots remain configuration-only boundaries.
+Closed transport schemas, content size limits, identity binding, and atomic
+claim/revision checks remain enforced. No wire discriminator or object shape
+changes. Adoption remains `in-progress` until paired repository and central
+cross-repository evidence is complete.
+
 ## Release Note: 8.0.0
 
 `8.0.0` is a major forward-only release. It adds the task-neutral
@@ -85,7 +99,7 @@ merging it with deferred resolution or terminal successor continuation:
   independent row-level lifecycle transactions and never join either wake
   transaction;
 - the framework-only host-interaction producer persists the complete strict
-  request (including credential-redacted prompt) in both the checkpoint and an
+  request (including its original prompt) in both the checkpoint and an
   independent interaction record. It writes only a v4
   `host_interaction_requested` event and an independent durable UI notification
   outbox, never a worker wake. Same identity plus digest replays with zero

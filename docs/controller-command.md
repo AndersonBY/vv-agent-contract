@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `12.0.0` defines one task-neutral, closed admission seam for durable
+Contract `13.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -117,7 +117,7 @@ The producer must hold the active worker claim. In one checkpoint CAS it:
 1. verifies `logical_cycle=claimed_cycle=cycle_index+1` and all operation/tool
    identity;
 2. writes `status=host_interaction`, the complete strict
-   `active_host_interaction` request (including the credential-redacted
+   `active_host_interaction` request (including the original
    prompt), an independent `host_interaction_record`, the interaction event
    marker, and a UI notification outbox row;
 3. clears `claim_token`, `claimed_cycle`, and `lease_expires_at_ms`, and bumps
@@ -127,7 +127,7 @@ The claim release is part of that CAS. Provider calls, model calls, callbacks,
 and queue publication occur after commit. The producer notification is not a
 worker wake. A crash reloads the persisted request, interaction record, and
 notification outbox before replaying. The producer accepts no checkpoint/run
-fence, credential, locator, or secret from its caller. Repeating the same
+fence or provider authentication configuration from its caller. Repeating the same
 interaction identity plus request digest after claim release returns a
 zero-write replay; a different digest or binding is a conflict.
 
@@ -139,7 +139,7 @@ command receipt, a recovery wake, or any notification claim, delivery, or
 reconciliation lifecycle.
 
 The UI notification is a separate durable outbox row, not a controller receipt
-or recovery wake. Its strict sanitized payload includes
+or recovery wake. Its strict payload includes
 `wait_reason=host_interaction` and is delivered through `thread/status` and
 `thread/status/changed`; it has its own stable `notification_id`, RFC 8785
 payload digest, pending/claimed/delivered/ambiguous/aborted state,
@@ -155,10 +155,10 @@ is `notification_conflict`. A later suspend emits a separate complete
 `run_state_changed` notification with `wait_reason=suspended`; it never
 mutates the host-interaction notification.
 
-`HostInteractionRequest.prompt` is a closed credential-redacted string capped
-at 65,536 UTF-8 bytes. The strict codec rejects credentials, external
-locators, transport metadata, unknown fields, and over-limit content before
-the CAS. The event is canonical RunEvent v5 `host_interaction_requested` and
+`HostInteractionRequest.prompt` and response `content` preserve the caller's
+UTF-8 text, capped at 65,536 bytes. The strict codec validates message shape,
+unknown fields, and content size before CAS; URLs and credential-like text
+are content, not additional wire fields. The event is canonical RunEvent v5 `host_interaction_requested` and
 the producer outbox action is `host_interaction_notification` to the observer,
 never `recovery_dispatch`.
 
@@ -339,7 +339,7 @@ actionId)` tuple using the length-prefixed JCS/SHA-256 algorithm above. A
 replay in the same scope reuses the command id; the same action id in another
 thread or turn derives a different command id. The server derives the command
 digest from the closed command plus authoritative turn binding. The projected
-host prompt is sanitized credential-redacted text; its
+host prompt preserves the original text; its
 operation/tool/checkpoint/lease/request digest fields are never public.
 `turn/resume` still disallows new input, and `ask_user` remains terminal.
 
@@ -358,7 +358,7 @@ admission has its own transaction containing the checkpoint, interaction
 record, request event, UI notification row, claim release, and revision; it
 deliberately does not create a controller receipt or recovery wake. The
 independent
-`host_interaction_notification_outbox` stores only the strict sanitized UI
+`host_interaction_notification_outbox` stores only the strict UI
 payload and its stable id/digest, with its own claim/lease/delivery/retry/
 reconcile protocol. Delivery is at-least-once and observer deduplication is
 required; an uncertain callback is ambiguous, not exactly-once. The reaper

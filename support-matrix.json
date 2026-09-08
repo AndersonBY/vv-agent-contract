@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "contract_version": "12.0.0",
-  "status": "pending-adoption",
+  "contract_version": "13.0.0",
+  "status": "in-progress",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "pending-adoption",
+      "status": "in-progress",
       "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "pending-adoption",
+      "status": "in-progress",
       "verified_revision": null
     }
   },
-  "adoption_note": "12.0.0 is a breaking forward-only receipt recovery release: ordinary definitive ERROR receipts persist the complete result and digest, checkpoint and session resume derive Message directly from that result, and OperationError remains a normalized diagnostic projection. Only synthetic terminal tool_cancelled closures remain resultless and lack a definitive digest; model-visible tool_outcome_unknown receipts retain the complete result, digest, and resume_observation evidence. Python and Rust adoption is pending.",
+  "adoption_note": "13.0.0 preserves application content verbatim in host interactions, checkpoints, events, and App Server prompts. Digests bind the original content. Declared platform credential slots and closed transport boundaries remain enforced. Paired local adoption is in progress; release and cross-repository evidence are pending.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

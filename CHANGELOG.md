@@ -1,5 +1,17 @@
 # Changelog
 
+## 13.0.0 — adoption in progress
+
+- Host interaction prompts and response messages retain their original UTF-8
+  content across persistence, recovery, notifications, and App Server reads.
+- Content digests bind the original payload. Business text and JSON values
+  are opaque to the framework, including credential-like examples and URLs.
+- Closed schemas, UTF-8 limits, identity checks, CAS, and explicit platform
+  credential slots retain their existing boundaries. Wire shapes are unchanged.
+
+Paired implementation and cross-repository verification remain required
+before this contract can be marked verified.
+
 ## 12.0.0 — pending adoption
 
 - Ordinary definitive `ERROR` tool receipts persist the complete canonical

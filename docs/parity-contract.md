@@ -90,6 +90,19 @@ workspace, memory, delegation, approval, and lifecycle mechanisms, but it does
 not classify a task, infer semantic progress, rewrite a business answer, or
 choose a task-specific stopping policy.
 
+## Content And Credential Boundaries
+
+User messages, host prompts, tool arguments, tool results, and their persisted
+history are opaque application content. The runtime preserves their values;
+it does not infer sensitivity from field names, natural language, URLs, or
+credential-like text. Digests cover the exact canonical content.
+
+Strict schemas, size limits, authorization, and execution fences remain
+independent checks. Platform authentication stays in provider configuration
+and explicit credential slots, not in model messages or public transport
+metadata. Public adapters expose only their declared fields. Log and telemetry
+producers select the diagnostic fields they need without rewriting run data.
+
 ## Completion And Results
 
 `NoToolPolicy` has exactly `continue`, `wait_user`, and `finish`. Effective
@@ -223,7 +236,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `12.0.0` applies the sparse bounded-result rules in
+Contract `13.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -359,7 +372,7 @@ languages. Its closed command and receipt wires use the same handle,
 resume-attempt, and revision fences; `host_interaction` and `suspended` remain
 non-terminal and recover the same logical cycle while preserving the last
 committed cycle index. The framework-only producer persists a complete strict
-host request (including a redacted prompt) and writes only the v4
+host request (including the unmodified prompt) and writes only the v4
 `host_interaction_requested` event/UI notification outbox. A response command
 persists the complete response in the independent interaction record before a
 recovery worker injects it once and records

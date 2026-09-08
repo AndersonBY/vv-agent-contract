@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 12.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 13.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -290,7 +290,7 @@ event cursor remain excluded.
 - `active_host_interaction`, the complete closed
   `vv-agent.host-interaction-request.v1` object
   `{schema_version, interaction_id, logical_cycle, operation_id, tool_call_id,
-  request_digest, prompt}` or null. Prompt content is credential-redacted and
+  request_digest, prompt}` or null. Prompt content is preserved verbatim and
   capped at 65,536 UTF-8 bytes;
 - `suspended_origin`, a closed `{status, active_host_interaction}` object or
   null. `host_interaction` and `suspended` persist these fields and have no
