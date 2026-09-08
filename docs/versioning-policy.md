@@ -56,6 +56,14 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 14.0.0
+
+`14.0.0` permits an empty `RuntimeRecipe.settings_file` when the existing
+`llm_client_ref` supplies the model client. Without that reference the path
+remains non-blank. The field remains a required string, all current wire shapes
+stay closed, and missing capability resolution fails before execution without
+falling back to file configuration.
+
 ## Release Note: 13.0.0
 
 `13.0.0` defines application content as opaque UTF-8 text and JSON values.

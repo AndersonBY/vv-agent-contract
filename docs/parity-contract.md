@@ -236,7 +236,7 @@ The resolver's closed typed errors are `deferred_resolution_conflict`,
 `deferred_resolution_stale`, `deferred_resolution_result_invalid`, and
 `deferred_checkpoint_claimed`; none is a `DeferredResolveDecision` variant.
 
-Contract `13.0.0` applies the sparse bounded-result rules in
+Contract `14.0.0` applies the sparse bounded-result rules in
 `prompt-bundles-and-tool-results.md`. Ordinary results do not carry truncation
 fields. Truncated results preserve their recovery pointer through model
 projection, results, journals, checkpoints, and distributed execution.
@@ -391,6 +391,13 @@ current `AgentTask` wire and carries `prompt_bundle`; it has no separate
 lease; progress updates preserve the claim; terminal commit precedes scheduler
 acknowledgement. Redelivery replays a durable terminal without executing the
 model or tools again.
+
+`RuntimeRecipe.settings_file` remains a required string. It may be empty when
+`capabilities.llm_client_ref` supplies the worker's model client; that path
+does not read a settings file. Without a client reference it must be non-blank
+and selects the settings file used to construct the client. A declared client
+reference must resolve before claim or model work; resolution failure never
+falls back to the file. Backend, model, and workspace identities remain required.
 
 The worker response is a separate closed wire with
 `schema_version=vv-agent.distributed-worker-response.v4` and one required

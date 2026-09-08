@@ -1,5 +1,14 @@
 # Changelog
 
+## 14.0.0
+
+- Distributed recipes accept an empty settings-file path when a registered
+  LLM client reference supplies the model client.
+- File-backed recipes still require a non-blank path. Missing client
+  references fail before execution without file fallback.
+- Current closed wire shapes and backend/model/workspace identities remain
+  unchanged.
+
 ## 13.0.0 — adoption in progress
 
 - Host interaction prompts and response messages retain their original UTF-8
