@@ -185,7 +185,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "14.0.0")
+        self.assertEqual(report["version"], "15.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -1643,11 +1643,10 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/builtin_tools.json").read_text(encoding="utf-8")
         )
         tools = {tool["name"]: tool for tool in fixture["tools"]}
-        self.assertEqual(fixture["schema_version"], 2)
+        self.assertEqual(fixture["schema_version"], 3)
         self.assertEqual(
             set(tools),
             {
-                "task_finish",
                 "ask_user",
                 "activate_skill",
                 "todo_write",
@@ -1690,7 +1689,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertFalse(exposure_cases["deferred"]["valid"])
         self.assertTrue(all(len(tool["description"]) < 500 for tool in tools.values()))
-        self.assertIn("optional", tools["task_finish"]["description"])
+        self.assertNotIn("task_finish", tools)
         self.assertIn("cursor", tools["read_file"]["parameters"]["properties"])
         for path in sorted((ROOT / "fixtures").glob("*.json")):
             self.assertNotIn("memory_notes", path.read_text(encoding="utf-8"), path.name)
@@ -2683,7 +2682,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/completion_policy.json").read_text(encoding="utf-8"))
 
         self.assertEqual(fixture["policy_values"], ["continue", "wait_user", "finish"])
-        self.assertEqual(fixture["framework_default"], "continue")
+        self.assertEqual(fixture["framework_default"], "finish")
         self.assertEqual(
             fixture["precedence"],
             ["run_config", "runner_default_run_config", "agent", "framework_default"],
@@ -5664,7 +5663,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
         self.assertEqual(
             capabilities["toolset_ref"]["schema_digest"],
-            "d266963bff5d4dc90f4fd4c9897381aa589375078f0c08c23af474e27f6b0269",
+            "4f535c2bfd1657cec4a8dce5f0d846dc8f683a5470100a8ce83801739b8e3c9a",
         )
         self.assertEqual(
             capabilities["after_cycle_hook_refs"],

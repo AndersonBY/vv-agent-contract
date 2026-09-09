@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "contract_version": "14.0.0",
-  "status": "verified",
+  "contract_version": "15.0.0",
+  "status": "in-progress",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "a315c3ec905b1997fd27c5f992bc315562d35627"
+      "status": "in-progress",
+      "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "3a15f99ded8a03402a3c3d0f326c0222b8540a1c"
+      "status": "in-progress",
+      "verified_revision": null
     }
   },
-  "adoption_note": "v14.0.0 passed the paired implementation snapshots and cross-language producer gates.",
-  "last_verified_at": "2026-09-09T02:35:47Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34302649163"
+  "adoption_note": "Natural completion and the built-in tool inventory require paired implementation adoption. Host interaction control transfer and exclusive recovery worker ownership also require producer and full cross-repository verification.",
+  "last_verified_at": null,
+  "cross_repository_run": null
 }

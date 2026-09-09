@@ -56,6 +56,19 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 15.0.0
+
+The built-in tool manifest uses schema version 3 and distributed capability
+`vv-agent.builtin-tools@3`; its digest covers the current tool schemas.
+
+`15.0.0` makes natural completion the default: an assistant response without
+tool calls proceeds through existing after-cycle hooks, output validation, and
+durable finalization. The built-in task-completion tool is absent. Final output
+comes from the assistant response rather than a completion-tool argument.
+Explicit host stopping policies remain available; the framework does not infer
+business success from text or TODO state. Hosts retain responsibility for
+artifact acceptance, resource publication, and reliable product finalization.
+
 ## Release Note: 14.0.0
 
 `14.0.0` permits an empty `RuntimeRecipe.settings_file` when the existing

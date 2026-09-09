@@ -107,8 +107,22 @@ producers select the diagnostic fields they need without rewriting run data.
 
 `NoToolPolicy` has exactly `continue`, `wait_user`, and `finish`. Effective
 precedence is per-run config, Runner default config, Agent config, then the
-framework default `continue`. The policy observes only the mechanical presence
+framework default `finish`. The policy observes only the mechanical presence
 or absence of tool calls; it never classifies assistant text.
+
+A normal assistant response without tool calls is a completion candidate. The
+existing after-cycle hooks may request another cycle with concrete feedback;
+otherwise the response proceeds through output validation and durable terminal
+finalization. Completion preserves the assistant response as the final answer
+without requiring a second model-authored copy in a tool argument. Error,
+cancellation, deferred work, and host-interaction waits keep their distinct
+lifecycle semantics.
+
+The built-in tool inventory has no task-completion tool. TODO state is planning
+information, not a framework-enforced success predicate. Hosts that require
+artifact checks or business acceptance use the existing after-cycle hook and
+finalization interfaces. A stopped run does not itself establish that an
+external business task has been accepted or its resources have been published.
 
 Every terminal result has a typed completion observation. Current completion
 reasons are `tool_finish`, `no_tool_finish`, `stop_on_first_tool`,
