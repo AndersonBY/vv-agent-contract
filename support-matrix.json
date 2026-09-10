@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "15.0.0",
+  "contract_version": "16.0.0",
   "status": "in-progress",
   "implementations": {
     "python": {
@@ -16,7 +16,7 @@
       "verified_revision": null
     }
   },
-  "adoption_note": "Natural completion and the built-in tool inventory require paired implementation adoption. Host interaction control transfer and exclusive recovery worker ownership also require producer and full cross-repository verification.",
+  "adoption_note": "Typed host-interaction tool outcomes, atomic result admission, and response recovery require paired producer, persistence, and full cross-repository verification.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

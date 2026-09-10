@@ -56,6 +56,17 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 16.0.0
+
+`16.0.0` adds the closed `host_interaction` tool outcome with a definitive
+result and strict interaction request. The outcome discriminator advances to
+`vv-agent.tool-call-outcome.v3`; readers reject other versions rather than
+selecting an alternate decoder. `completed` and `deferred` retain their
+separate meanings. Tool return expresses intent; the framework owns atomic
+result admission, claim release, and response recovery. Adoption remains
+`in-progress` until both real producers, persistence boundaries, full gates,
+and cross-repository verification pass.
+
 ## Release Note: 15.0.0
 
 The built-in tool manifest uses schema version 3 and distributed capability

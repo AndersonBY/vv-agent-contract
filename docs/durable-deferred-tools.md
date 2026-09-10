@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `14.0.0` defines one task-neutral boundary for a tool whose external
+Contract `16.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -9,11 +9,24 @@ proof objects, and business payloads never enter the framework handle.
 
 ## Current closed wires
 
-`ToolCallOutcome` is `vv-agent.tool-call-outcome.v2` and has exactly two
+`ToolCallOutcome` is `vv-agent.tool-call-outcome.v3` and has exactly three
 variants:
 
 - `completed` contains one complete `ToolExecutionResult`;
-- `deferred` contains one `DeferredToolHandle` and no tool result.
+- `deferred` contains one `DeferredToolHandle` and no tool result;
+- `host_interaction` contains one definitive `ToolExecutionResult` and one
+  strict `HostInteractionRequest`. Its result has status `SUCCESS` or a
+  definitive `ERROR`, directive `continue`, and the request's tool-call ID.
+  An ambiguous error, terminal directive, mismatched identity, missing field,
+  or additional field is rejected.
+
+A host-interaction outcome is the tool handler's normal return value, not a
+durable admission receipt. The framework commits the exact returned result
+with the interaction request before publishing the wait. Neither the handler
+nor its return value claims that the interaction was delivered. An exception
+or timeout cannot publish an intent returned later by an abandoned handler.
+Host interaction is distinct from deferred provider acceptance and terminal
+`ask_user`; it does not use either representation.
 
 `ToolExecutionResult.status_code` has the current values `SUCCESS`, `ERROR`,
 `WAIT_RESPONSE`, `RUNNING`, and `PENDING_COMPRESS`. Deferred is not a result

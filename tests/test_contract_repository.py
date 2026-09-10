@@ -185,7 +185,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "15.0.0")
+        self.assertEqual(report["version"], "16.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -1010,7 +1010,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
 
         variants = fixture["outcome"]["variants"]
-        self.assertEqual(set(variants), {"completed", "deferred"})
+        self.assertEqual(set(variants), {"completed", "deferred", "host_interaction"})
         self.assertTrue(variants["deferred"]["model_visible_tool_result"] is False)
         self.assertTrue(fixture["outcome"]["closed_objects"])
         self.assertTrue(fixture["outcome"]["exactly_one_variant"])
