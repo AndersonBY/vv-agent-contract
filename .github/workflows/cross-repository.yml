@@ -126,6 +126,7 @@ jobs:
         run: |
           cargo fmt --all -- --check
           cargo test -p vv-agent -- --test-threads=1
+          cargo test -p vv-agent --features apalis --test apalis_backend
           cargo check --examples
           cargo clippy --all-targets --all-features -- -D warnings
 
