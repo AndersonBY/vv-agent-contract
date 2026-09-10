@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "17.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "52f7e801cf820a83da6808cec34a4445165e6b74"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "2e3b4ce481f53a1ca5f40c40f12605dbd27ecea9"
     }
   },
-  "adoption_note": "Typed host-interaction tool outcomes, atomic result admission, and response recovery require paired producer, persistence, and full cross-repository verification.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v17.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-10T11:18:18Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34468832334"
 }
