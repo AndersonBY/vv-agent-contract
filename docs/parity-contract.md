@@ -330,7 +330,7 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v10` and embed an exact
+Checkpoint records require `vv-agent.checkpoint.v11` and embed an exact
 `vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.
@@ -395,6 +395,11 @@ recovery worker injects it once and records
 `host_interaction_response_consumed`; response replay is zero-write. Resume of
 a running suspended origin wakes, while resume of a host-interaction origin
 without a pending response only restores the wait. The controller
+also suspends deferred origins without clearing their handles. Resolution
+while suspended persists receipts without a wake; resume waits while handles
+remain and wakes once after the batch resolves. Cancellation closes unresolved
+handles with concrete unknown-effect observations and rejects their late results.
+The controller
 receipt/outbox CAS is separate from deferred resolution, while terminal
 continuation remains a successor-run operation. `ask_user` continues to
 produce terminal `wait_user`.

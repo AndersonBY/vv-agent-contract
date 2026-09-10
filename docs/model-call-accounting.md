@@ -124,7 +124,7 @@ does not fabricate usage for an opaque output-repair callback.
 
 ## Checkpoint Atomicity
 
-Checkpoint `vv-agent.checkpoint.v10` stores the run-level model-call ledger. A
+Checkpoint `vv-agent.checkpoint.v11` stores the run-level model-call ledger. A
 model journal entry records its operation and the actual effective `backend`
 and `model`; internal calls must not copy these values from the root run
 definition. Before provider dispatch,

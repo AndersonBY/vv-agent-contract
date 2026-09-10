@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `17.0.0` defines one task-neutral boundary for a tool whose external
+Contract `18.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -150,6 +150,16 @@ unclaimed `running`, empties the barrier, and makes it schedulable through the
 ordinary recovery claim path. If entries remain unresolved, status remains
 `deferred`. Resolutions can arrive in any order; resumed model input merges
 results in original model tool-call order, never callback order.
+
+Suspension overlays the deferred barrier without clearing its journals or
+handles. `resolve_deferred` still persists definitive receipts and completion
+events while suspended, but returns `AppliedWaiting` even for the last handle
+and leaves the checkpoint suspended. Resume restores `deferred` with no wake
+when handles remain, or `running` with one recovery wake after all receipts.
+The retained deferred origin never changes during resolution. Cancellation
+uses the existing `tool_cancelled` closure and retains unknown-effect
+observations; an unresolved late handle is stale, while an already retained
+receipt still replays. Controller commands never call or undo the provider.
 
 ## Resolution and durable receipts
 

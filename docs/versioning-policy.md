@@ -56,6 +56,19 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 18.0.0
+
+Deferred runs support durable suspend, resume and cancel through the existing
+controller seam. The checkpoint discriminator advances to
+`vv-agent.checkpoint.v11`; its closed suspended origin also accepts `deferred`
+with no host interaction. Current readers reject every other discriminator.
+Receipts admitted while suspended remain durable without a worker wake;
+resume dispatches only when the complete deferred batch has resolved.
+Cancellation closes the cycle with retained unknown-effect observations and
+rejects unresolved late results without reviving the run. Command, deferred
+handle, result and receipt wires are unchanged. Adoption remains `in-progress`
+until paired producers, full gates and cross-repository CI pass.
+
 ## Release Note: 17.0.0
 
 Tool-originated host-interaction admission commits its completed cycle and

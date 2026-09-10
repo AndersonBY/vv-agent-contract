@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `17.0.0` defines one task-neutral, closed admission seam for durable
+Contract `18.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -8,8 +8,8 @@ recovery. Callers do not provide storage internals.
 Two boundaries remain independent:
 
 - `resolve_deferred(handle, result)` resolves a deferred effect and its
-  receipt-first barrier. A deferred checkpoint cannot be changed by a
-  controller command.
+  receipt-first barrier. Suspend and resume preserve unresolved handles;
+  cancel closes them with unknown-effect observations, not definitive results.
 - terminal continuation creates a successor run. `wait_user` remains the
   existing terminal `ask_user` result; no controller command changes it.
 
@@ -176,7 +176,7 @@ never `recovery_dispatch`.
 
 ## Checkpoint state and cycle terminology
 
-The v10 checkpoint discriminator is `vv-agent.checkpoint.v10`; no v9 reader,
+The v11 checkpoint discriminator is `vv-agent.checkpoint.v11`; no v10 reader,
 namespace probe, or migration fallback exists. A checkpoint always persists
 the complete strict `active_host_interaction` request (including prompt and
 schema discriminator) and `suspended_origin`, both closed objects or null:
@@ -187,6 +187,11 @@ schema discriminator) and `suspended_origin`, both closed objects or null:
   worker; resuming a host-interaction origin without a resolved response only
   restores the wait. A pending resolved response changes that resume into one
   recovery wake;
+- a `deferred` suspended origin has null `active_host_interaction`. Deferred
+  receipts may be admitted while suspended, without changing the suspended
+  status or waking a worker. Resume restores `deferred` without a wake if
+  unresolved handles remain, otherwise it restores `running` with one recovery
+  wake. The origin remains `deferred` until resume even after the last receipt;
 - every other state requires both null.
 
 `cycle_index` means the last committed cycle. A live claim names
@@ -301,8 +306,9 @@ Errors are strict and observable: `controller_command_digest_invalid`,
 `host_interaction_conflict`, `host_interaction_fields_invalid`,
 `host_interaction_content_too_large`, and `host_interaction_response_missing`.
 
-Precedence is: committed terminal, live claim, unresolved ambiguity, deferred
-barrier, command state rule, then cancellation handling. A live claim receives
+Precedence is: committed terminal, live claim, unresolved ambiguity, command
+state rule, then cancellation handling. Deferred journals permit suspend,
+resume and cancel; other commands cannot bypass their barrier. A live claim receives
 the cancellation signal; an expired claim is reclaimed before cancellation is
 applied. An unresolved ambiguous operation remains explicit and cannot be
 turned into a successful result by cancellation.
@@ -334,6 +340,15 @@ cycle commit or terminal acknowledgement. A crash before commit rolls back to
 Deferred resolution
 uses its own resolver and wake protocol; terminal continuation uses its own
 successor protocol.
+
+A deferred cancel closes the current logical cycle through the existing
+unclaimed terminal finalizer. Unresolved tools become resultless
+`tool_cancelled` entries with their concrete deferred `resume_observation`;
+completed receipts remain definitive evidence. It emits one `cycle_aborted`
+before the cancelled terminal lifecycle, releases no model wake, and does not
+claim to stop or undo the provider effect. A late result for a cancelled
+unresolved handle is `deferred_resolution_stale` with zero writes. A receipt
+committed before cancellation still replays from the retained receipt index.
 
 A response submitted while the interaction is held in a suspended
 `host_interaction` origin is admitted into the full interaction record but
@@ -384,7 +399,7 @@ reconcile protocol. Delivery is at-least-once and observer deduplication is
 required; an uncertain callback is ambiguous, not exactly-once. The reaper
 routes ambiguous rows to explicit delivered/retry/abort reconciliation and
 never blind-retries them. It is never reused as a recovery wake. SQLite only enforces scalar
-lifecycle relations; strict v10 codec validation owns nested JSON shape and
+lifecycle relations; strict v11 codec validation owns nested JSON shape and
 UTF-8/digest limits.
 Redis must expose equivalent replay, conflict, stale, lease, and ambiguity
 semantics.

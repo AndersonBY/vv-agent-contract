@@ -1,7 +1,7 @@
 # Durable Checkpoint And Resume Contract
 
 This document defines the current durable checkpoint and resume contract in
-`vv-agent-contract` 14.0.0. It is a task-neutral persistence and recovery
+`vv-agent-contract` 18.0.0. It is a task-neutral persistence and recovery
 mechanism. It does not inspect prompts, answers, task categories, or domain
 milestones, and it does not decide whether a task is semantically complete.
 
@@ -11,7 +11,7 @@ can complete without its receipt becoming durable.
 
 ## Controller Commands
 
-The v10 controller seam is specified in `controller-command.md`. It admits one
+The v11 controller seam is specified in `controller-command.md`. It admits one
 closed `ControllerCommand` against a passive run handle and one checkpoint
 revision fence. `host_interaction` and `suspended` are non-terminal statuses;
 their command receipt and checkpoint revision are one CAS, and recovery keeps
@@ -21,11 +21,11 @@ retained journal evidence. A worker's existing
 driver can wait for `host_interaction` or `suspended` without a new worker wire
 variant.
 
-The command receipt is not a deferred-tool receipt. `resolve_deferred` must
-clear an unresolved deferred barrier before controller state changes can be
-admitted. Likewise, `wait_user` remains the terminal `ask_user` result and a
+The command receipt is not a deferred-tool receipt. Suspend and resume retain
+the deferred barrier; cancel closes unresolved journals with unknown-effect
+observations. Likewise, `wait_user` remains the terminal `ask_user` result and a
 new input uses the separate successor-run continuation protocol. A committed
-terminal, live claim, unresolved ambiguity, and deferred barrier have strict
+terminal, live claim, and unresolved ambiguity have strict
 precedence over ordinary control. A live-claim cancel records
 `cancel_requested=true` and lets the worker observe a typed cancellation
 outcome on renewal; an expired claim is reclaimed and the control command is
@@ -38,7 +38,10 @@ If a response arrives while a host interaction is suspended, admission stores
 the complete response record but leaves the checkpoint suspended and emits no
 worker wake. Resuming that host origin dispatches exactly once when the record
 is pending. Resuming a suspended running origin dispatches immediately; a host
-origin without a response remains waiting.
+origin without a response remains waiting. A deferred origin resumes without a
+wake while any handle remains unresolved. Receipts admitted during suspension
+preserve that status and return `AppliedWaiting`; after all receipts, resume
+restores running with one recovery wake.
 
 ## Activation And Strictness
 
@@ -49,7 +52,7 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v10` and
+suffix. Records require `schema_version=vv-agent.checkpoint.v11` and
 `run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
@@ -273,7 +276,7 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v10`;
+- `schema_version`, exactly `vv-agent.checkpoint.v11`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
@@ -927,7 +930,7 @@ background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
 closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
-part of the current checkpoint.v10 wire. This restriction is explicit rather than silently
+part of the current checkpoint.v11 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence

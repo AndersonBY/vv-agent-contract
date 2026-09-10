@@ -197,7 +197,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "17.0.0")
+        self.assertEqual(report["version"], "18.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -3544,6 +3544,18 @@ class ContractRepositoryTests(unittest.TestCase):
             text=True,
         )
 
+    def test_deferred_controls_preserve_receipts_and_suspension(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
+        cases = fixture["deferred_control_cases"]
+        self.assertEqual([case["resulting_status"] for case in cases], ["deferred", "running", "failed", "failed"])
+        self.assertEqual([case["wake"] for case in cases], [False, True, False, False])
+        self.assertEqual([case["resolve_while_suspended"] for case in cases], [0, 2, 0, 1])
+        boundary = fixture["deferred_boundary"]
+        self.assertTrue(boundary["suspend_and_resume_preserve_unresolved_handles"])
+        self.assertEqual(boundary["suspended_resolution_decision"], "applied_waiting")
+        self.assertFalse(boundary["suspended_resolution_wakes"])
+        self.assertTrue(boundary["cancel_closes_unresolved_handles_with_observations"])
+
     def test_checkpoint_is_strict_and_extensions_are_explicit(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
         canonical = fixture["canonical_checkpoint"]
@@ -3552,7 +3564,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v10")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v11")
         self.assertIn("cancel_requested", fixture["required_fields"])
         self.assertIs(canonical["cancel_requested"], False)
         self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v5")
@@ -3573,7 +3585,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v10",
+                "required_value": "vv-agent.checkpoint.v11",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
@@ -3740,7 +3752,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         self.assertIs(claimed_cycle_case["payload"]["cancel_requested"], False)
         self.assertIn(
-            "old_v9_schema_is_rejected_forward_only",
+            "old_v10_schema_is_rejected_forward_only",
             {case["name"] for case in fixture["invalid_cases"]},
         )
         self.assertTrue(fixture["status_rules"]["old_checkpoint_discriminator_is_rejected_without_reader_fallback"])
@@ -3991,7 +4003,7 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertEqual(sum(sizes), expected_total)
             self.assertEqual(case["canonical_total_entries_utf8_bytes"], expected_total)
 
-    def test_invalid_current_v10_payloads_keep_required_checkpoint_shape(self) -> None:
+    def test_invalid_current_v11_payloads_keep_required_checkpoint_shape(self) -> None:
         fixture = json.loads((ROOT / "fixtures/checkpoint_codec.json").read_text(encoding="utf-8"))
         current = fixture["discriminator"]["required_value"]
         required = set(fixture["required_fields"])
@@ -5247,7 +5259,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
         operation_fixture = json.loads((ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8"))
         self.assertEqual(fixture["version"], 10)
-        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v10")
+        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v11")
         self.assertIn("cancel_requested", fixture["checkpoint_wire"]["required_fields"])
         self.assertEqual(
             fixture["cycle_semantics"]["cycle_aborted_cycle_index_relation"],
@@ -5934,7 +5946,7 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_controller_command_is_closed_fenced_and_separate_from_deferred(self) -> None:
         fixture = json.loads((ROOT / "fixtures/controller_command.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(fixture["contract_version"], "14.0.0")
+        self.assertEqual(fixture["contract_version"], "18.0.0")
         self.assertEqual(fixture["schema_version"], "vv-agent.controller-command.v1")
         self.assertTrue(fixture["scope"]["task_neutral"])
         self.assertTrue(fixture["scope"]["deferred_resolution_is_separate"])
@@ -6340,7 +6352,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "committed_terminal",
                 "live_claim_cancel_requested",
                 "unresolved_ambiguous_operation",
-                "unresolved_deferred_barrier",
+                "deferred_barrier_preserved_by_suspend_resume_or_closed_by_cancel",
             ],
         )
         self.assertEqual(
@@ -6837,7 +6849,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_records (", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_notification_outbox (", sql)
         self.assertIn("response_digest TEXT", sql)
-        self.assertIn("strict v10 codec", sql)
+        self.assertIn("strict v11 codec", sql)
         self.assertIn("model_call_journal", sql)
         self.assertNotIn("deferred_resolution_receipts" + " TEXT NOT NULL", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS deferred_resolution_receipts (", sql)
@@ -6875,7 +6887,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v10",
+                    "vv-agent.checkpoint.v11",
                     "vv-agent.run-definition.v5",
                     "{}",
                     "task-1",
