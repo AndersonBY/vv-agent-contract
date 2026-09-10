@@ -240,8 +240,10 @@ state transition. Deferred is represented only by
 Unknown fields are rejected, and no reader derives another status vocabulary
 from `status_code`.
 
-Tool calls use the closed `ToolCallOutcome` with exactly `completed` or
-`deferred` variants. `deferred` carries only the closed
+Tool calls use the closed `ToolCallOutcome` with exactly `completed`,
+`deferred`, or `host_interaction` variants. A host interaction carries its
+definitive result and strict request; admission commits the completed cycle
+before response recovery starts the next model cycle. `deferred` carries only the closed
 `DeferredToolHandle` (required discriminator plus four identity fields); it
 never produces a model-visible tool result. The
 durable admission, resolution CAS, batch barrier, recovery decision, and

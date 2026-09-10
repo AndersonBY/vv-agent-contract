@@ -61,6 +61,9 @@ Rust refs under review. It verifies:
 2. Both vendored snapshots match the canonical artifact and one another.
 3. Real prompt, tool, public API, event, session, and App Server producers pass.
 4. Both complete repository quality gates pass.
+5. Real tool-produced host-interaction SQLite and Redis checkpoints exchange in both
+   directions; each consumer resolves and injects a response exactly once,
+   and the producer reloads the resulting claim, transcript, and tool receipt.
 
 Record the successful run URL and exact implementation revisions in
 `support-matrix.json`, then change the version state to `verified`. A recording

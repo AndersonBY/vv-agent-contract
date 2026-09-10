@@ -181,11 +181,23 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertIn("node contract/scripts/verify_jcs.mjs", workflow)
 
+    def test_cross_repository_workflow_exchanges_real_host_interactions(self) -> None:
+        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
+        exchange = workflow.split("- name: Verify cross-language host interaction stores", 1)[1].split(
+            "- name: Verify cross-language Redis controller command", 1
+        )[0]
+        self.assertIn("test_real_tool_host_interaction_retains_receipt_before_waiting[None]", exchange)
+        self.assertIn("native_host_tool_commits_cycle_and_resumes_after_sqlite_reopen", exchange)
+        self.assertEqual(exchange.count("VV_AGENT_CROSS_HOST_MODE=respond"), 2)
+        self.assertEqual(exchange.count("VV_AGENT_CROSS_HOST_MODE=read"), 2)
+        self.assertEqual(exchange.count("cross_language_host_interaction_store"), 4)
+        self.assertIn("for store_kind in sqlite redis", exchange)
+
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "16.0.0")
+        self.assertEqual(report["version"], "17.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)

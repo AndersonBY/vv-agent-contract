@@ -152,6 +152,41 @@ jobs:
             uv run --directory vv-agent pytest \
               tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
 
+      - name: Verify cross-language host interaction stores
+        shell: bash
+        env:
+          HOST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
+        run: |
+          set -euo pipefail
+          for store_kind in sqlite redis; do
+            host_exchange_dir="$(mktemp -d "$RUNNER_TEMP/vv-agent-host-exchange.XXXXXX")"
+            mkdir "$host_exchange_dir/python" "$host_exchange_dir/rust"
+            if [ "$store_kind" = redis ]; then
+              export VV_AGENT_CROSS_HOST_REDIS_URL="$HOST_REDIS_URL/13"
+            fi
+            VV_AGENT_CROSS_HOST_WRITE_DIR="$host_exchange_dir/python" \
+              uv run --directory vv-agent pytest \
+                'tests/test_distributed_checkpoint.py::test_real_tool_host_interaction_retains_receipt_before_waiting[None]'
+            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/python" VV_AGENT_CROSS_HOST_MODE=respond \
+              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent --test distributed_runner \
+                host_interaction::cross_language_host_interaction_store -- --exact --ignored
+            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/python" VV_AGENT_CROSS_HOST_MODE=read \
+              uv run --directory vv-agent pytest \
+                tests/test_distributed_checkpoint.py::test_cross_language_host_interaction_store
+            if [ "$store_kind" = redis ]; then
+              export VV_AGENT_CROSS_HOST_REDIS_URL="$HOST_REDIS_URL/14"
+            fi
+            VV_HOST_TEST_DIR="$host_exchange_dir/rust" VV_HOST_TEST_PHASE=exchange_write \
+              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent --test distributed_runner \
+                host_interaction::native_host_tool_commits_cycle_and_resumes_after_sqlite_reopen -- --exact
+            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/rust" VV_AGENT_CROSS_HOST_MODE=respond \
+              uv run --directory vv-agent pytest \
+                tests/test_distributed_checkpoint.py::test_cross_language_host_interaction_store
+            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/rust" VV_AGENT_CROSS_HOST_MODE=read \
+              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent --test distributed_runner \
+                host_interaction::cross_language_host_interaction_store -- --exact --ignored
+          done
+
       - name: Verify cross-language Redis controller command
         shell: bash
         env:

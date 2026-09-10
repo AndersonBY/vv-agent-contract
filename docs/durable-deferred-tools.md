@@ -1,6 +1,6 @@
 # Durable Deferred Tools
 
-Contract `16.0.0` defines one task-neutral boundary for a tool whose external
+Contract `17.0.0` defines one task-neutral boundary for a tool whose external
 effect may be accepted while its result is unavailable during the current
 worker invocation. The framework owns the operation identity, checkpoint
 journal, batch barrier, claim, and lifecycle events. A host/provider owns the
@@ -27,6 +27,32 @@ nor its return value claims that the interaction was delivered. An exception
 or timeout cannot publish an intent returned later by an abandoned handler.
 Host interaction is distinct from deferred provider acceptance and terminal
 `ask_user`; it does not use either representation.
+
+Both runtimes expose `host_interaction` as a non-terminal Agent result with
+`wait_reason=host_interaction`, no final answer, and the retained checkpoint
+key. Distributed workers project it to the existing `pending` response,
+and the App Server projects an interrupted, resumable turn. Registered typed
+executors are retained by the runtime registry rather than replaced with a
+completed-only handler adapter.
+
+For a tool-originated interaction, that admission also commits the completed
+model/tool cycle: the assistant message, all tool results in model order, and
+shared state become durable with the exact result, interaction request, and
+notification outbox. Remaining undispatched calls receive explicit
+`skipped_due_to_host_interaction` results; they are not executed. Unresolved
+external operations prevent this cycle commit. The checkpoint advances its
+committed cycle and clears the active journals in that same transaction;
+complete results remain in its cycle records and lifecycle events. A reply
+therefore starts the next model cycle and never changes a retained model
+request's digest. Direct framework interactions before model execution do not
+commit an empty cycle. `logical_cycle` always identifies the interaction's
+origin, not the later reply's execution cycle.
+
+An accepted cancellation takes precedence over a new host interaction. The
+admission transaction rejects a cancelled checkpoint without a request or
+notification write. Its still-owning worker retains the definitive tool
+result through the ordinary receipt path and completes the existing cancelled
+terminal flow; releasing ownership first and writing a late receipt is invalid.
 
 `ToolExecutionResult.status_code` has the current values `SUCCESS`, `ERROR`,
 `WAIT_RESPONSE`, `RUNNING`, and `PENDING_COMPRESS`. Deferred is not a result

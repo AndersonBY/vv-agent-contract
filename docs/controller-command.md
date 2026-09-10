@@ -1,6 +1,6 @@
 # Durable Controller Command Admission
 
-Contract `14.0.0` defines one task-neutral, closed admission seam for durable
+Contract `17.0.0` defines one task-neutral, closed admission seam for durable
 control of an in-progress distributed run. The deep module owns checkpoint
 fences, state precedence, idempotency, SQLite/Redis CAS, receipts, and wake
 recovery. Callers do not provide storage internals.
@@ -40,7 +40,7 @@ transport retries and is the idempotency key.
 
 | Variant | Exact payload | Effect |
 | --- | --- | --- |
-| `host_interaction_response` | `kind`, `interaction_id`, `logical_cycle`, `operation_id`, `tool_call_id`, `request_digest`, `response` | Respond to the exact persisted host interaction and wake same logical cycle. |
+| `host_interaction_response` | `kind`, `interaction_id`, `logical_cycle`, `operation_id`, `tool_call_id`, `request_digest`, `response` | Respond to the persisted interaction and wake the next uncommitted cycle. |
 | `suspend` | `kind` | Persist a resumable suspension; it never wakes a worker. |
 | `resume` | `kind` | Restore the persisted origin and wake same logical cycle; it accepts no new input. |
 | `cancel` | `kind` | Set `cancel_requested` for a live claim, or atomically reclaim an expired claim and close the cycle as cancelled. It never wakes a worker. |
@@ -123,6 +123,18 @@ The producer must hold the active worker claim. In one checkpoint CAS it:
 3. clears `claim_token`, `claimed_cycle`, and `lease_expires_at_ms`, and bumps
    the revision.
 
+For a tool-originated interaction, the same CAS stores the completed cycle,
+messages, shared state, and complete tool results, advances `cycle_index`,
+and clears active operation journals. Remaining undispatched calls have
+explicit `skipped_due_to_host_interaction` results. Any unresolved external
+operation blocks admission. The request's `logical_cycle` remains the origin
+cycle; response recovery claims the next cycle. Tool handlers return the typed
+outcome; the runtime admits it after assembling the complete cycle. A direct
+framework interaction before model execution leaves `cycle_index` unchanged
+and requires empty model and tool journals. Admission without a completed-cycle
+snapshot when either journal is nonempty returns `host_interaction_conflict`
+without writing checkpoint, interaction record, event, or notification state.
+
 The claim release is part of that CAS. Provider calls, model calls, callbacks,
 and queue publication occur after commit. The producer notification is not a
 worker wake. A crash reloads the persisted request, interaction record, and
@@ -178,10 +190,13 @@ schema discriminator) and `suspended_origin`, both closed objects or null:
 - every other state requires both null.
 
 `cycle_index` means the last committed cycle. A live claim names
-`claimed_cycle=cycle_index+1`. `logical_cycle` is that same in-flight cycle
-identity after the producer releases the claim. A response or resume preserves
-`cycle_index` and reacquires the same logical cycle; it does not create a new
-cycle or use the ambiguous phrase “same cycle” without this distinction.
+`claimed_cycle=cycle_index+1`. An interaction's `logical_cycle` identifies its
+origin. A tool-originated interaction commits that origin before releasing its
+claim; a direct framework interaction before model execution does not commit
+an empty cycle. Response and resume commands preserve the committed
+`cycle_index`; the recovery worker claims the next uncommitted cycle.
+The response-consumed event uses the committed `cycle_index` and retains the
+original interaction's `logical_cycle`.
 
 `cycle_aborted.logical_cycle` is the closure identity and is positive; when
 the closure is admitted from a claimed checkpoint it equals
@@ -258,7 +273,12 @@ the sanitized public fields `actionId`, `accepted`, `status`, and `waitReason`.
 Outbox rows have `pending`, `claimed`, `delivered`, or `ambiguous` state plus a
 stable `outbox_id`, owner token, lease, attempt, delivery timestamp, and last
 error. Claim and completion are CAS-fenced by owner token and attempt. A
-reaper retries pending or expired claimed rows with the same `command_id`;
+completed wake with the same command digest and outcome returns its retained
+receipt without writes; a different outcome is rejected. Completion replay
+does not grant execution ownership or change the checkpoint.
+Recovery workers observing a completed wake reload the authoritative checkpoint;
+an active execution claim yields pending without another claim or model call.
+A reaper retries pending or expired claimed rows with the same `command_id`;
 uncertain external publication becomes `ambiguous` and is reconciled rather
 than blindly duplicated. The cross-language checkpoint API is
 `CheckpointStore.reap_controller_command_wakes(checkpoint_key, now_ms)`.

@@ -56,6 +56,19 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 17.0.0
+
+Tool-originated host-interaction admission commits its completed cycle and
+releases the claim atomically. Responses execute the next cycle; complete
+tool results remain in cycle records after active journal cleanup. Direct
+framework interactions before model execution retain the uncommitted cycle
+and require empty model and tool journals. Tool interaction admission belongs
+to the runtime after the handler returns its typed outcome and the complete
+cycle is assembled.
+The existing wire shapes remain unchanged; this is a shared runtime behavior
+change. Adoption remains `in-progress` until both implementations and their
+producer, persistence, and cross-repository gates pass.
+
 ## Release Note: 16.0.0
 
 `16.0.0` adds the closed `host_interaction` tool outcome with a definitive
