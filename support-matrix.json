@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_version": "17.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
@@ -12,11 +12,11 @@
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "81aaa8f1f2f1b5d5c02280498ec92ce21306b622"
     }
   },
-  "adoption_note": "Contract 17 adoption includes the optional Apalis retry producer gate.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v17.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-10T11:56:19Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34472317309"
 }
