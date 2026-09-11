@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "contract_version": "20.0.0",
-  "status": "verified",
+  "contract_version": "21.0.0",
+  "status": "pending-adoption",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "36ad6da4196c67d3b90f1be3d2507fa8a8e68687"
+      "status": "pending-adoption",
+      "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "31f3f572d9bf41ba709fb4d1c00c217c2ac50aaf"
+      "status": "pending-adoption",
+      "verified_revision": null
     }
   },
-  "adoption_note": "v20.0.0 passed the paired implementation snapshots and cross-language producer gates.",
-  "last_verified_at": "2026-09-11T12:12:39Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34596007090"
+  "adoption_note": "v21.0.0 Bash management receipts require paired implementation and real checkpointed Runner evidence.",
+  "last_verified_at": null,
+  "cross_repository_run": null
 }

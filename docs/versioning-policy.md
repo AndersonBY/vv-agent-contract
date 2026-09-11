@@ -56,6 +56,17 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 21.0.0
+
+`21.0.0` replaces the Bash wait controls with `yield_time_ms` and optional
+`timeout_seconds`, and adds `stop_background_command`. The built-in manifest
+is `vv-agent-builtin-tools-v4` and capability `vv-agent.builtin-tools@4`.
+Management receipts use `SUCCESS`/`continue` while the managed process remains
+running. Ownership, original execution deadlines, bounded live output,
+confirmed process-tree termination, and immutable checkpoint receipts apply in
+both languages. The generic tool-result and checkpoint wires do not change.
+Adoption remains pending until paired real producers and full gates pass.
+
 ## Release Note: 19.0.0
 
 `edit_file` success results carry only the edit receipt and file identity

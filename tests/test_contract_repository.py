@@ -197,10 +197,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "20.0.0")
+        self.assertEqual(report["version"], "21.0.0")
         self.assertEqual(report["domains"], 20)
-        self.assertEqual(report["fixture_files"], 54)
-        self.assertEqual(report["manifest_entries"], 53)
+        self.assertEqual(report["fixture_files"], 55)
+        self.assertEqual(report["manifest_entries"], 54)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_json_duplicate_object_keys_are_rejected(self) -> None:
@@ -1655,7 +1655,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/builtin_tools.json").read_text(encoding="utf-8")
         )
         tools = {tool["name"]: tool for tool in fixture["tools"]}
-        self.assertEqual(fixture["schema_version"], 3)
+        self.assertEqual(fixture["schema_version"], 4)
         self.assertEqual(
             set(tools),
             {
@@ -1670,6 +1670,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "search_files",
                 "bash",
                 "check_background_command",
+                "stop_background_command",
                 "create_sub_task",
                 "sub_task_status",
                 "read_image",
@@ -1682,6 +1683,24 @@ class ContractRepositoryTests(unittest.TestCase):
             ["direct", "hidden"],
         )
         self.assertNotIn("deferred", fixture["exposure_contract"]["allowed_values"])
+        parameters = tools["bash"]["parameters"]
+        self.assertEqual(set(parameters["properties"]), {
+            "command", "exec_dir", "stdin", "auto_confirm", "yield_time_ms", "timeout_seconds",
+        })
+        self.assertEqual(parameters["required"], ["command"])
+        self.assertFalse(parameters["additionalProperties"])
+        self.assertEqual(parameters["properties"]["yield_time_ms"]["default"], 1000)
+        for name, minimum, maximum in (("yield_time_ms", 0, 10000), ("timeout_seconds", 1, 86400)):
+            self.assertEqual(parameters["properties"][name]["type"], "integer")
+            self.assertEqual(parameters["properties"][name]["minimum"], minimum)
+            self.assertEqual(parameters["properties"][name]["maximum"], maximum)
+        for name in ("check_background_command", "stop_background_command"):
+            self.assertEqual(set(tools[name]["parameters"]["properties"]), {"session_id"})
+            self.assertEqual(tools[name]["parameters"]["required"], ["session_id"])
+            self.assertFalse(tools[name]["parameters"]["additionalProperties"])
+        management = json.loads((ROOT / "fixtures/bash_process_management.json").read_text(encoding="utf-8"))
+        self.assertEqual(management["running_receipt"]["status_code"], "SUCCESS")
+        self.assertEqual(management["owner_binding"], ["task_id", "canonical_workspace_root"])
         behavior = json.loads(
             (ROOT / "fixtures/builtin_tool_behavior.json").read_text(encoding="utf-8")
         )
@@ -5685,10 +5704,18 @@ class ContractRepositoryTests(unittest.TestCase):
             fixture["run_definition_schema_rules"]["writer_value"],
         )
         self.assertEqual(capabilities["checkpoint_store_ref"]["version"], "2")
-        self.assertEqual(
-            capabilities["toolset_ref"]["schema_digest"],
-            "4f535c2bfd1657cec4a8dce5f0d846dc8f683a5470100a8ce83801739b8e3c9a",
-        )
+        builtin_tools = json.loads((ROOT / "fixtures/builtin_tools.json").read_text(encoding="utf-8"))
+        builtin_schemas = [
+            {"type": tool["type"], "function": {
+                "name": tool["name"], "description": tool["description"], "parameters": tool["parameters"],
+            }}
+            for tool in builtin_tools["tools"]
+        ]
+        builtin_digest = hashlib.sha256(json.dumps(
+            builtin_schemas, ensure_ascii=True, separators=(",", ":"), sort_keys=True,
+        ).encode()).hexdigest()
+        self.assertEqual(capabilities["toolset_ref"]["version"], str(builtin_tools["schema_version"]))
+        self.assertEqual(capabilities["toolset_ref"]["schema_digest"], builtin_digest)
         self.assertEqual(
             capabilities["after_cycle_hook_refs"],
             [{"id": "lifecycle.policy", "version": "1"}],
@@ -7193,7 +7220,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 54)
+            self.assertEqual(synced["fixture_files"], 55)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

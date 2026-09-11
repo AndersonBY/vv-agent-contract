@@ -1,5 +1,16 @@
 # Changelog
 
+## 21.0.0
+
+- Separate Bash initial wait (`yield_time_ms`, default 1000, range 0..10000)
+  from an optional execution deadline (`timeout_seconds`, range 1..86400).
+- Start and running-query receipts are definitive successes that permit the
+  next model cycle under a durable checkpoint.
+- Add owner-scoped process-tree stop, bounded live output, immutable artifacts,
+  and explicit missing/unknown observations without invented exit codes.
+- Advance the built-in tool manifest and capability to version 4; remove the
+  replaced Bash controls. Paired adoption is pending.
+
 ## 20.0.0
 
 - Add an optional first-delivery admission callback to distributed start. A

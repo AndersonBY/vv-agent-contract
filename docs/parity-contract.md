@@ -90,6 +90,16 @@ workspace, memory, delegation, approval, and lifecycle mechanisms, but it does
 not classify a task, infer semantic progress, rewrite a business answer, or
 choose a task-specific stopping policy.
 
+## Bash Process Management
+
+The canonical Bash lifecycle is defined in `bash-process-management.md`.
+`bash` separates its bounded initial wait from an optional execution deadline.
+Starting and observing an ongoing command returns a definitive `SUCCESS`
+management receipt with `continue`; process state lives in content and metadata.
+`check_background_command` and `stop_background_command` accept only a
+`session_id` and require the owning task and workspace before any observation
+or side effect. The built-in manifest is version 4 with 15 direct tools.
+
 ## Workspace Edit Results
 
 A successful `edit_file` returns JSON content with exactly `ok=true`, `path`,
