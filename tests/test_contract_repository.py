@@ -6822,7 +6822,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(compiled_start["rust"]["name"], "start_distributed_compiled")
         self.assertEqual(
             [parameter["name"] for parameter in compiled_start["python"]["signature"]["parameters"]],
-            ["agent", "task", "run_config", "continuation"],
+            ["agent", "task", "run_config", "continuation", "start_admission"],
         )
         self.assertTrue(compiled_start["python"]["signature"]["parameters"][2]["required"])
         self.assertFalse(compiled_start["python"]["signature"]["parameters"][3]["required"])
