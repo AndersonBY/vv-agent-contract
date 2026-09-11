@@ -1,5 +1,16 @@
 # Changelog
 
+## 20.0.0
+
+- Add an optional first-delivery admission callback to distributed start. A
+  false callback result transfers first-delivery ownership to the caller's
+  transactional outbox without creating a framework transport receipt.
+
+## 19.0.0
+
+- Workspace edits return a compact replacement receipt and file identity metadata.
+- Consecutive edits retain current baseline validation, exact matching, and UTF-8/CRLF preservation.
+
 ## 14.0.0
 
 - Distributed recipes accept an empty settings-file path when a registered

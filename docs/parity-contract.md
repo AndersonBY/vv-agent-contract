@@ -90,6 +90,20 @@ workspace, memory, delegation, approval, and lifecycle mechanisms, but it does
 not classify a task, infer semantic progress, rewrite a business answer, or
 choose a task-specific stopping policy.
 
+## Workspace Edit Results
+
+A successful `edit_file` returns JSON content with exactly `ok=true`, `path`,
+and `replaced_count`. Its host metadata contains exactly `changed_files`,
+`operation=edit_file`, and `line_ending`. The canonical success producer is
+frozen in `fixtures/builtin_tool_behavior.json`.
+
+Editing uses exact text matching against the current read/write baseline and
+refreshes the baseline after each successful write. Partial reads may establish
+an edit baseline; subsequent external changes require a fresh read. Unique
+matching, explicit `replace_all`, UTF-8 BOM preservation, and CRLF handling
+apply equally to consecutive edits on a large file. Successful editing does
+not require generating a document diff or counting changed lines.
+
 ## Content And Credential Boundaries
 
 User messages, host prompts, tool arguments, tool results, and their persisted
@@ -459,6 +473,11 @@ out-of-order callbacks stop with `superseded_delivery`. Both implementations
 also expose `start_distributed_compiled`, which accepts an already-compiled
 `AgentTask`, preserves its prepared runtime fields, and does not re-run
 compile-time instruction or context producers. See `distributed-run-driver.md`.
+
+The distributed `start` operation may receive one process-local first-delivery
+admission callback after the canonical handle and envelope are built. Its
+boolean result selects framework enqueue (`true`) or caller-owned transactional
+outbox delivery (`false`); it is not a receipt-store interface.
 
 Deferred admission reuses the `pending` worker response because no cycle
 commit and no response result were returned by this delivery attempt. While any current-batch deferred

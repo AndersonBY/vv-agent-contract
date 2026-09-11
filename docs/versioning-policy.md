@@ -56,6 +56,27 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 19.0.0
+
+`edit_file` success results carry only the edit receipt and file identity
+metadata specified in `parity-contract.md`. The current result excludes
+`diff`, `diff_truncated`, `additions`, and `deletions`. Exact replacement and
+baseline validation semantics, the tool input schema, and the generic
+`ToolExecutionResult` wire remain unchanged. Adoption requires paired real
+producers, full repository gates, and cross-repository verification.
+
+## Release Note: 20.0.0
+
+`20.0.0` adds an optional first-delivery admission callback to the
+nonblocking distributed `start` operation. The framework constructs the
+canonical handle and envelope first; a callback may return `false` when a
+product transaction has committed its own durable outbox, suppressing generic
+transport enqueue. The callback has no receipt-store lifecycle and cannot
+claim, reap, reconcile, or complete transport deliveries. Both
+implementations reject non-boolean admission decisions. Adoption remains
+`in-progress` until paired producer, full repository, fixture, and
+cross-repository checks pass.
+
 ## Release Note: 18.0.0
 
 Deferred runs support durable suspend, resume and cancel through the existing

@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "contract_version": "18.0.0",
-  "status": "verified",
+  "contract_version": "20.0.0",
+  "status": "in-progress",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "66c2925536e63560d51a5d21fb2403c9471e3f0c"
+      "status": "in-progress",
+      "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "verified",
-      "verified_revision": "0ac45905d0186dc9dd97f9b761d9aae7a0a2e959"
+      "status": "in-progress",
+      "verified_revision": null
     }
   },
-  "adoption_note": "v18.0.0 passed the paired implementation snapshots and cross-language producer gates.",
-  "last_verified_at": "2026-09-10T16:21:49Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34499348509"
+  "adoption_note": "First-delivery admission callback and paired edit_file result producers require immutable contract pinning and cross-repository verification.",
+  "last_verified_at": null,
+  "cross_repository_run": null
 }

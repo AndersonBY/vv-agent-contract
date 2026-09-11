@@ -19,6 +19,14 @@ equivalent language-level APIs for this input; names and calling conventions
 may follow language idioms, but the existing `vv-agent.distributed-run.v5`
 envelope and all other wire shapes remain unchanged.
 
+The first delivery may be admitted by an optional caller-owned callback after
+the framework has produced the canonical handle and envelope. The callback
+receives exactly those two values and returns a boolean: `true` leaves delivery
+to the framework transport, while `false` means the caller committed its own
+transactional outbox and the framework must not enqueue a second envelope.
+The callback is process-local admission, not a transport receipt store; it has
+no lookup, claim, reap, or completion methods.
+
 `advance` receives the previous envelope plus either one closed worker response
 or an out-of-band transport failure. The observation is never authoritative.
 The driver reloads the checkpoint exactly once and returns one decision:
