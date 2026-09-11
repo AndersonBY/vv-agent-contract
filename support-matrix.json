@@ -7,7 +7,7 @@
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
       "status": "verified",
-      "verified_revision": "5fe53153a138d22fcc7048a87fdb089e32066c5b"
+      "verified_revision": "36ad6da4196c67d3b90f1be3d2507fa8a8e68687"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -17,6 +17,6 @@
     }
   },
   "adoption_note": "v20.0.0 passed the paired implementation snapshots and cross-language producer gates.",
-  "last_verified_at": "2026-09-11T11:44:44Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34593827410"
+  "last_verified_at": "2026-09-11T12:12:39Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34596007090"
 }
