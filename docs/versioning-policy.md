@@ -56,6 +56,17 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 22.0.0
+
+Checkpoint v12 replaces cumulative checkpoint history with a bounded execution
+frontier and immutable same-store history batches committed atomically with
+existing receipts, budgets, outboxes and CAS revisions. Complete public results
+hydrate their history at explicit result boundaries. After-cycle hook v2 uses
+compact `TaskTokenUsageTotals` instead of repeating the complete model ledger.
+Both producers and all store implementations must pass recovery, corruption,
+growth and cross-runtime exchange checks. Adoption remains in progress until
+the full paired gates pass; no historical checkpoint decoder is included.
+
 ## Release Note: 21.0.0
 
 `21.0.0` replaces the Bash wait controls with `yield_time_ms` and optional

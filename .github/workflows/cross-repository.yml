@@ -153,6 +153,37 @@ jobs:
             uv run --directory vv-agent pytest \
               tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
 
+      - name: Verify cross-language checkpoint history and identity indexes
+        shell: bash
+        env:
+          HISTORY_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/12
+        run: |
+          set -euo pipefail
+          history_exchange_dir="$(mktemp -d "$RUNNER_TEMP/vv-agent-history-exchange.XXXXXX")"
+          for store_kind in sqlite redis; do
+            export VV_AGENT_CROSS_HISTORY_STORE="$store_kind"
+            if [ "$store_kind" = sqlite ]; then
+              export VV_AGENT_CROSS_HISTORY_LOCATION="$history_exchange_dir/python.sqlite3"
+            else
+              export VV_AGENT_CROSS_HISTORY_LOCATION="$HISTORY_REDIS_URL"
+            fi
+            VV_AGENT_CROSS_HISTORY_MODE=write \
+              uv run --directory vv-agent pytest \
+                tests/test_checkpoint_history_stores.py::test_cross_runtime_history_store
+            VV_AGENT_CROSS_HISTORY_MODE=read \
+              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
+                --test checkpoint_core history::cross_runtime_history_store -- --exact --ignored
+            if [ "$store_kind" = sqlite ]; then
+              export VV_AGENT_CROSS_HISTORY_LOCATION="$history_exchange_dir/rust.sqlite3"
+            fi
+            VV_AGENT_CROSS_HISTORY_MODE=write \
+              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
+                --test checkpoint_core history::cross_runtime_history_store -- --exact --ignored
+            VV_AGENT_CROSS_HISTORY_MODE=read \
+              uv run --directory vv-agent pytest \
+                tests/test_checkpoint_history_stores.py::test_cross_runtime_history_store
+          done
+
       - name: Verify cross-language host interaction stores
         shell: bash
         env:

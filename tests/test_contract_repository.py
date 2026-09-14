@@ -197,7 +197,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "21.0.0")
+        self.assertEqual(report["version"], "22.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 55)
         self.assertEqual(report["manifest_entries"], 54)
@@ -2204,7 +2204,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/after_cycle_hook.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(fixture["schema_version"], "vv-agent.after-cycle-hook.v1")
+        self.assertEqual(fixture["schema_version"], "vv-agent.after-cycle-hook.v2")
         self.assertEqual(
             fixture["decision"]["action_values"],
             ["continue", "steer", "stop_non_success"],
@@ -2857,7 +2857,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "result.completion_reason",
             }.issubset(capabilities)
         )
-        self.assertEqual(len(capabilities), 178)
+        self.assertEqual(len(capabilities), 179)
         self.assertTrue(
             {
                 "runtime_backend.host_interaction_request",
@@ -3583,7 +3583,7 @@ class ContractRepositoryTests(unittest.TestCase):
         )
         minimal_definition = run_definition_fixture["golden_cases"][0]
 
-        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v11")
+        self.assertEqual(canonical["schema_version"], "vv-agent.checkpoint.v12")
         self.assertIn("cancel_requested", fixture["required_fields"])
         self.assertIs(canonical["cancel_requested"], False)
         self.assertEqual(canonical["run_definition_schema"], "vv-agent.run-definition.v5")
@@ -3604,7 +3604,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertEqual(
             fixture["discriminator"],
             {
-                "required_value": "vv-agent.checkpoint.v11",
+                "required_value": "vv-agent.checkpoint.v12",
                 "missing_or_unknown_error": "checkpoint_schema_unsupported",
             },
         )
@@ -5278,7 +5278,7 @@ class ContractRepositoryTests(unittest.TestCase):
         fixture = json.loads((ROOT / "fixtures/checkpoint_resume.json").read_text(encoding="utf-8"))
         operation_fixture = json.loads((ROOT / "fixtures/operation_journal.json").read_text(encoding="utf-8"))
         self.assertEqual(fixture["version"], 10)
-        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v11")
+        self.assertEqual(fixture["checkpoint_schema"], "vv-agent.checkpoint.v12")
         self.assertIn("cancel_requested", fixture["checkpoint_wire"]["required_fields"])
         self.assertEqual(
             fixture["cycle_semantics"]["cycle_aborted_cycle_index_relation"],
@@ -6876,7 +6876,7 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_records (", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS host_interaction_notification_outbox (", sql)
         self.assertIn("response_digest TEXT", sql)
-        self.assertIn("strict v11 codec", sql)
+        self.assertIn("strict v12 codec", sql)
         self.assertIn("model_call_journal", sql)
         self.assertNotIn("deferred_resolution_receipts" + " TEXT NOT NULL", sql)
         self.assertIn("CREATE TABLE IF NOT EXISTS deferred_resolution_receipts (", sql)
@@ -6909,12 +6909,12 @@ class ContractRepositoryTests(unittest.TestCase):
                     messages, cycles, model_calls, shared_state, budget_usage,
                     event_cursor, event_outbox, extension_state, model_call_journal,
                     tool_journal, revision, claim_token, claimed_cycle,
-                    lease_expires_at_ms, terminal_result, terminal_acknowledged
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    lease_expires_at_ms, terminal_result, terminal_acknowledged, history
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "checkpoint-key",
-                    "vv-agent.checkpoint.v11",
+                    "vv-agent.checkpoint.v12",
                     "vv-agent.run-definition.v5",
                     "{}",
                     "task-1",
@@ -6943,6 +6943,7 @@ class ContractRepositoryTests(unittest.TestCase):
                     None,
                     None,
                     0,
+                    "{}",
                 ),
             )
             tables = {
@@ -6955,6 +6956,8 @@ class ContractRepositoryTests(unittest.TestCase):
                 tables,
                 {
                     "checkpoints",
+                    "checkpoint_history",
+                    "checkpoint_history_call_ids",
                     "deferred_resolution_receipts",
                     "host_interaction_records",
                     "host_interaction_notification_outbox",

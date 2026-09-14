@@ -176,7 +176,7 @@ never `recovery_dispatch`.
 
 ## Checkpoint state and cycle terminology
 
-The v11 checkpoint discriminator is `vv-agent.checkpoint.v11`; no v10 reader,
+The v12 checkpoint discriminator is `vv-agent.checkpoint.v12`; no historical reader,
 namespace probe, or migration fallback exists. A checkpoint always persists
 the complete strict `active_host_interaction` request (including prompt and
 schema discriminator) and `suspended_origin`, both closed objects or null:
@@ -399,7 +399,7 @@ reconcile protocol. Delivery is at-least-once and observer deduplication is
 required; an uncertain callback is ambiguous, not exactly-once. The reaper
 routes ambiguous rows to explicit delivered/retry/abort reconciliation and
 never blind-retries them. It is never reused as a recovery wake. SQLite only enforces scalar
-lifecycle relations; strict v11 codec validation owns nested JSON shape and
+lifecycle relations; strict v12 codec validation owns nested JSON shape and
 UTF-8/digest limits.
 Redis must expose equivalent replay, conflict, stale, lease, and ambiguity
 semantics.

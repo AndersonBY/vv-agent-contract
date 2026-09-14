@@ -354,7 +354,7 @@ valid history; completely empty assistant messages are removed.
 
 ## Durable Checkpoint And Distributed Runtime
 
-Checkpoint records require `vv-agent.checkpoint.v11` and embed an exact
+Checkpoint records require `vv-agent.checkpoint.v12` and embed an exact
 `vv-agent.run-definition.v5` plus its RFC 8785 SHA-256 digest. Top-level records
 are closed. SQLite uses `checkpoints`; Redis uses the single current hashed key
 namespace. Readers reject any other table, prefix, or record shape.

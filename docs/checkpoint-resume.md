@@ -52,12 +52,12 @@ model or tool operation.
 
 There is one current durable namespace. SQLite uses `checkpoints`; Redis uses
 `vv-agent:checkpoint:<lowercase-sha256(checkpoint_key)>` plus the typed lease
-suffix. Records require `schema_version=vv-agent.checkpoint.v11` and
+suffix. Records require `schema_version=vv-agent.checkpoint.v12` and
 `run_definition_schema=vv-agent.run-definition.v5`. Missing, stale, unknown,
 or malformed discriminators fail before claim or external operations. The
 runtime has no older decoder, namespace probe, or migration path.
 
-The checkpoint contains the complete run-level model-call ledger. A terminal
+The checkpoint and its same-store immutable history contain the complete run-level model-call ledger. A terminal
 model attempt, its journal state, normalized usage, post-attempt budget
 snapshot, and durable lifecycle event are committed by one progress CAS. This
 atomicity is what prevents receipt replay from charging the budget twice. See
@@ -276,7 +276,7 @@ event cursor remain excluded.
 
 `checkpoint_codec.json` defines the canonical object. Required fields are:
 
-- `schema_version`, exactly `vv-agent.checkpoint.v11`;
+- `schema_version`, exactly `vv-agent.checkpoint.v12`;
 - `run_definition_schema`, exactly `vv-agent.run-definition.v5`;
 - the complete credential-redacted `run_definition`, whose RFC 8785 digest must
   equal `run_definition_digest`;
@@ -769,6 +769,94 @@ observation with the existing driver `advance`, or lets the running-checkpoint
 reconciler perform that existing dispatch. See `durable-deferred-tools.md` for
 the closed handle, batch barrier, early-callback, and replay rules.
 
+## Bounded Execution Frontier And Immutable History
+
+Checkpoint v12 requires a closed `history` frontier with `sequence`,
+`cycle_count`, `model_call_count`, `head_digest`, `usage`, and
+`previous_agent_input`. Counts are JSON-safe nonnegative integers; sequence
+zero requires zero counts, a null digest, zero numeric usage, aggregate cache
+usage with missing accounting, and a null previous input. A nonempty frontier
+has a lowercase SHA-256 head digest. `usage` is the closed
+`TaskTokenUsageTotals` object containing nullable input, output, total and
+reasoning token counts plus aggregate `cache_usage`. `previous_agent_input`
+is null or the last archived completed agent-cycle observation with
+`cycle_index` and nullable `input_tokens`.
+
+The current checkpoint retains the latest committed cycle and the active
+cycle, current model-call records, the current model context, active journals,
+pending lifecycle outbox entries, and existing budget and control state.
+Model-call records needed by retained journal evidence cannot be archived.
+Context compaction remains independent from historical evidence retention.
+Retiring a prefix never changes the exact tool result or model-call record.
+Progress before a cycle commit retains the last committed transcript. The
+completed transcript and cycle become durable only in the atomic cycle commit,
+so a crash after durable receipts can replay that cycle without losing or
+duplicating its evidence or external effects.
+Submitted mutations must preserve the authoritative committed cycle prefix,
+definitive model-call prefix, and history frontier before their CAS succeeds.
+Cycle indices are positive, strictly increasing, and at most the active cycle.
+New cycle and model-call suffix entries belong only to the authoritative active
+cycle. A model-call identity already archived cannot be introduced again, even
+with a different cycle index; stores reject it before committing the mutation.
+
+Each retired batch is the closed `vv-agent.checkpoint-history.v1` object with
+`checkpoint_key`, monotonically increasing `sequence`, `previous_digest`,
+complete ordered `cycles`, and complete ordered `model_calls`. A batch is
+nonempty. Its head digest is SHA-256 over the RFC 8785 encoding of that complete
+object. A single store transaction commits the immutable batch, updated
+frontier, checkpoint revision, and all existing journal, budget, outbox and
+claim changes. A rejected CAS or failed transaction writes neither a frontier
+nor an orphan batch. Identical retained identities cannot be changed or
+appended twice. The archive shares checkpoint retention and deletion.
+
+SQLite stores batches in `checkpoint_history`, keyed by checkpoint key and
+sequence, with payload and payload digest and an on-delete cascading foreign
+key. Redis stores canonical batch JSON in the checkpoint data key's
+`:history` hash, using decimal sequence fields. The existing Redis CAS guards
+the archive and checkpoint together; the SQLite transaction includes both.
+In-memory stores use the same atomic boundary under their existing lock.
+Archived model-call identities use a bounded-lookup uniqueness index: SQLite
+`checkpoint_history_call_ids(checkpoint_key, call_id)` has a composite primary
+key and an on-delete cascading checkpoint foreign key; Redis uses the
+checkpoint data key's `:history:call_ids` set. Index inserts share the archive
+transaction. Writers check pending call identities against this index without
+loading archived payloads. Checkpoint deletion also removes the index.
+
+Ordinary `load_checkpoint`, claim, progress, lease and dispatch operations
+read only the execution frontier. Explicit `load_checkpoint_history` returns
+the complete archived prefix and validates chain order, ownership, digests,
+identity uniqueness and aggregate totals against a consistent frontier. Its
+return value carries that verified `frontier` alongside `cycles` and
+`model_calls`. Result hydration compares this frontier with its checkpoint
+snapshot and rejects `checkpoint_history_changed` if concurrent progress has
+retired more records, rather than mixing an old tail with a newer archive.
+Full public results are hydrated at result/finalization/replay boundaries;
+their existing complete cycle and model-call ledger contract is unchanged.
+The retained terminal inside a checkpoint contains only its active tail and
+the corresponding tail usage, avoiding a second complete historical copy.
+After-cycle snapshots expose `TaskTokenUsageTotals`, which includes archived
+usage in constant size and contains no model-call records. Missing accounting
+continues to propagate as null, not a fabricated zero.
+
+The fixed-context growth test holds active context size and new per-cycle
+content fixed. It must measure retained checkpoint bytes separately from
+cumulative serialized and transferred read/write bytes: under these conditions
+the former is bounded and the latter grows linearly with newly committed facts.
+This measures incremental archival of completed records, not a universal bound
+on persistence cost for growing conversations.
+
+Current `messages` remain fully serialized in each checkpoint snapshot; archive
+retirement does not bound or incrementally store this active model context.
+With a fixed number of writes per cycle and a context that grows linearly
+without compaction, cumulative context serialization and writes can therefore
+grow quadratically. A separate real-run workload must add 4 KiB of model output
+per cycle without compaction at 20 and 40 cycles, report cumulative SQLite JSON
+binding bytes and message/retained/archive/public cycle counts, and verify that
+all output and public history remain present. It reports this cost without
+applying the fixed-context linear threshold. SQLite binding bytes do not
+measure disk, WAL, or network traffic. Explicit full-history reads and full
+public result materialization necessarily read the requested history.
+
 ## Budget And Time Resume
 
 The complete `BudgetUsageSnapshot` is persisted at every journal progress
@@ -930,7 +1018,7 @@ background children do not implicitly inherit the parent's checkpoint key; a
 host may provide a distinct child key explicitly. The current contract fails
 closed with `checkpoint_handoff_unsupported` when checkpointing is combined with a
 handoff, because the complete handoff graph and active-agent state are not yet
-part of the current checkpoint.v11 wire. This restriction is explicit rather than silently
+part of the current checkpoint.v12 wire. This restriction is explicit rather than silently
 resuming under the wrong agent definition.
 
 ## Canonical Evidence
