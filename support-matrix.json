@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "22.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": "17cbabd1c197c339224c36b8e5f88b0a6b39b891"
+      "status": "verified",
+      "verified_revision": "91431c36fc6999d0014ede82441a069c6fde33e8"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": "b152fa60b31cac7e65214b26e3cbfa54d3ccab9c"
+      "status": "verified",
+      "verified_revision": "cc038175b096fdc9e5778c67ba9b2a6cac7d6f1b"
     }
   },
-  "adoption_note": "Checkpoint history archives and bounded execution frontiers are under paired implementation; complete gates pending.",
-  "last_verified_at": "2026-09-12T05:25:35Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34674624369"
+  "adoption_note": "v22.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-09-14T07:46:10Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/34817545649"
 }
