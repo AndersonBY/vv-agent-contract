@@ -58,6 +58,14 @@ the central cross-repository workflow pass, the current change remains
 
 ## Release Note: 22.0.0
 
+Implementation correction: reconciliation audit identities use the source
+attempt and decision, and the decision and audit commit together through the
+existing checkpoint progress/receipt CAS. Current-schema retained outbox bytes
+remain unchanged. This repairs stable identity and durable recovery guarantees;
+it adds no public field, store method, or schema discriminator. Existing
+checkpoint/journal fixtures seed paired producer regression tests, and the
+immutable fixture snapshot and release locks remain unchanged.
+
 Checkpoint v12 replaces cumulative checkpoint history with a bounded execution
 frontier and immutable same-store history batches committed atomically with
 existing receipts, budgets, outboxes and CAS revisions. Complete public results

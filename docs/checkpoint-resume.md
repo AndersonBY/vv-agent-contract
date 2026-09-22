@@ -482,6 +482,37 @@ appending a duplicate. Reusing an id with different payload bytes fails with
 observe the same stable lifecycle event without making the checkpoint itself
 undeliverable.
 
+For `retry`, `replay_success`, and `record_failure`, a reconciliation resolves
+the **source** operation attempt, captured before applying the decision. Its
+`reconciliation_resolved` ID is `evt_` plus the first 32 lowercase hexadecimal
+characters of SHA-256 over the UTF-8 NUL-joined tuple
+`(checkpoint_key, "reconciliation_resolved", operation_id, decimal(source_attempt), decision)`.
+`retry` advances the journal to `source_attempt + 1`; the other decisions keep
+the source attempt. A later ambiguous attempt is a new resolution. Claim tokens,
+checkpoint revisions, recovery admission counts, timestamps, and result digests
+are not resolution identities. `defer`, `abort`, and batch `accept_deferred`
+retain their existing suspension, terminal, and admission paths.
+
+The decision's journal state, attempt, definitive receipt (when present), and
+resolved outbox event commit in one existing claim/revision CAS. Tool resolution
+uses `record_tool_receipt`, including the caller snapshot's staged outbox in
+that mutation; retry and model resolution use checkpoint progress. Delivery
+starts only after that CAS. A lost claim or failed commit writes neither the
+decision nor its audit. After a committed decision, recovery replays the stored
+outbox bytes without invoking the provider again for that resolved attempt.
+Same receipt identity with a different complete result remains
+`tool_receipt_conflict`; adding the decision to the event coordinates does not
+turn conflicting results into new receipts. A timestamp-only re-enqueue retains
+the original event bytes and digest; other payload changes remain conflicts.
+
+Already retained current-schema outbox entries are immutable, including entries
+whose IDs were produced before this identity correction. Pending delivery uses
+their stored ID, timestamp, payload, and digest without renaming or recreating
+them. New resolutions use the tuple above, so a retained retry event generated
+with the destination attempt cannot collide with a subsequent resolution of
+that attempt. This does not introduce a historical decoder, ID alias, or
+checkpoint migration.
+
 The delivery transition uses `record_event_delivery`. It compares the
 checkpoint revision, verifies the pending event id and payload digest, records
 the exact returned cursor in both the outbox entry and `event_cursor`, and
