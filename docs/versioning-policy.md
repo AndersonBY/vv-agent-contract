@@ -66,6 +66,17 @@ it adds no public field, store method, or schema discriminator. Existing
 checkpoint/journal fixtures seed paired producer regression tests, and the
 immutable fixture snapshot and release locks remain unchanged.
 
+Implementation corrections: each new internal or primary model request checks
+the current budget, including compaction-to-primary transitions within one
+cycle. Admission uses the existing `cycle_start` boundary without counting an
+extra cycle; completed model receipts retain replay accounting. Python Celery
+execution claims and renewals honor the already-required envelope deadline,
+including adopted recovery claims and short heartbeat waits. Native workspace
+page reads in both runtimes and Python artifact validation use bounded-memory
+scans of the same fully hashed and UTF-8-validated source stream. Public APIs,
+schemas, canonical fixtures, immutable release locks, and adoption evidence
+remain unchanged.
+
 Checkpoint v12 replaces cumulative checkpoint history with a bounded execution
 frontier and immutable same-store history batches committed atomically with
 existing receipts, budgets, outboxes and CAS revisions. Complete public results
