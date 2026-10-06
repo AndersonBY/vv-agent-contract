@@ -197,7 +197,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "22.0.0")
+        self.assertEqual(report["version"], "23.0.0")
         self.assertEqual(report["domains"], 20)
         self.assertEqual(report["fixture_files"], 55)
         self.assertEqual(report["manifest_entries"], 54)
@@ -265,6 +265,7 @@ class ContractRepositoryTests(unittest.TestCase):
                 "plain_message_uses_current_wire",
                 "openai_function_tool_call_is_canonicalized",
                 "microcompacted_tool_message_round_trips",
+                "summary_evidence_round_trips",
             },
         )
 

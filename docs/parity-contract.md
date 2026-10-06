@@ -333,6 +333,142 @@ infer task semantics. Validation is atomic for the complete argument object: an
 invalid nested array item rejects the tool call, and handlers never partially
 execute a schema-invalid batch.
 
+## History-Preserving Compaction
+
+Contract `23.0.0` permits one archive-backed microcompaction pass and then an
+accepted summary of a complete historical prefix. Without an accepted summary,
+no content-bearing message, image, reasoning, or tool-call/result skeleton may
+be removed. Only a completely empty assistant may be filtered. Microcompaction
+replaces eligible result bodies after verified persistence and preserves call
+ids, arguments, result associations and typed references. Its age is relative
+to assistant turns in the current transcript, excluding framework summaries;
+an absolute runtime cycle cannot make a retained recent turn old. There is no
+second pruner, processed-image stripping, orphan cleanup, or assistant collapse
+in the compaction pipeline. Resume sanitization remains a separate boundary.
+
+`keep_recent_messages` (default 10, including the existing
+`memory_keep_recent_messages` runtime projection) counts raw messages after
+excluding system messages and framework summaries. A cut inside an assistant
+`tool_calls` plus its immediately following results moves left to that
+assistant. All results must occur exactly once, in call order, within that
+block; ids may be reused in a later block. Invalid blocks abort compaction
+without deleting or repairing messages. Preserve system messages verbatim and
+in order. The selected raw tail is protected from pruning in a planned summary;
+force goes directly to summarization. Below-threshold returns may retain safe
+microcompaction changes, but never discard pairs without a summary.
+
+The summary input has separate `Previous Summary` and `Conversation Prefix`
+sections. The latter contains every removed raw message, complete calls,
+arguments, and results (including valid compact markers). Old summaries and
+manifests stay until replacement is accepted. No event limit truncates this
+input; archived originals are not automatically rehydrated. An unsupported
+image must remain in the tail by moving the cut left, or the operation fails.
+An input window too small fails without chunking or dropping input.
+
+The localized `zh-CN` and `en-US` prompt templates in
+`memory_local.json#summary_compaction.prompt_templates` are canonical. Preserve
+the production instruction text, full JSON schema, analysis instruction,
+JSON-only rule, verbatim-original-request rule and progress event bound. Only
+the history section changes to the two sections above. Render their payloads
+as JCS and substitute the three declared placeholders in one pass: literal
+placeholder text inside history must never be reinterpreted. Preserve the
+trailing newline, clamp `event_limit` to at least one, default to `zh-CN`, and
+use `en-US` for other language values. The `old_tool_pairs_rendered_prompt`
+case fixes the complete rendered bytes in both languages.
+
+Model output is untrusted text to extract and normalize, not a strict stored
+wire object. Strip an outer code fence and case-insensitive `<analysis>`
+blocks, unwrap a supported `<summary>` wrapper, then scan for the first JSON
+object using raw decoding; surrounding prose is tolerated. Apply these rules
+before deciding whether the model provided effective content:
+
+- Drop unknown top-level and nested record fields.
+- Fill each missing or wrong-typed top-level field with its canonical empty
+  value (`[]` or `""`), without coercing numbers or other values to strings.
+  A string-list field containing any non-string element becomes `[]`.
+- Always write `summary_version="2.0"`, ignoring the model's version or its
+  absence. `summary_required_fields`, field types and
+  `written_summary_objects_closed` describe framework output only.
+- A non-array record field becomes `[]`. Within an array, discard malformed
+  records individually. File records require a nonblank string `path` and an
+  `action` from the existing enum; error/fix records require a string `error`.
+  Missing or wrong-typed descriptive strings (`summary`, `fix`, `file`) become
+  `""`. Drop unknown nested fields and preserve the order of surviving records
+  and the original bytes of valid string values. Do not discard other records
+  because one record is malformed.
+- The normalized object has effective content only if at least one of
+  `original_user_messages`, `decisions`, `files_examined_or_modified`,
+  `errors_and_fixes`, `progress`, `key_facts`, `open_issues`, `next_steps` is
+  nonempty, or `current_work_state` is nonempty. `user_constraints` alone and
+  the version do not qualify. Evaluate this before framework file-path and
+  evidence merging so those deterministic additions cannot authorize a lossy
+  fallback.
+
+No extractable object, a raised/absent callback, or no effective normalized
+content keeps the safely pruned complete history. The existing structural
+checks still apply: invalid blocks, unsupported prefix images, input-window
+limits, manifest/context budget, final recovery-surface availability and an
+actual token reduction. Harmless unknown fields, incomplete schemas, wrong
+field types or a wrong model-supplied version do not by themselves reject a
+summary. Local helpers cannot authorize replacement. Cancellation, budget
+exhaustion, checkpoint ambiguity and integrity errors propagate. Strict stored
+Message, evidence-manifest and checkpoint validation is unchanged.
+
+An accepted result is original system messages, one
+`user(name="memory_summary")`, then the unchanged raw tail. The summary content
+contains `Original User Request`, `Compressed Agent Memory`, and
+`Persisted Artifacts` sections in that order, as frozen by the exact examples.
+The first section joins original requests with two newlines; the second is
+RFC 8785 JSON. The evidence section exists even when empty. A valid summary
+must cover all removed pairs by input inclusion, acceptance, and deterministic
+reference preservation; no per-tool semantic coverage protocol is implied.
+
+`Message.metadata._vv_agent_compaction` is a reserved closed object with both
+`artifacts` and `cursors` arrays, even when empty. Closed records contain
+`tool_call_id`, `tool_name`, RFC 8785 object-string `arguments`, and respectively
+`artifact_ref: ToolArtifactRef` or `cursor: ToolResultCursor`. Reuse current
+strict nested shapes. Collect ordinary typed artifact references as well as
+validated recovery envelopes. Merge previous manifests first, then removed
+prefix blocks in transcript order; deduplicate complete canonical records
+within each list, retaining the first occurrence. Never deduplicate by call id
+alone and never truncate references to fit a budget.
+
+The model-visible evidence section renders the fixture's path/argument lines;
+hashes and byte counts stay in metadata. A cursor line exposes path and offset,
+while the complete validated cursor survives for host recovery. It introduces
+no new tool input or automatic cursor injection: models can use the normal
+policy-checked `read_file` path. Ordinary provider projection removes this
+reserved metadata item, omits an empty metadata container, and preserves
+unrelated metadata under its existing projection rules. Strict host/session/
+checkpoint readers validate the reserved object. The final recovery-surface
+check after `before_llm` includes summary evidence, not only tool markers.
+
+File references use `files_examined_or_modified`, merging known file operations
+from the removed prefix by path in first-seen order. Accepted-summary entries
+come first, then prior-summary entries, then known prefix file operations;
+append unseen paths without overwriting earlier entries. The exact tool/action
+mapping and description templates are in `summary_compaction.file_path_collection`. Do not perform automatic exists/stat/read calls
+or inject current file contents. `restore_key_files`,
+`PostCompactRestoreConfig`, their exports, and MemoryManager fields
+`tool_result_compact_threshold`, `tool_result_keep_last`,
+`tool_calls_keep_last`, `assistant_no_tool_keep_last`, and `workspace` are
+removed, including runtime metadata readers; there are no aliases. Session
+Memory's own storage configuration remains independent. The standalone local
+summary and JSON extraction helper fixtures do not prove manager acceptance.
+
+Emergency compaction uses the same process with tail target
+`max(1, floor(keep_recent_messages * (1 - clamp(drop_ratio, 0, 0.95))))`.
+Further-removed raw messages enter the new summary input alongside the prior
+summary. No successful shrink means unchanged history and the existing
+`CompactionExhaustedError` at the PTL exhaustion boundary. `structural` events
+mean only information-preserving cleanup/warnings; `summary` and `emergency`
+mean accepted summaries with normal and smaller tail targets. Session Memory
+`on_compaction` runs only after accepted replacement; its token baseline
+includes the new summary and tail, while the running system prompt stays
+frozen. `result_retention=preserve` blocks pruning but permits accepted summary
+replacement. Public compact/emergency/microcompact method signatures and the
+four-field MicrocompactionPolicy remain unchanged.
+
 ## Sessions And Message History
 
 Session items use one canonical current wire and one current SQLite schema.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 23.0.0 — unreleased
+
+- Replace history only after an accepted complete-prefix summary; retain an
+  atomic raw tail and preserve safely pruned history on failure.
+- Preserve the complete localized summary prompts and normalize harmless model
+  formatting/schema variations before checking effective summary content.
+- Keep typed artifact/cursor evidence in closed summary metadata through
+  recompression, session serialization and deterministic receipt replay.
+- Re-summarize for emergency recovery or exhaust without dropping history.
+- Remove automatic file restoration, duplicate pruning, image stripping and
+  obsolete MemoryManager controls; keep current unrelated discriminators.
+- Contract authoring is in progress; paired implementation adoption and central
+  verification are outstanding.
+
 ## 21.0.0
 
 - Separate Bash initial wait (`yield_time_ms`, default 1000, range 0..10000)
