@@ -58,6 +58,16 @@ the central cross-repository workflow pass, the current change remains
 
 ## Release Note: 22.0.0
 
+Implementation correction: tool timeouts retain `tool_timeout`, set
+`retryable=false` in content and metadata, and warn that work and side effects
+may continue, requiring state verification before another call. They do not
+set `definitive_outcome=true`, following `fixtures/operation_journal.json`
+`outcome_classification.non_cooperative_blocking_tool_timeout` and
+`framework_must_not_assume_a_timed_out_thread_or_process_stopped_side_effects`.
+Paired producer regressions cover late side effects and ambiguous checkpoint
+journals without failed receipts; canonical fixtures, immutable release locks,
+and adoption evidence remain unchanged.
+
 Implementation correction: reconciliation audit identities use the source
 attempt and decision, and the decision and audit commit together through the
 existing checkpoint progress/receipt CAS. Current-schema retained outbox bytes
