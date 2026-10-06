@@ -873,7 +873,7 @@
       "previous_summary",
       "complete_conversation_prefix"
     ],
-    "cut_point_rule": "count_raw_messages_excluding_system_and_framework_summary; move_cut_left_to_start_of_intersected_assistant_tool_calls_and_all_results_block; match_ids_within_each_block",
+    "cut_point_rule": "count_raw_messages_excluding_system_and_framework_summary; move_cut_left_to_start_of_intersected_assistant_tool_calls_and_all_results_block; match_ids_within_each_block; an_ordered_incomplete_final_tool_block_stays_in_tail_as_is",
     "output_structure": [
       "original_system_messages",
       "user_memory_summary",
@@ -2925,7 +2925,7 @@
         }
       },
       {
-        "name": "unsupported_prefix_image_preserves_history",
+        "name": "prefix_image_uses_text_placeholder",
         "input": {
           "messages": [
             {
@@ -2948,9 +2948,18 @@
           ],
           "keep_recent_messages": 2,
           "force": true,
+          "summary_response": "{\"current_work_state\":\"Image inspected\",\"decisions\":[],\"errors_and_fixes\":[],\"files_examined_or_modified\":[],\"key_facts\":[],\"next_steps\":[],\"open_issues\":[],\"original_user_messages\":[\"Inspect image\"],\"progress\":[],\"summary_version\":\"2.0\",\"user_constraints\":[]}",
           "summary_accepts_images": false
         },
-        "expected_summary_input": null,
+        "expected_summary_input": {
+          "previous_summary": [],
+          "conversation_prefix": [
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: Inspect image]"
+            }
+          ]
+        },
         "expected": {
           "messages": [
             {
@@ -2959,8 +2968,14 @@
             },
             {
               "role": "user",
-              "content": "Inspect image",
-              "image_url": "data:image/png;base64,AA=="
+              "name": "memory_summary",
+              "content": "<Original User Request>\nInspect image\n</Original User Request>\n\n<Compressed Agent Memory>\n{\"current_work_state\":\"Image inspected\",\"decisions\":[],\"errors_and_fixes\":[],\"files_examined_or_modified\":[],\"key_facts\":[],\"next_steps\":[],\"open_issues\":[],\"original_user_messages\":[\"Inspect image\"],\"progress\":[],\"summary_version\":\"2.0\",\"user_constraints\":[]}\n</Compressed Agent Memory>\n\n<Persisted Artifacts>\n</Persisted Artifacts>",
+              "metadata": {
+                "_vv_agent_compaction": {
+                  "artifacts": [],
+                  "cursors": []
+                }
+              }
             },
             {
               "role": "assistant",
@@ -2971,16 +2986,598 @@
               "content": "Continue"
             }
           ],
-          "changed": false,
-          "summary_calls": 0,
+          "changed": true,
+          "summary_calls": 1,
+          "raw_tail": [
+            {
+              "role": "assistant",
+              "content": "Image inspected"
+            },
+            {
+              "role": "user",
+              "content": "Continue"
+            }
+          ],
           "workspace_file_reads": 0,
           "workspace_file_stats": 0
+        },
+        "token_estimator": {
+          "input_messages": 1000,
+          "candidate_messages": 600
+        }
+      },
+      {
+        "name": "computer_agent_image_prefix_uses_placeholders",
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "system"
+            },
+            {
+              "role": "user",
+              "content": "Inspect the application"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s0",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 0: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s0"
+            },
+            {
+              "role": "user",
+              "content": "",
+              "image_url": "data:image/png;base64,c2NyZWVu0"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s1",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 1: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s1"
+            },
+            {
+              "role": "user",
+              "content": "[Image loaded] s1.png",
+              "image_url": "data:image/png;base64,c2NyZWVu1"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s2",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 2: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s2"
+            },
+            {
+              "role": "user",
+              "content": "[Image loaded] s2.png",
+              "image_url": "data:image/png;base64,c2NyZWVu2"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s3",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 3: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s3"
+            },
+            {
+              "role": "user",
+              "content": "[Image loaded] s3.png",
+              "image_url": "data:image/png;base64,c2NyZWVu3"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s4",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 4: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s4"
+            },
+            {
+              "role": "user",
+              "content": "[Image loaded] s4.png",
+              "image_url": "data:image/png;base64,c2NyZWVu4"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s5",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 5: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s5"
+            },
+            {
+              "role": "user",
+              "content": "[Image loaded] s5.png",
+              "image_url": "data:image/png;base64,c2NyZWVu5"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "z",
+                  "type": "function",
+                  "function": {
+                    "name": "check_status",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "done",
+              "tool_call_id": "z"
+            }
+          ],
+          "keep_recent_messages": 2,
+          "force": true,
+          "summary_response": "{\"current_work_state\":\"Six screenshots inspected; final status checked.\",\"decisions\":[],\"errors_and_fixes\":[],\"files_examined_or_modified\":[],\"key_facts\":[],\"next_steps\":[],\"open_issues\":[],\"original_user_messages\":[\"Inspect the application\"],\"progress\":[],\"summary_version\":\"2.0\",\"user_constraints\":[]}",
+          "summary_accepts_images": false
+        },
+        "expected_summary_input": {
+          "previous_summary": [],
+          "conversation_prefix": [
+            {
+              "role": "user",
+              "content": "Inspect the application"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s0",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 0: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s0"
+            },
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: image]"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s1",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 1: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s1"
+            },
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: [Image loaded] s1.png]"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s2",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 2: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s2"
+            },
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: [Image loaded] s2.png]"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s3",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 3: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s3"
+            },
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: [Image loaded] s3.png]"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s4",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 4: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s4"
+            },
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: [Image loaded] s4.png]"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "s5",
+                  "type": "function",
+                  "function": {
+                    "name": "screenshot",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Step 5: observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. observed UI state. ",
+              "tool_call_id": "s5"
+            },
+            {
+              "role": "user",
+              "content": "[image omitted from summary input: [Image loaded] s5.png]"
+            }
+          ]
+        },
+        "expected": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "system"
+            },
+            {
+              "role": "user",
+              "name": "memory_summary",
+              "content": "<Original User Request>\nInspect the application\n</Original User Request>\n\n<Compressed Agent Memory>\n{\"current_work_state\":\"Six screenshots inspected; final status checked.\",\"decisions\":[],\"errors_and_fixes\":[],\"files_examined_or_modified\":[],\"key_facts\":[],\"next_steps\":[],\"open_issues\":[],\"original_user_messages\":[\"Inspect the application\"],\"progress\":[],\"summary_version\":\"2.0\",\"user_constraints\":[]}\n</Compressed Agent Memory>\n\n<Persisted Artifacts>\n</Persisted Artifacts>",
+              "metadata": {
+                "_vv_agent_compaction": {
+                  "artifacts": [],
+                  "cursors": []
+                }
+              }
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "z",
+                  "type": "function",
+                  "function": {
+                    "name": "check_status",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "done",
+              "tool_call_id": "z"
+            }
+          ],
+          "changed": true,
+          "summary_calls": 1,
+          "raw_tail": [
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "z",
+                  "type": "function",
+                  "function": {
+                    "name": "check_status",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "done",
+              "tool_call_id": "z"
+            }
+          ],
+          "workspace_file_reads": 0,
+          "workspace_file_stats": 0
+        },
+        "token_estimator": {
+          "input_messages": 1000,
+          "candidate_messages": 600
+        }
+      },
+      {
+        "name": "trailing_incomplete_block_stays_in_tail",
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "system"
+            },
+            {
+              "role": "user",
+              "content": "go"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "old",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. ",
+              "tool_call_id": "old"
+            },
+            {
+              "role": "assistant",
+              "content": "Previous work recorded"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "p1",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                },
+                {
+                  "id": "p2",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          ],
+          "keep_recent_messages": 2,
+          "force": true,
+          "summary_response": "{\"current_work_state\":\"Earlier lookup completed; final tool batch remains pending.\",\"decisions\":[],\"errors_and_fixes\":[],\"files_examined_or_modified\":[],\"key_facts\":[],\"next_steps\":[],\"open_issues\":[],\"original_user_messages\":[\"go\"],\"progress\":[],\"summary_version\":\"2.0\",\"user_constraints\":[]}"
+        },
+        "expected_summary_input": {
+          "previous_summary": [],
+          "conversation_prefix": [
+            {
+              "role": "user",
+              "content": "go"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "old",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": "Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. Historical evidence. ",
+              "tool_call_id": "old"
+            }
+          ]
+        },
+        "expected": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "system"
+            },
+            {
+              "role": "user",
+              "name": "memory_summary",
+              "content": "<Original User Request>\ngo\n</Original User Request>\n\n<Compressed Agent Memory>\n{\"current_work_state\":\"Earlier lookup completed; final tool batch remains pending.\",\"decisions\":[],\"errors_and_fixes\":[],\"files_examined_or_modified\":[],\"key_facts\":[],\"next_steps\":[],\"open_issues\":[],\"original_user_messages\":[\"go\"],\"progress\":[],\"summary_version\":\"2.0\",\"user_constraints\":[]}\n</Compressed Agent Memory>\n\n<Persisted Artifacts>\n</Persisted Artifacts>",
+              "metadata": {
+                "_vv_agent_compaction": {
+                  "artifacts": [],
+                  "cursors": []
+                }
+              }
+            },
+            {
+              "role": "assistant",
+              "content": "Previous work recorded"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "p1",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                },
+                {
+                  "id": "p2",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          ],
+          "changed": true,
+          "summary_calls": 1,
+          "raw_tail": [
+            {
+              "role": "assistant",
+              "content": "Previous work recorded"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "p1",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                },
+                {
+                  "id": "p2",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          ],
+          "workspace_file_reads": 0,
+          "workspace_file_stats": 0
+        },
+        "token_estimator": {
+          "input_messages": 1000,
+          "candidate_messages": 600
         }
       }
     ],
     "invalid_block_cases": [
       {
-        "name": "missing_result",
+        "name": "missing_result_in_middle",
         "messages": [
           {
             "role": "system",
@@ -3016,6 +3613,10 @@
             "role": "tool",
             "content": "a",
             "tool_call_id": "p1"
+          },
+          {
+            "role": "user",
+            "content": "Continue after the incomplete tool batch"
           }
         ],
         "expected": {
@@ -3054,6 +3655,10 @@
               "role": "tool",
               "content": "a",
               "tool_call_id": "p1"
+            },
+            {
+              "role": "user",
+              "content": "Continue after the incomplete tool batch"
             }
           ],
           "changed": false,
@@ -4647,6 +5252,13 @@
           }
         }
       ]
+    },
+    "image_prefix_projection": {
+      "placeholder": "[image omitted from summary input: {content_or_image}]",
+      "content_or_image": "verbatim content if nonempty, otherwise image",
+      "image_url": "omitted from summary input only",
+      "raw_tail": "unchanged",
+      "summary_accepts_images": false
     }
   },
   "evidence_manifest": {

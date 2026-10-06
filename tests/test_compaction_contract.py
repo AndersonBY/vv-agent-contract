@@ -23,6 +23,9 @@ def canonical(value):
 def project(message):
     result = copy.deepcopy(message)
     result.pop('artifact_ref', None)
+    if 'image_url' in result:
+        del result['image_url']
+        result['content'] = '[image omitted from summary input: ' + (result['content'] or 'image') + ']'
     if 'metadata' in result:
         result['metadata'].pop('_vv_agent_compaction', None)
         if not result['metadata']:
@@ -176,6 +179,27 @@ class CompactionContractTests(unittest.TestCase):
                 for forbidden in ('sha256', 'size_bytes', 'original_bytes', 'visible_bytes'):
                     self.assertNotIn(forbidden, summary['content'])
                 self.assertLess(case['token_estimator']['candidate_messages'], case['token_estimator']['input_messages'])
+
+    def test_image_prefix_projection_and_unfinished_tail(self):
+        contract = fixture('memory_local.json')['summary_compaction']
+        cases = {case['name']: case for case in contract['cases']}
+        self.assertNotIn('unsupported_prefix_image_preserves_history', cases)
+        for name, count in (('prefix_image_uses_text_placeholder', 1),
+                            ('computer_agent_image_prefix_uses_placeholders', 6)):
+            case = cases[name]
+            self.assertFalse(case['input']['summary_accepts_images'])
+            prefix = case['expected_summary_input']['conversation_prefix']
+            placeholders = [m for m in prefix if m['content'].startswith('[image omitted from summary input: ')]
+            self.assertEqual(len(placeholders), count)
+            self.assertNotIn('image_url', canonical(prefix))
+            self.assertNotIn('data:image/', canonical(prefix))
+            self.assertEqual(case['expected']['raw_tail'], case['input']['messages'][-2:])
+        pending = cases['trailing_incomplete_block_stays_in_tail']
+        self.assertTrue(pending['expected']['changed'])
+        self.assertTrue(pending['expected']['raw_tail'][-1]['tool_calls'])
+        self.assertEqual(pending['expected']['raw_tail'], pending['input']['messages'][-2:])
+        missing = next(c for c in contract['invalid_block_cases'] if c['name'] == 'missing_result_in_middle')
+        self.assertEqual(missing['messages'][-1]['role'], 'user')
 
     def test_manifest_is_complete_stable_merge_and_exact_projection(self):
         memory = fixture('memory_local.json')

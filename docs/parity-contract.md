@@ -351,8 +351,12 @@ in the compaction pipeline. Resume sanitization remains a separate boundary.
 excluding system messages and framework summaries. A cut inside an assistant
 `tool_calls` plus its immediately following results moves left to that
 assistant. All results must occur exactly once, in call order, within that
-block; ids may be reused in a later block. Invalid blocks abort compaction
-without deleting or repairing messages. Preserve system messages verbatim and
+block; ids may be reused in a later block. Non-tool messages after the result
+batch, including image notifications and steering messages, are independent
+messages. An incomplete final block (no results or only the ordered initial
+subset) stays in the raw tail as-is; move the cut left to its assistant if needed.
+Missing results in the middle, duplicates and out-of-order results still abort
+compaction without deleting or repairing messages. Preserve system messages verbatim and
 in order. The selected raw tail is protected from pruning in a planned summary;
 force goes directly to summarization. Below-threshold returns may retain safe
 microcompaction changes, but never discard pairs without a summary.
@@ -361,8 +365,14 @@ The summary input has separate `Previous Summary` and `Conversation Prefix`
 sections. The latter contains every removed raw message, complete calls,
 arguments, and results (including valid compact markers). Old summaries and
 manifests stay until replacement is accepted. No event limit truncates this
-input; archived originals are not automatically rehydrated. An unsupported
-image must remain in the tail by moving the cut left, or the operation fails.
+input; archived originals are not automatically rehydrated. An image message in
+the prefix is projected as text with content exactly
+`[image omitted from summary input: <content or image>]`: use its verbatim
+nonempty content, or the literal `image` when empty, and omit `image_url`.
+Never send image payloads to the text-only summary route (`summary_accepts_images`
+remains false). Images do not move the cut; raw-tail images stay unchanged.
+Original prefix image messages leave context only when that summary is accepted;
+rejection retains them with their payloads.
 An input window too small fails without chunking or dropping input.
 
 The localized `zh-CN` and `en-US` prompt templates in
@@ -406,8 +416,7 @@ before deciding whether the model provided effective content:
 
 No extractable object, a raised/absent callback, or no effective normalized
 content keeps the safely pruned complete history. The existing structural
-checks still apply: invalid blocks, unsupported prefix images, input-window
-limits, manifest/context budget, final recovery-surface availability and an
+checks still apply: invalid blocks, input-window limits, manifest/context budget, final recovery-surface availability and an
 actual token reduction. Harmless unknown fields, incomplete schemas, wrong
 field types or a wrong model-supplied version do not by themselves reject a
 summary. Local helpers cannot authorize replacement. Cancellation, budget
