@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "contract_version": "23.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "951ffc4be155321c535d7bbb9cce1eb788b2c27e"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Unreleased history-preserving compaction contract; paired producer adoption, full gates and central cross-repository verification are outstanding.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v23.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "last_verified_at": "2026-10-07T02:32:42Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/37561132745"
 }
