@@ -1,6 +1,6 @@
 # Changelog
 
-## 23.0.0 — unreleased
+## 23.0.0 — adoption in progress
 
 - Replace history only after an accepted complete-prefix summary; retain an
   atomic raw tail and preserve safely pruned history on failure.
