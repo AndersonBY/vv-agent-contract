@@ -191,6 +191,29 @@ metadata, or other bookkeeping. Integrity metadata remains on the typed
 artifact reference outside the model projection. `read_file` is the only
 model-facing recovery path.
 
+## Summary And Recovery Projection
+
+Contract `23.0.0` uses the history-preserving pipeline in
+`parity-contract.md#history-preserving-compaction`. Microcompaction is the only
+pruner. Relative transcript age and an atomic raw tail protect recent calls;
+no image or tool-call skeleton is stripped to fit a threshold. Summary input
+contains the complete removed prefix and the prior summary; acceptance is the
+only boundary that permits their replacement. Exact messages and projections
+are in `memory_local.json#summary_compaction` and `session_codec.json`.
+
+The canonical localized templates preserve their full production schema and
+rules, replacing only the history section with JCS previous-summary and prefix
+payloads. Model JSON is tolerantly extracted and normalized before its effective
+content is checked; closed summary fields constrain framework writes, while
+host evidence and persistence integrity boundaries remain strict.
+
+Summary metadata retains complete typed artifacts and cursors across repeated
+summaries. Its path list is deterministic, requires the policy-checked recovery
+surface, and does not perform automatic file restoration. Session/checkpoint
+storage preserves that metadata, while provider projection strips the reserved
+`_vv_agent_compaction` item. Hashes and byte counts are not rendered into summary
+text. This does not change ordinary bounded tool-result recovery envelopes.
+
 ## Tool Surface
 
 Only `direct` and `hidden` are current `ToolExposure` values. `direct` is

@@ -22,8 +22,9 @@ from tool names or arguments, or decide whether a business answer is complete.
 name, arguments, response format, or task description. Missing metadata uses
 `archive`, so built-in and custom tools participate uniformly unless the tool
 explicitly declares `preserve`. Preservation applies only to proactive
-microcompaction; full summary and emergency recovery may still reduce history
-when required to fit the model context.
+microcompaction; full summary and emergency recovery may replace history only
+after an accepted summary includes every removed pair and retains its recovery
+references. Failure preserves history.
 
 This declaration is the only source of typed idempotency. There is no separate
 tool-level idempotency input or run-definition field. An omitted declaration

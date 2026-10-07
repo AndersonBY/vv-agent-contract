@@ -174,6 +174,18 @@ Completed cycle commits may clear active operation journals, but they do not
 remove model-call records. Terminal replay returns the retained ledger without
 model dispatch.
 
+## Compaction Accounting
+
+Contract `23.0.0` prune-only work issues no summary model call. A framework
+summary issues one `memory_compaction` call; an emergency re-summary with a
+changed prefix/tail is a separate logical operation and is charged separately.
+A failed or invalid summary that was dispatched still retains its ordinary
+terminal accounting even though no history replacement commits. Preflight
+input-window rejection issues no call. Receipt replay reapplies the same
+summary plus tail and evidence without another dispatch, ledger record or
+budget increment. `token_usage.json#compaction_cases` specifies exact records
+and deltas; the accounting schemas and operation enum stay unchanged.
+
 ## Session Memory Diagnostics
 
 Session Memory output parsing is fail-soft but not silent. Invalid extraction

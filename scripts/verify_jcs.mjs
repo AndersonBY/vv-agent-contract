@@ -651,6 +651,26 @@ if (WRITE) {
 }
 
 const checkpointResume = readFixture("checkpoint_resume.json");
+const summaryReplay = checkpointResume.summary_receipt_replay;
+if (!summaryReplay) fail("checkpoint_resume: missing summary receipt replay");
+for (const [label, vector] of [
+  ["summary_receipt_replay", summaryReplay.summary_request_golden],
+  ["summary_receipt_changed_request", summaryReplay.changed_request.golden],
+]) {
+  if (WRITE) Object.assign(vector, vectorValues(vector.request));
+  else verifyVector(`checkpoint_resume/${label}`, vector.request, vector);
+}
+const summaryDigest = summaryReplay.summary_request_golden.sha256;
+if (WRITE) {
+  summaryReplay.input.retained_receipt.request_digest = summaryDigest;
+  summaryReplay.expected.request_digest = summaryDigest;
+} else if (
+  summaryReplay.input.retained_receipt.request_digest !== summaryDigest
+  || summaryReplay.expected.request_digest !== summaryDigest
+  || summaryReplay.changed_request.golden.sha256 === summaryDigest
+) {
+  fail("checkpoint_resume: summary receipt request digest mismatch");
+}
 const frozenPromptResume = checkpointResume.runner_cases.find(
   (entry) => entry.name === "frozen_prompt_bundle_resume_does_not_reinvoke_producers",
 );

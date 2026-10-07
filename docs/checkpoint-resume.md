@@ -697,6 +697,28 @@ external outcome is ambiguous. It returns
 journal or replaying stale data. The current runtime does not rewrite an
 untrusted record into a different schema.
 
+## Summary Receipt Recovery
+
+Contract `23.0.0` keeps checkpoint v12 and the existing model-operation receipt
+protocol. The exact cut, prior summary, prefix order, canonical arguments and
+merged evidence must be deterministic. The summary request uses the existing
+`memory_compaction` operation identity and request digest; never allocate a new
+identity to evade a mismatched retained digest.
+
+A crash after the summary response/accounting receipt but before transcript
+replacement replays that response to derive the same summary, tail and manifest.
+It adds no model dispatch, usage record, budget charge or tool side effect.
+After replacement commits, recovery loads that projection without compressing
+the prefix again. `checkpoint_resume.json#summary_receipt_replay` freezes both
+boundaries and Python-to-Rust/Rust-to-Python exchange. The active transcript
+change does not prune immutable checkpoint history batches or receipt evidence.
+
+Archive persistence that preceded a failed summary may be reused after normal
+content verification; failure keeps all safely pruned pairs. Summary recovery
+does not reread mutable source files. Current readers validate reserved summary
+metadata using `memory_local.json#evidence_manifest`; no old-checkpoint decoder,
+migration, operation-journal change, or envelope discriminator is introduced.
+
 ## Ambiguity And Reconciliation
 
 On recovery, `started` without a durable receipt becomes `ambiguous`. The

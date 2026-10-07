@@ -56,6 +56,27 @@ Separate repositories cannot merge atomically. Until both implementations and
 the central cross-repository workflow pass, the current change remains
 `pending-adoption` or `in-progress` and must not be reported as shared support.
 
+## Release Note: 23.0.0
+
+Major, unreleased: compaction preserves complete call/result history until an
+accepted prefix summary can replace it, and keeps an atomic recent raw tail.
+Reserved summary metadata retains artifacts and cursors across recompression,
+sessions and receipt replay. Failed summaries preserve history; emergency
+compaction re-summarizes with a smaller tail or exhausts without silent drops.
+Localized summary prompts retain their full schema and instructions. Model
+output is tolerantly extracted and normalized; unknown fields are dropped,
+missing/wrong-typed fields are defaulted, and the framework writes version 2.0.
+Only effective normalized content may authorize replacement; stored evidence
+validation remains strict.
+Automatic file restoration, the second pruner, processed-image stripping, and
+the obsolete Manager controls are removed without aliases. Compact method
+signatures and unrelated schema/protocol discriminators remain unchanged.
+
+The support matrix is `in-progress` with null verified revisions and no prior
+verification run carried forward. This authoring state does not imply an
+immutable release or implementation support. Paired producer adoption, full
+repository gates and central cross-repository CI are still required.
+
 ## Release Note: 22.0.0
 
 Implementation correction: tool timeouts retain `tool_timeout`, set
