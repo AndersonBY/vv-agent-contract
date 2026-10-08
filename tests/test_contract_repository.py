@@ -115,46 +115,16 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertIn("fetch-depth: 0", contract_checkout)
 
-    def test_cross_repository_checkout_preserves_sibling_repository_names(self) -> None:
+    def test_cross_repository_gate_uses_required_python_only(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
-        python_checkout = workflow.split("- name: Checkout Python implementation", maxsplit=1)[1].split(
-            "- name: Checkout Rust implementation", maxsplit=1
-        )[0]
-        rust_checkout = workflow.split("- name: Checkout Rust implementation", maxsplit=1)[1].split(
-            "- name: Set up Python", maxsplit=1
-        )[0]
-
-        self.assertIn("path: vv-agent\n", python_checkout)
-        self.assertIn("path: vv-agent-rs\n", rust_checkout)
-
-    def test_cross_repository_gate_runs_bidirectional_sqlite_probe(self) -> None:
-        workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
-        sqlite_probe = workflow.split("- name: Verify cross-language SQLite checkpoint", maxsplit=1)[1].split(
-            "- name: Record evidence", maxsplit=1
-        )[0]
-        normalized_probe = " ".join(sqlite_probe.replace("\\\n", " ").split())
-
-        self.assertIn("Verify cross-language SQLite checkpoint", workflow)
-        self.assertIn(
-            'python_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-python.XXXXXX.sqlite3")"',
-            sqlite_probe,
-        )
-        self.assertIn(
-            'rust_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-rust.XXXXXX.sqlite3")"',
-            sqlite_probe,
-        )
-        self.assertNotIn('database="$RUNNER_TEMP/vv-agent-cross-runtime.sqlite3"', sqlite_probe)
-        self.assertEqual(sqlite_probe.count("VV_AGENT_CROSS_RUNTIME_MODE="), 4)
-        for mode, database in (
-            ("write_python", "python_database"),
-            ("read_python", "python_database"),
-            ("write_rust", "rust_database"),
-            ("read_rust", "rust_database"),
-        ):
-            self.assertIn(
-                f'VV_AGENT_CROSS_RUNTIME_DB="${database}" VV_AGENT_CROSS_RUNTIME_MODE={mode}',
-                normalized_probe,
-            )
+        self.assertIn("path: vv-agent\n", workflow)
+        for removed in ("rust_ref", "vv-agent-rs", "cargo ", "cross-language", "CROSS_RUNTIME", "CROSS_HOST", "CROSS_HISTORY"):
+            self.assertNotIn(removed, workflow)
+        for command in ("uv run pytest", "uv run ruff check .", "uv run ty check"):
+            self.assertIn(command, workflow)
+        self.assertIn("check --source contract", workflow)
+        self.assertIn("check --artifact", workflow)
+        self.assertIn('contract/scripts/contractctl.py --root contract build', workflow)
 
     def test_record_verified_requires_all_default_branches(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
@@ -162,7 +132,7 @@ class ContractRepositoryTests(unittest.TestCase):
             "- name: Commit verified support matrix", maxsplit=1
         )[0]
 
-        for input_name in ("contract_ref", "python_ref", "rust_ref"):
+        for input_name in ("contract_ref", "python_ref"):
             self.assertIn(f'test "${{{{ inputs.{input_name} }}}}" = "main"', recording_step)
 
     def test_validate_workflow_supports_manual_dispatch(self) -> None:
@@ -181,17 +151,14 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertIn("node contract/scripts/verify_jcs.mjs", workflow)
 
-    def test_cross_repository_workflow_exchanges_real_host_interactions(self) -> None:
+    def test_cross_repository_workflow_provisions_real_databases(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
-        exchange = workflow.split("- name: Verify cross-language host interaction stores", 1)[1].split(
-            "- name: Verify cross-language Redis controller command", 1
-        )[0]
-        self.assertIn("test_real_tool_host_interaction_retains_receipt_before_waiting[None]", exchange)
-        self.assertIn("native_host_tool_commits_cycle_and_resumes_after_sqlite_reopen", exchange)
-        self.assertEqual(exchange.count("VV_AGENT_CROSS_HOST_MODE=respond"), 2)
-        self.assertEqual(exchange.count("VV_AGENT_CROSS_HOST_MODE=read"), 2)
-        self.assertEqual(exchange.count("cross_language_host_interaction_store"), 4)
-        self.assertIn("for store_kind in sqlite redis", exchange)
+        for required in (
+            "image: redis:", "redis-cli", "VV_AGENT_TEST_REDIS_URL:",
+            "image: postgres:", "pg_isready", "psql -Atc 'SELECT 1'",
+            "VV_AGENT_TEST_POSTGRES_DSN:", "job.services.postgres.ports['5432']",
+        ):
+            self.assertIn(required, workflow)
 
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
@@ -7263,15 +7230,14 @@ class ContractRepositoryTests(unittest.TestCase):
             matrix = record_adoption.record_adoption(
                 contract_root,
                 revision,
-                "e" * 40,
                 "https://github.com/AndersonBY/vv-agent-contract/actions/runs/123",
                 verified_at="2026-07-13T12:00:00Z",
             )
             self.assertEqual(matrix["status"], "verified")
             self.assertEqual(
                 matrix["adoption_note"],
-                f"v{matrix['contract_version']} passed the paired implementation snapshots "
-                "and cross-language producer gates.",
+                f"v{matrix['contract_version']} passed the required implementation snapshots "
+                "and cross-repository producer gates.",
             )
             self.assertEqual(matrix["implementations"]["python"]["verified_revision"], revision)
 

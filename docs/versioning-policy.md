@@ -9,7 +9,7 @@ event, session, checkpoint, App Server message, and wire payload.
 When a shape changes, the same change must:
 
 1. update the canonical documentation and fixture;
-2. update both real implementations and their producer tests;
+2. update required implementations and their producer tests;
 3. update every current caller and evaluation adapter;
 4. delete the replaced reader, writer, alias, shim, migration, fixture, test,
    and documentation path.
@@ -40,25 +40,40 @@ to communicate change size:
 
 These labels do not promise that a runtime reads records from older releases.
 Each implementation pins one exact contract version and revision. New releases
-replace the supported contract after paired adoption; applications that need an
-older runtime use the corresponding Git tag and package release.
+replace the active supported contract after required implementations adopt.
+Applications that need an older runtime use the corresponding Git tag and
+package release.
 
 ## Adoption States
 
-- `pending-adoption`: the immutable contract release exists, but one or both
-  implementations do not yet pin it.
-- `in-progress`: paired implementation work exists, but complete evidence is
-  not yet available.
-- `verified`: both repositories pin the same contract revision and pass real
-  producer, full repository, fixture, and cross-repository checks.
+`support-matrix.json` uses schema 2; schema 1 is rejected. The top-level
+`contract_version` and `status` describe the current required implementations.
+Each implementation has its own explicit `contract_version`.
 
-Separate repositories cannot merge atomically. Until both implementations and
-the central cross-repository workflow pass, the current change remains
-`pending-adoption` or `in-progress` and must not be reported as shared support.
+- `pending-adoption`: one or more required implementations have not adopted
+  the selected contract release.
+- `in-progress`: required implementation work exists, but complete evidence
+  is not yet available.
+- `verified`: all required implementations pin the current contract and pass
+  real producer, full repository, fixture and central cross-repository checks.
+- `frozen` (implementation only): a non-required implementation retains its
+  pinned version, package series and verified baseline revision. It does not
+  claim support for the top-level contract version or block its adoption.
+
+Currently only Python is required. Rust is frozen at contract 23.0.0 / 0.21.x
+for security, data integrity, v23 correctness fixes and dependency/build upkeep.
+No new kernel, wire or public behavior is permitted. Reactivating Rust requires
+a new Maker decision and full adoption of the then-current contract, including
+real producer tests, full gates and central verification; see
+[the adoption workflow](change-workflow.md#frozen-implementations).
+
+Until all required implementations and central CI pass, a new contract remains
+`pending-adoption` or `in-progress`. Publishing alone does not establish support.
+The frozen implementation's evidence applies only to its own pinned release.
 
 ## Release Note: 23.0.0
 
-Major, unreleased: compaction preserves complete call/result history until an
+Major, verified: compaction preserves complete call/result history until an
 accepted prefix summary can replace it, and keeps an atomic recent raw tail.
 Reserved summary metadata retains artifacts and cursors across recompression,
 sessions and receipt replay. Failed summaries preserve history; emergency
@@ -72,10 +87,10 @@ Automatic file restoration, the second pruner, processed-image stripping, and
 the obsolete Manager controls are removed without aliases. Compact method
 signatures and unrelated schema/protocol discriminators remain unchanged.
 
-The support matrix is `in-progress` with null verified revisions and no prior
-verification run carried forward. This authoring state does not imply an
-immutable release or implementation support. Paired producer adoption, full
-repository gates and central cross-repository CI are still required.
+v23.0.0 remains verified by the revisions, timestamp and central run recorded
+in `support-matrix.json`. The schema 2 process update makes Python required and
+freezes Rust at its verified v23 baseline without changing this contract version,
+canonical fixture bytes, manifest digest or the recorded verification evidence.
 
 ## Release Note: 22.0.0
 
@@ -172,7 +187,7 @@ and require empty model and tool journals. Tool interaction admission belongs
 to the runtime after the handler returns its typed outcome and the complete
 cycle is assembled.
 The existing wire shapes remain unchanged; this is a shared runtime behavior
-change. Adoption remains `in-progress` until both implementations and their
+change. Adoption remains `in-progress` until required implementations and their
 producer, persistence, and cross-repository gates pass.
 
 ## Release Note: 16.0.0
@@ -285,7 +300,7 @@ merging it with deferred resolution or terminal successor continuation:
   UTF-8 limits before CAS. Receipt payloads remain free of provider-specific
   data, secrets, and application business fields.
 
-The support matrix is `pending-adoption` until both implementations pin the
+The support matrix is `pending-adoption` until required implementations pin the
 same v8 revision and pass real producer, full repository, and cross-language
 gates.
 
@@ -316,7 +331,7 @@ codec to `vv-agent.checkpoint.v10`:
   result-public v6, RunEvent v5, and distributed response v4 remain unchanged.
 
 The support matrix is `pending-adoption` with null implementation revisions
-until both language implementations pin this contract revision and pass real
+until required implementations pin this contract revision and pass real
 producer, full repository, and cross-language gates.
 
 ## Release Note: 11.0.0
@@ -342,7 +357,7 @@ event identity for every definitive ordinary or deferred tool receipt:
   event payload golden vectors use the same derivation. No historical ID alias,
   reader, or migration is part of the current contract.
 
-The support matrix remains `pending-adoption` until both implementations pin
+The support matrix remains `pending-adoption` until required implementations pin
 the same 11.0.0 revision and pass real producer, full repository, and
 cross-language gates.
 
@@ -365,7 +380,7 @@ and any other stale, unknown, malformed, or future RunEvent discriminator.
   error `deferred_admission_completed_outcome_invalid` and never rewrites its
   definitive receipt.
 
-The support matrix remains `pending-adoption` until both implementations pin
+The support matrix remains `pending-adoption` until required implementations pin
 the same 10.0.0 revision and pass real producer, full repository, and
 cross-language gates.
 
@@ -413,7 +428,7 @@ discriminators and unknown future values; there is no alias or dual reader.
   requires a positive logical cycle and closes unclosed tools before the
   terminal lifecycle. Claimed control closure remains `finalize_claimed`.
 
-This release remains `pending-adoption` until both implementations pin the
+This release remains `pending-adoption` until required implementations pin the
 same v9 revision and pass real producer, full repository, and cross-language
 gates. Python and Rust producers must adopt the breaking v9 receipt digest,
 `finalize_claimed`, and `resume_observations` wire shapes.
@@ -424,7 +439,7 @@ gates. Python and Rust producers must adopt the breaking v9 receipt digest,
 canonical invalid coverage for `ToolExecutionResult`: a result with
 `status_code=SUCCESS` and a non-null `error_code` is invalid and must be
 rejected as `tool_result_invalid`. The support matrix remains
-`pending-adoption` until both implementations adopt and pass the paired gates.
+`pending-adoption` until required implementations adopt and pass the paired gates.
 
 ## Release Note: 8.1.1
 
@@ -433,7 +448,7 @@ Redis checkpoint atomicity as compare-and-swap transaction semantics without
 prescribing an implementation. Lua, WATCH/MULTI/EXEC, and equivalent
 transactions are valid when they preserve the required revision, claim, lease,
 and pending-event fences. The support matrix remains `pending-adoption` until
-both implementations adopt and pass the paired gates.
+required implementations adopt and pass the paired gates.
 
 ## Release Note: 8.1.0
 
@@ -444,7 +459,7 @@ instruction or context producers. The capability remains enqueue-only and
 returns a passive handle; the existing distributed envelope, worker response,
 checkpoint, and driver decision wire shapes are unchanged. The cross-repository
 workflow also provisions and probes Redis for the Rust persistence gate. The
-support matrix remains `pending-adoption` until both implementations adopt and
+support matrix remains `pending-adoption` until required implementations adopt and
 pass the paired gates.
 
 ## Release Note: 8.0.1
@@ -455,19 +470,19 @@ checkpoint valid fixture. Checkpoint objects remain closed: unknown top-level
 fields are rejected, while vendor extension data is valid only in the explicit
 `extension_state` map. The current checkpoint/controller valid and invalid cases
 and all controller-command digest vectors were audited; their semantics remain
-unchanged. The support matrix remains `pending-adoption` until both
+unchanged. The support matrix remains `pending-adoption` until required
 implementations adopt and pass the paired gates.
 
 ## Completion Evidence
 
 A forward-only contract change is complete only when:
 
-- both locks pin the same exact contract release and revision;
-- both vendored snapshots match the canonical artifact;
-- both real writer and strict reader tests pass;
-- stale, missing, malformed, and unknown versions are rejected in both
-  languages;
-- repository-wide searches find no old reader, alias, migration, fixture, or
+- all required locks pin the same exact contract release and revision;
+- required vendored snapshots match the canonical artifact;
+- required real writer and strict reader tests pass;
+- stale, missing, malformed and unknown versions are rejected by required readers;
+- active repositories contain no old reader, alias, migration, fixture or
   active documentation reference;
-- the central cross-repository workflow records both exact implementation
-  revisions.
+- central CI records every required implementation's exact revision;
+- frozen records retain their own pinned versions and verified baselines and
+  are never reported as adopting the newer contract.

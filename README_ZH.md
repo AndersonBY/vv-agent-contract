@@ -11,7 +11,17 @@ release artifact SHA-256 和 fixture manifest SHA-256。fixture 会作为生成�
 vendored snapshot 提交到实现仓库，因此本地和 CI 测试不依赖网络。
 
 实现仓库不得直接编辑 vendored fixture。共享行为变化必须先修改本仓库，
-再同步到 Python 和 Rust，最后由两侧真实 producer tests 和中央跨仓 CI 验证。
+再同步到本版 required implementations，由必需实现的真实 producer tests、
+全量质量门禁和中央跨仓 CI 验证。
+
+`support-matrix.json` 使用 schema 2，`required_implementations` 当前仅包含 Python。
+契约 23.0.0 保持 verified；发布不等于采用，后续版本须由必需实现及中央 CI 通过后
+才能标记 verified。
+
+Rust 冻结于自己的契约 23.0.0 / 包系列 0.21.x，保留已验证的基线 revision。
+仅允许安全、数据完整性、v23 正确性修复和不改变行为的依赖/构建维护；不增加新 kernel、
+wire 或公共行为。Python 采用新契约不代表 Rust 支持该版本。重新启用 Rust 必须有
+新的 Maker 决策，并完整采用届时的当前契约，通过真实 producer、全量门禁及中央 CI。
 
 ```bash
 python3 scripts/contractctl.py validate

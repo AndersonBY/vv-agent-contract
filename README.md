@@ -22,8 +22,8 @@ fixtures are committed into the implementation repository as a generated
 vendored snapshot so local tests remain deterministic and offline.
 
 Vendored fixtures are never edited directly. A contract change begins here,
-then each implementation runs its snapshot sync command and updates its real
-producers until conformance tests pass.
+then each required implementation runs its snapshot sync command and updates
+its real producers until conformance tests pass.
 
 ## Local Validation
 
@@ -36,10 +36,16 @@ python3 scripts/contractctl.py build --output-dir dist
 
 ## Adoption State
 
-`support-matrix.json` records whether the current contract version has passed
-both implementation gates. Publishing a contract version and adopting it are
-separate operations. A version is not cross-language verified until both
-implementation revisions and the central cross-repository run are recorded.
+`support-matrix.json` schema 2 declares `required_implementations` (currently
+Python only). Publishing and adoption are separate: the current contract is
+verified only after required implementation gates and central CI pass.
+
+Contract 23.0.0 remains verified. Rust is frozen at its own contract 23.0.0 /
+package series 0.21.x and verified baseline revision. Maintenance covers
+security, data integrity, v23 correctness and dependency/build upkeep; no new
+kernel, wire or public behavior. Later Python adoption does not establish Rust
+support. Reactivation requires a new Maker decision and full adoption of the
+then-current contract, including producer tests, full gates and central CI.
 
 See `docs/change-workflow.md` for the complete workflow.
 The optional resource budget semantics are defined in `docs/run-budgets.md`.

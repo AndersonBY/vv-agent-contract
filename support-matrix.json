@@ -1,22 +1,28 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "contract_version": "23.0.0",
   "status": "verified",
+  "required_implementations": [
+    "python"
+  ],
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
+      "contract_version": "23.0.0",
       "status": "verified",
       "verified_revision": "951ffc4be155321c535d7bbb9cce1eb788b2c27e"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
       "branch": "main",
-      "status": "verified",
+      "contract_version": "23.0.0",
+      "package_series": "0.21.x",
+      "status": "frozen",
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v23.0.0 passed the paired implementation snapshots and cross-language producer gates.",
+  "adoption_note": "v23.0.0 remains verified by the recorded implementation and cross-repository gates. Python is required; Rust is frozen at its verified v23.0.0 baseline for 0.21.x maintenance only.",
   "last_verified_at": "2026-10-07T02:32:42Z",
   "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/37561132745"
 }

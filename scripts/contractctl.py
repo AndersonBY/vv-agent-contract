@@ -138,6 +138,67 @@ def validate_fixture_syntax(fixtures: Path, intentional_invalid: Any) -> None:
         )
 
 
+def validate_support_matrix(matrix: Any, version: str) -> None:
+    if not isinstance(matrix, dict) or type(matrix.get("schema_version")) is not int or matrix["schema_version"] != 2:
+        raise ContractError("support-matrix.json must be a schema_version=2 object")
+    if set(matrix) - {
+        "schema_version", "contract_version", "status", "required_implementations",
+        "implementations", "adoption_note", "last_verified_at", "cross_repository_run",
+    }:
+        raise ContractError("unknown support matrix fields")
+    if matrix.get("contract_version") != version:
+        raise ContractError("support matrix contract_version must match contract.json")
+    if not isinstance(matrix.get("status"), str) or matrix["status"] not in ALLOWED_ADOPTION_STATES:
+        raise ContractError(f"invalid support matrix status: {matrix.get('status')!r}")
+    implementations = matrix.get("implementations")
+    if not isinstance(implementations, dict) or set(implementations) != {"python", "rust"}:
+        raise ContractError("support matrix must contain exactly python and rust implementations")
+    required = matrix.get("required_implementations")
+    if (not isinstance(required, list) or not required
+            or not all(isinstance(name, str) and name in implementations for name in required)
+            or len(set(required)) != len(required)):
+        raise ContractError("required_implementations must be a non-empty unique list of implementation names")
+    for language, implementation in implementations.items():
+        if not isinstance(implementation, dict):
+            raise ContractError(f"support matrix {language} entry must be an object")
+        if set(implementation) - {
+            "repository", "branch", "status", "contract_version", "package_series", "verified_revision",
+        }:
+            raise ContractError(f"unknown {language} implementation fields")
+        repository = implementation.get("repository")
+        if not isinstance(repository, str) or not repository.startswith("https://github.com/"):
+            raise ContractError(f"{language} repository must be an HTTPS GitHub URL")
+        if not isinstance(implementation.get("branch"), str) or not implementation["branch"]:
+            raise ContractError(f"{language} branch must be a non-empty string")
+        state = implementation.get("status")
+        if not isinstance(state, str) or state not in ALLOWED_ADOPTION_STATES | {"frozen"}:
+            raise ContractError(f"invalid {language} adoption status: {state!r}")
+        pinned = implementation.get("contract_version")
+        if not isinstance(pinned, str) or SEMVER_RE.fullmatch(pinned) is None:
+            raise ContractError(f"{language} must pin its own contract_version")
+        if state == "frozen":
+            if language in required:
+                raise ContractError(f"frozen {language} cannot be a required implementation")
+            series = implementation.get("package_series")
+            if not isinstance(series, str) or re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.x", series) is None:
+                raise ContractError(f"frozen {language} must pin its package_series")
+        elif pinned != version:
+            raise ContractError(f"active {language} contract_version must match the current contract")
+        revision = implementation.get("verified_revision")
+        if state in {"verified", "frozen"} or revision is not None:
+            if not isinstance(revision, str) or re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+                raise ContractError(f"{state} {language} revision must be a full Git commit")
+    if matrix["status"] == "verified":
+        for language in required:
+            if implementations[language]["status"] != "verified":
+                raise ContractError(f"verified support matrix requires a verified {language} revision")
+        if not isinstance(matrix.get("last_verified_at"), str) or not matrix["last_verified_at"]:
+            raise ContractError("verified support matrix requires last_verified_at")
+        run_url = matrix.get("cross_repository_run")
+        if not isinstance(run_url, str) or not run_url.startswith("https://github.com/"):
+            raise ContractError("verified support matrix requires a GitHub cross_repository_run URL")
+
+
 def validate_contract(root: Path) -> dict[str, Any]:
     root = root.resolve()
     contract = load_json(root / "contract.json")
@@ -175,32 +236,7 @@ def validate_contract(root: Path) -> dict[str, Any]:
         raise ContractError("contract domain ids must be non-empty strings")
 
     matrix = load_json(root / "support-matrix.json")
-    if not isinstance(matrix, dict) or matrix.get("schema_version") != 1:
-        raise ContractError("support-matrix.json must be a schema_version=1 object")
-    if matrix.get("contract_version") != version:
-        raise ContractError("support matrix contract_version must match contract.json")
-    if matrix.get("status") not in ALLOWED_ADOPTION_STATES:
-        raise ContractError(f"invalid support matrix status: {matrix.get('status')!r}")
-    implementations = matrix.get("implementations")
-    if not isinstance(implementations, dict) or set(implementations) != {"python", "rust"}:
-        raise ContractError("support matrix must contain exactly python and rust implementations")
-    for language, implementation in implementations.items():
-        if not isinstance(implementation, dict):
-            raise ContractError(f"support matrix {language} entry must be an object")
-        if implementation.get("status") not in ALLOWED_ADOPTION_STATES:
-            raise ContractError(f"invalid {language} adoption status: {implementation.get('status')!r}")
-    if matrix["status"] == "verified":
-        for language, implementation in implementations.items():
-            revision = implementation.get("verified_revision")
-            if implementation.get("status") != "verified" or not isinstance(revision, str):
-                raise ContractError(f"verified support matrix requires a verified {language} revision")
-            if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
-                raise ContractError(f"verified {language} revision must be a full Git commit")
-        if not isinstance(matrix.get("last_verified_at"), str) or not matrix["last_verified_at"]:
-            raise ContractError("verified support matrix requires last_verified_at")
-        run_url = matrix.get("cross_repository_run")
-        if not isinstance(run_url, str) or not run_url.startswith("https://github.com/"):
-            raise ContractError("verified support matrix requires a GitHub cross_repository_run URL")
+    validate_support_matrix(matrix, version)
 
     required_docs = [
         root / "README.md",

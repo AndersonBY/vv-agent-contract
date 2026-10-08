@@ -4,20 +4,25 @@
 languages. API spelling may follow language idioms; prompt, tool, state, event,
 persistence, App Server, and wire semantics may not drift.
 
+Adoption applies to `support-matrix.json`'s required implementations (currently
+Python). Rust is frozen at its own v23.0.0 baseline; this document's behavioral
+rules and canonical fixtures remain unchanged for v23. See `change-workflow.md`
+for the frozen boundary and reactivation requirements.
+
 ## Completion Definition
 
 A domain is aligned only when all of the following are true:
 
-1. The public capability exists in both implementations.
+1. The public capability exists in every required implementation.
 2. Accepted input, defaults, precedence, output, errors, side effects,
    cancellation, persistence, and terminal states are equivalent.
 3. Model-visible prompt and tool content match after canonical JSON encoding.
 4. Current wire objects are closed and require their exact discriminator.
-5. Real producer tests pass in both languages; private builder tests are not
-   sufficient by themselves.
-6. Both locks select the same central revision and both vendored snapshots
+5. Real producer tests pass in every required implementation; private builder
+   tests are not sufficient by themselves.
+6. All required locks select the same central revision and their vendored snapshots
    match its artifact.
-7. Focused tests and both full repository quality gates pass.
+7. Focused tests and all required full repository quality gates pass.
 
 `HEAD` contains one current shape. Missing, stale, unknown, malformed, or
 future schema versions are rejected. Unknown fields are rejected unless the
