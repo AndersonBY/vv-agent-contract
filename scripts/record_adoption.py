@@ -10,45 +10,41 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from contractctl import load_json, validate_support_matrix
+
 
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
-
-
-def load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def record_adoption(
     root: Path,
     python_revision: str,
-    rust_revision: str,
     run_url: str,
     verified_at: str | None = None,
 ) -> dict[str, Any]:
-    for name, revision in (("python", python_revision), ("rust", rust_revision)):
-        if REVISION_RE.fullmatch(revision) is None:
-            raise ValueError(f"{name} revision must be a full hexadecimal Git commit")
+    if REVISION_RE.fullmatch(python_revision) is None:
+        raise ValueError("python revision must be a full hexadecimal Git commit")
     if not run_url.startswith("https://github.com/"):
         raise ValueError("cross-repository run URL must be a GitHub HTTPS URL")
 
     contract = load_json(root / "contract.json")
     matrix_path = root / "support-matrix.json"
     matrix = load_json(matrix_path)
-    if matrix.get("contract_version") != contract.get("version"):
-        raise ValueError("support matrix version does not match contract.json")
+    validate_support_matrix(matrix, contract["version"])
+    if matrix["required_implementations"] != ["python"]:
+        raise ValueError("record_adoption requires exactly the Python implementation")
 
     timestamp = verified_at or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     matrix["status"] = "verified"
     matrix["adoption_note"] = (
-        f"v{contract['version']} passed the paired implementation snapshots "
-        "and cross-language producer gates."
+        f"v{contract['version']} passed the required implementation snapshots "
+        "and cross-repository producer gates."
     )
     matrix["last_verified_at"] = timestamp
     matrix["cross_repository_run"] = run_url
     matrix["implementations"]["python"]["status"] = "verified"
     matrix["implementations"]["python"]["verified_revision"] = python_revision
-    matrix["implementations"]["rust"]["status"] = "verified"
-    matrix["implementations"]["rust"]["verified_revision"] = rust_revision
+    validate_support_matrix(matrix, contract["version"])
     matrix_path.write_text(json.dumps(matrix, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return matrix
 
@@ -57,14 +53,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--python-revision", required=True)
-    parser.add_argument("--rust-revision", required=True)
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--verified-at")
     args = parser.parse_args()
     matrix = record_adoption(
         args.root.resolve(),
         args.python_revision,
-        args.rust_revision,
         args.run_url,
         verified_at=args.verified_at,
     )

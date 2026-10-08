@@ -13,11 +13,6 @@ on:
         required: true
         default: main
         type: string
-      rust_ref:
-        description: vv-agent-rs Git ref or commit
-        required: true
-        default: main
-        type: string
       record_verified:
         description: Record the successful implementation revisions in support-matrix.json
         required: true
@@ -42,10 +37,22 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vv_agent
+          POSTGRES_PASSWORD: vv_agent_test
+          POSTGRES_DB: vv_agent_test
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U vv_agent -d vv_agent_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
-      CARGO_BUILD_JOBS: "1"
     steps:
       - name: Checkout contract
         uses: actions/checkout@v6
@@ -61,13 +68,6 @@ jobs:
           path: vv-agent
           ref: ${{ inputs.python_ref || 'main' }}
 
-      - name: Checkout Rust implementation
-        uses: actions/checkout@v6
-        with:
-          repository: AndersonBY/vv-agent-rs
-          path: vv-agent-rs
-          ref: ${{ inputs.rust_ref || 'main' }}
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -81,13 +81,8 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.2.0
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.95.0
-        with:
-          components: rustfmt, clippy
-
       - name: Install native test tools
-        run: sudo apt-get update && sudo apt-get install -y redis-tools ripgrep
+        run: sudo apt-get update && sudo apt-get install -y redis-tools postgresql-client ripgrep
 
       - name: Probe Redis service
         shell: bash
@@ -97,155 +92,38 @@ jobs:
           set -euo pipefail
           test "$(redis-cli --raw -h 127.0.0.1 -p "$REDIS_HOST_PORT" ping)" = PONG
 
+      - name: Probe PostgreSQL service
+        shell: bash
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+          PGUSER: vv_agent
+          PGPASSWORD: vv_agent_test
+          PGDATABASE: vv_agent_test
+        run: test "$(psql -Atc 'SELECT 1')" = 1
+
       - name: Validate canonical contract
         run: |
           python3 contract/scripts/contractctl.py --root contract validate
           node contract/scripts/verify_jcs.mjs
           python3 -m unittest discover -s contract/tests
+          python3 contract/scripts/contractctl.py --root contract build --output-dir contract/dist
 
-      - name: Verify both locked snapshots
+      - name: Verify Python locked snapshot
         run: |
           python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --source contract
-          python3 vv-agent-rs/scripts/contract_snapshot.py --repo-root vv-agent-rs check --source contract
-          diff -qr vv-agent/tests/fixtures/parity vv-agent-rs/crates/vv-agent/tests/fixtures/parity
+          python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --artifact "$(python3 -c 'import json; print(json.load(open("vv-agent/contract.lock.json"))["artifact_url"])')"
 
       - name: Run Python full gate
         working-directory: vv-agent
         env:
           VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
+          VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
         run: |
           uv sync --dev --extra s3
           uv run pytest
           uv run ruff check .
           uv run ty check
-
-      - name: Run Rust full gate
-        working-directory: vv-agent-rs
-        env:
-          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
-        run: |
-          cargo fmt --all -- --check
-          cargo test -p vv-agent -- --test-threads=1
-          cargo test -p vv-agent --features apalis --test apalis_backend
-          cargo check --examples
-          cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Verify cross-language SQLite checkpoint
-        shell: bash
-        run: |
-          set -euo pipefail
-          python_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-python.XXXXXX.sqlite3")"
-          rust_database="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-rust.XXXXXX.sqlite3")"
-          VV_AGENT_CROSS_RUNTIME_DB="$python_database" \
-            VV_AGENT_CROSS_RUNTIME_MODE=write_python \
-            uv run --directory vv-agent pytest \
-              tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
-          VV_AGENT_CROSS_RUNTIME_DB="$python_database" \
-            VV_AGENT_CROSS_RUNTIME_MODE=read_python \
-            cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-              --lib cross_runtime_sqlite_probe_from_environment -- --ignored
-          VV_AGENT_CROSS_RUNTIME_DB="$rust_database" \
-            VV_AGENT_CROSS_RUNTIME_MODE=write_rust \
-            cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-              --lib cross_runtime_sqlite_probe_from_environment -- --ignored
-          VV_AGENT_CROSS_RUNTIME_DB="$rust_database" \
-            VV_AGENT_CROSS_RUNTIME_MODE=read_rust \
-            uv run --directory vv-agent pytest \
-              tests/test_checkpoint.py::test_cross_runtime_sqlite_probe_from_environment
-
-      - name: Verify cross-language checkpoint history and identity indexes
-        shell: bash
-        env:
-          HISTORY_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/12
-        run: |
-          set -euo pipefail
-          history_exchange_dir="$(mktemp -d "$RUNNER_TEMP/vv-agent-history-exchange.XXXXXX")"
-          for store_kind in sqlite redis; do
-            export VV_AGENT_CROSS_HISTORY_STORE="$store_kind"
-            if [ "$store_kind" = sqlite ]; then
-              export VV_AGENT_CROSS_HISTORY_LOCATION="$history_exchange_dir/python.sqlite3"
-            else
-              export VV_AGENT_CROSS_HISTORY_LOCATION="$HISTORY_REDIS_URL"
-            fi
-            VV_AGENT_CROSS_HISTORY_MODE=write \
-              uv run --directory vv-agent pytest \
-                tests/test_checkpoint_history_stores.py::test_cross_runtime_history_store
-            VV_AGENT_CROSS_HISTORY_MODE=read \
-              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-                --test checkpoint_core history::cross_runtime_history_store -- --exact --ignored
-            if [ "$store_kind" = sqlite ]; then
-              export VV_AGENT_CROSS_HISTORY_LOCATION="$history_exchange_dir/rust.sqlite3"
-            fi
-            VV_AGENT_CROSS_HISTORY_MODE=write \
-              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-                --test checkpoint_core history::cross_runtime_history_store -- --exact --ignored
-            VV_AGENT_CROSS_HISTORY_MODE=read \
-              uv run --directory vv-agent pytest \
-                tests/test_checkpoint_history_stores.py::test_cross_runtime_history_store
-          done
-
-      - name: Verify cross-language host interaction stores
-        shell: bash
-        env:
-          HOST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
-        run: |
-          set -euo pipefail
-          for store_kind in sqlite redis; do
-            host_exchange_dir="$(mktemp -d "$RUNNER_TEMP/vv-agent-host-exchange.XXXXXX")"
-            mkdir "$host_exchange_dir/python" "$host_exchange_dir/rust"
-            if [ "$store_kind" = redis ]; then
-              export VV_AGENT_CROSS_HOST_REDIS_URL="$HOST_REDIS_URL/13"
-            fi
-            VV_AGENT_CROSS_HOST_WRITE_DIR="$host_exchange_dir/python" \
-              uv run --directory vv-agent pytest \
-                'tests/test_distributed_checkpoint.py::test_real_tool_host_interaction_retains_receipt_before_waiting[None]'
-            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/python" VV_AGENT_CROSS_HOST_MODE=respond \
-              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent --test distributed_runner \
-                host_interaction::cross_language_host_interaction_store -- --exact --ignored
-            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/python" VV_AGENT_CROSS_HOST_MODE=read \
-              uv run --directory vv-agent pytest \
-                tests/test_distributed_checkpoint.py::test_cross_language_host_interaction_store
-            if [ "$store_kind" = redis ]; then
-              export VV_AGENT_CROSS_HOST_REDIS_URL="$HOST_REDIS_URL/14"
-            fi
-            VV_HOST_TEST_DIR="$host_exchange_dir/rust" VV_HOST_TEST_PHASE=exchange_write \
-              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent --test distributed_runner \
-                host_interaction::native_host_tool_commits_cycle_and_resumes_after_sqlite_reopen -- --exact
-            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/rust" VV_AGENT_CROSS_HOST_MODE=respond \
-              uv run --directory vv-agent pytest \
-                tests/test_distributed_checkpoint.py::test_cross_language_host_interaction_store
-            VV_AGENT_CROSS_HOST_DIR="$host_exchange_dir/rust" VV_AGENT_CROSS_HOST_MODE=read \
-              cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent --test distributed_runner \
-                host_interaction::cross_language_host_interaction_store -- --exact --ignored
-          done
-
-      - name: Verify cross-language Redis controller command
-        shell: bash
-        env:
-          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
-        run: |
-          set -euo pipefail
-          env_file="$(mktemp "$RUNNER_TEMP/vv-agent-cross-runtime-redis.XXXXXX")"
-          VV_AGENT_CROSS_REDIS_ENV_FILE="$env_file" \
-            VV_AGENT_CROSS_REDIS_MODE=write_python \
-            uv run --directory vv-agent pytest \
-              tests/test_runtime_controller.py::test_cross_runtime_redis_probe_from_environment
-          set -a
-          source "$env_file"
-          set +a
-          cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-            --test controller_command \
-            controller_command_redis::redis_reads_python_seeded_host_receipt_and_notification_rows \
-            -- --exact --ignored
-          VV_AGENT_REDIS_URL="$VV_AGENT_TEST_REDIS_URL" \
-            cargo test --manifest-path vv-agent-rs/Cargo.toml -p vv-agent \
-              --test checkpoint_core \
-              store_contract::redis_store_supports_claimed_finalize_and_event_delivery \
-              -- --exact --ignored --test-threads=1
-          VV_AGENT_CROSS_REDIS_ENV_FILE="$env_file" \
-            VV_AGENT_CROSS_REDIS_MODE=read_python \
-            uv run --directory vv-agent pytest \
-              tests/test_runtime_controller.py::test_cross_runtime_redis_probe_from_environment
 
       - name: Record evidence
         shell: bash
@@ -255,7 +133,6 @@ jobs:
             echo
             echo "- Contract: \`$(git -C contract rev-parse HEAD)\`"
             echo "- Python: \`$(git -C vv-agent rev-parse HEAD)\`"
-            echo "- Rust: \`$(git -C vv-agent-rs rev-parse HEAD)\`"
             echo "- Fixture manifest: \`$(sha256sum contract/fixtures/SHA256SUMS | cut -d' ' -f1)\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -266,14 +143,11 @@ jobs:
           set -euo pipefail
           test "${{ inputs.contract_ref }}" = "main"
           test "${{ inputs.python_ref }}" = "main"
-          test "${{ inputs.rust_ref }}" = "main"
           python_revision="$(git -C vv-agent rev-parse HEAD)"
-          rust_revision="$(git -C vv-agent-rs rev-parse HEAD)"
           run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           python3 contract/scripts/record_adoption.py \
             --root contract \
             --python-revision "$python_revision" \
-            --rust-revision "$rust_revision" \
             --run-url "$run_url"
           python3 contract/scripts/contractctl.py --root contract validate
           python3 -m unittest discover -s contract/tests
