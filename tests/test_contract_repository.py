@@ -138,7 +138,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "24.0.0")
+        self.assertEqual(report["version"], "24.0.1")
         self.assertEqual(report["domains"], 18)
         self.assertEqual(report["fixture_files"], 53)
         self.assertEqual(report["manifest_entries"], 52)

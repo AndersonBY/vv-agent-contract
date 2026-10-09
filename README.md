@@ -1,7 +1,7 @@
 # vv-agent-contract
 
 Language-neutral observable behavior, canonical fixtures and strict wire schemas
-for vv-agent. Contract 24.0.0 defines one session log/inbox kernel and is pending
+for vv-agent. Contract 24.0.1 defines one session log/inbox kernel and is pending
 Python F3 adoption plus central CI. Rust stays frozen at verified 23.0.0 / 0.21.x
 and does not claim v24 support.
 
