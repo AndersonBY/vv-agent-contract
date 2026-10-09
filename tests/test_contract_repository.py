@@ -128,11 +128,12 @@ class ContractRepositoryTests(unittest.TestCase):
     def test_cross_repository_workflow_provisions_real_databases(self) -> None:
         workflow = (ROOT / ".github/workflows/cross-repository.yml").read_text(encoding="utf-8")
         for required in (
-            "image: redis:", "redis-cli", "VV_AGENT_TEST_REDIS_URL:",
             "image: postgres:", "pg_isready", "psql -Atc 'SELECT 1'",
             "VV_AGENT_TEST_POSTGRES_DSN:", "job.services.postgres.ports['5432']",
         ):
             self.assertIn(required, workflow)
+        # Python has no Redis store or Redis tests after the session-kernel cut-over.
+        self.assertNotIn("redis", workflow.lower())
 
     def test_live_contract_validates(self) -> None:
         report = contractctl.validate_contract(ROOT)
