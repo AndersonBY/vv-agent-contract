@@ -49,7 +49,7 @@ replace deterministic failure-cut evidence.
 
 Cross-repository CI accepts contract/Python review refs. It validates canonical
 fixtures, independent JCS, deterministic bundles, exact lock/artifact/manifest
-selection and real Python producers plus full gates with Redis and PostgreSQL.
+selection and real Python producers plus full gates with PostgreSQL.
 Do not weaken the workflow to accept pending implementation differences.
 Recording adoption requires contract and Python main refs. record_adoption.py
 records the exact Python revision/run URL and preserves the entire frozen Rust

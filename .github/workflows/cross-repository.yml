@@ -28,15 +28,6 @@ jobs:
   conformance:
     runs-on: ubuntu-latest
     services:
-      redis:
-        image: redis:8
-        ports:
-          - 6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
       postgres:
         image: postgres:17
         env:
@@ -82,15 +73,7 @@ jobs:
         uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install native test tools
-        run: sudo apt-get update && sudo apt-get install -y redis-tools postgresql-client ripgrep
-
-      - name: Probe Redis service
-        shell: bash
-        env:
-          REDIS_HOST_PORT: ${{ job.services.redis.ports['6379'] }}
-        run: |
-          set -euo pipefail
-          test "$(redis-cli --raw -h 127.0.0.1 -p "$REDIS_HOST_PORT" ping)" = PONG
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client ripgrep
 
       - name: Probe PostgreSQL service
         shell: bash
@@ -117,7 +100,6 @@ jobs:
       - name: Run Python full gate
         working-directory: vv-agent
         env:
-          VV_AGENT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}/15
           VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
         run: |
           uv sync --dev --extra s3
