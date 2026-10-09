@@ -1,17 +1,12 @@
 {
   "schema_version": 1,
   "name": "vv-agent-contract",
-  "version": "23.0.0",
+  "version": "24.0.0",
   "repository": "https://github.com/AndersonBY/vv-agent-contract",
   "fixtures": {
     "path": "fixtures",
     "manifest": "fixtures/SHA256SUMS",
-    "manifest_sha256": "0e4c98ac3d22c959e2b1dd5969f55b56491c0b2eab1dbacaf38f68298bcf7d98",
-    "intentional_invalid_jsonl_records": {
-      "event_store_replay.jsonl": [
-        2
-      ]
-    }
+    "manifest_sha256": "396f6482ba02f472bfe738a03104bf67b561e7389e8c48caebfb7e871cae9352"
   },
   "domains": [
     "system-prompt",
@@ -21,13 +16,11 @@
     "background-agent-task",
     "handoff",
     "workspace",
-    "sessions-and-stores",
+    "session-kernel",
     "configured-sub-agents",
     "run-handle-and-live-control",
     "events-and-tracing",
     "tool-orchestrator",
-    "durable-deferred-tools",
-    "distributed-runtime",
     "memory-and-compaction",
     "guardrails-hooks-results",
     "app-server",

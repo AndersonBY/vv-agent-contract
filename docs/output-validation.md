@@ -1,44 +1,23 @@
-# Optional Output Validation And Repair
+# Output validation and repair
 
-Contract `14.0.0` defines a host extension for validating a completed output and,
-when the host explicitly supplies one, asking a separate repair callback for a
-replacement value. It is deliberately outside the default agent loop.
+Validation is opt-in. Without an enabled host validator, native terminal behavior
+performs no extra callback. Exact inputs and outputs are in `output_validation.json`.
 
-## Defaults
+At a normal completion candidate, validate the value. A valid candidate proceeds
+unchanged. Invalid output without repair ends with output_validation_failed.
+An enabled repair makes at most one explicit tools-free, budgeted and logged
+output_repair operation carrying the invalid value and typed validation details.
+Validate its returned value again; a second invalid value, provider failure,
+coercion exception or invalid repair response becomes a durable failed result
+with partial-output evidence. Unknown repair is never automatically retried.
 
-The capability is disabled unless the host registers a validator and enables
-it for the run. With no enabled validator, the runtime performs no additional
-callback or trace event and uses the native terminal path.
+An output_checked boundary retains completed/failed/repair status, reason, value
+and optional partial_output before finalization or another dispatch. Committed
+checks and repair receipts MUST be reused on recovery. Precommit callback
+interruption permits repetition. Output validation cannot add tools, broaden
+policy or override cancellation, abort or budget exhaustion. Handoff validates
+the target's executed output, not the source's temporary transfer marker.
 
-The host may set a repair callback and a maximum repair count, but the contract
-currently permits at most one repair attempt. A repair request carries the
-invalid value and typed validation details, plus an independently selected
-model/config description. Its `tools` collection is always empty. The runtime
-does not call the primary model again through this extension and does not
-infer a task category, answer pattern, domain milestone, or stopping rule.
-
-## Lifecycle
-
-1. The normal runtime reaches its existing terminal candidate.
-2. The host validator returns `valid` or a typed `invalid` result.
-3. A valid value proceeds unchanged.
-4. An invalid value without a repair callback becomes a typed
-   `output_validation_failed` result.
-5. With a repair callback, the runtime makes one explicit request and
-   validates the returned value again.
-6. A second invalid value, a callback exception, or an invalid repair response
-   becomes the same typed failure; no second repair is attempted.
-
-The validator and repair callback are observers/extensions. They cannot add
-tools, expand an existing policy, fabricate a successful terminal, or replace
-an earlier cancellation, budget exhaustion, reconciliation, or operator-abort
-terminal. Hosts that need a domain-specific output format own that validator,
-prompt, and scorer in their application or evaluation layer.
-
-## Evidence
-
-The canonical behavior is frozen in `fixtures/output_validation.json`.
-Implementations must provide disabled, pass, fail, one-repair, second-failure,
-and provider-failure producer tests. The fixture is vendored by both language
-repositories through `scripts/contract_snapshot.py sync`; it is never edited
-in an implementation repository.
+[Model-call accounting](model-call-accounting.md) owns repair measurement;
+[session kernel](session-kernel.md) owns durable boundaries and terminal evidence.
+Task-specific formats, prompts and acceptance scorers remain host responsibilities.

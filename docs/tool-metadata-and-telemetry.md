@@ -1,6 +1,6 @@
 # Tool Metadata And Execution Telemetry
 
-Contract `14.0.0` defines one typed, task-neutral declaration for host policy,
+Contract `24.0.0` defines one typed, task-neutral declaration for host policy,
 tool-result retention, and
 execution telemetry. The framework does not inspect prompts, infer semantics
 from tool names or arguments, or decide whether a business answer is complete.
@@ -69,7 +69,7 @@ Collection limits apply after trimming and deduplication.
 List fields use the same normalization rules. Across Agent, Runner default,
 and per-run layers, lists form a set union and the boolean uses logical OR. A
 later layer cannot remove a denial. Configured sub-agents, agent-as-tool runs,
-handoff targets, and distributed workers inherit the effective parent denials
+handoff targets, and child sessions inherit the effective parent denials
 and may only add more.
 
 Schema planning and executor dispatch both enforce the effective policy. These
@@ -89,17 +89,14 @@ The event order for a normalized model tool call is:
 1. `tool_call_planned`
 2. zero or more approval events
 3. `tool_call_started`, immediately before effects may occur
-4. `tool_call_deferred`, when durable admission returns a handle without a
-   result
-5. `tool_call_completed`, after a definitive `ToolExecutionResult` exists
+4. a retained parked handle when accepted without a definitive result
+5. `tool_call_completed` after authentic definitive receipt
 
 Invalid serialized arguments fail before planning. An unknown tool, policy
 denial, or approval short-circuit emits planned plus completed without a
-started event. A durable deferred admission emits `tool_call_deferred` and no
-model-visible tool result; resolution later emits the ordinary completed event.
-Cancellation, process loss, or another exception after started may leave no
-completed event; the checkpoint operation journal is authoritative for
-ambiguity and recovery.
+started event. A parked operation retains its provider/approval/user/child handle without
+fabricating a completed result. Cancellation or process loss after started may
+leave unknown effects; the session records are authoritative for recovery.
 
 Planned and started events contain normalized arguments and optional typed
 metadata. Completed events always contain status, directive, nullable error
@@ -107,11 +104,8 @@ code, `execution_started`, nullable `duration_ms`, and optional typed metadata.
 The objects are closed. Missing required fields and unknown fields are rejected.
 
 Completed status values are `success`, `error`, `wait_response`, `running`,
-and `pending_compress`. Deferred is represented by `tool_call_deferred` with a
-durable handle and is not a completed result; `pending_compress` remains an
-internal automatic-compaction status and does not expose a model tool.
-Cross-process deferred events have `execution_started=true` and
-`duration_ms=null`. Directive values are `continue`, `finish`, and `wait_user`.
+and `pending_compress`. Parked handles are not completed results. pending_compress is internal automatic
+compaction and does not expose a model tool. Directive values are `continue`, `finish`, and `wait_user`.
 Successful results use `error_code=null`; calls that did not cross the started
 boundary use `duration_ms=null`.
 
@@ -130,24 +124,22 @@ payload. `toolMetadata` is present when declared; completed payloads also carry
 A denial therefore has only a failed completed item. The App Server does not
 decode an older reduced payload or fabricate missing fields.
 
-## Checkpoint Projection
+## Frozen policy and recovery
 
-The current run definition freezes `tool_metadata` for every tool, using null
-when no declaration exists, and freezes all four metadata policy fields. There
-is no duplicate idempotency projection. Resume requires the exact current run
-definition schema and compares the current declaration and policy with the
-stored definition before claim or any external operation.
-
-Checkpoint objects are closed. Missing fields, stale schemas, and unknown
-fields fail before claim. The runtime does not default an older definition,
-rewrite a stored digest, or run a migration.
+The logical definition freezes each tool declaration (null if absent) and every
+metadata policy field. Resume rechecks current authorization without relaxing
+frozen denial. Typed idempotency is the only declaration: unknown tools auto-retry
+only with supported frozen metadata and actual provider support for the stable
+`{session_id}/{operation_id}` key. Ordinary tools allow one retry. Prepared hook
+results are reused; committed receipts cannot be rewritten or charged twice.
+See [session kernel](session-kernel.md).
 
 ## Required Producer Evidence
 
-Both implementations must prove:
+Required implementations must prove:
 
 - normalization and limits through real public tool constructors;
-- denial accumulation through Agent, Runner, per-run, distributed,
+- denial accumulation through Agent, Runner, per-run, kernel,
   configured-child, agent-as-tool, handoff, schema-planner, and executor paths;
 - planned/started/completed ordering for success, denial, approval, unknown
   tool, error, timeout, and cancellation boundaries;

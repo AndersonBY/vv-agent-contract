@@ -1,108 +1,72 @@
-# Contract Change And Adoption Workflow
+# Contract authoring and adoption
 
-## 1. Classify The Change
+Shared observable changes start with canonical fixtures and normative documents
+here. Implementation defects are fixed against their pinned contract. Inspect
+real producers and preserve unrelated implementation worktrees. One current shape
+replaces all superseded active readers, aliases, fixtures and documentation; Git
+is history. See [version policy](versioning-policy.md).
 
-First decide whether the implementation violates the current contract or the
-shared contract itself must change.
+## Canonical authoring
 
-- Fix implementation-only defects against the currently locked contract. Do
-  not create a new contract version merely because one language drifted.
-- Start public API, prompt, built-in tool, runtime, persistence, event, App
-  Server, or wire changes in this repository.
-- Treat uncertain changes as shared until real producer tests prove otherwise.
+Update normative behavior, fixtures/schemas and release notes together. Fixtures
+must come from real producers with deterministic doubles and independent byte,
+identity and transition assertions. Never edit vendored snapshots or generator
+facts. If generator output is defective, stop that file and report the defect.
+The current record/inbox ownership is [session kernel](session-kernel.md), with
+[consumers](session-consumers.md) and [App Server](session-kernel.md#app-server) projections.
+Storage layouts and constructor/method signature catalogs are outside contract.
 
-## 2. Author The Canonical Contract
-
-Update the normative document, canonical fixture/schema, and versioning note
-together. Replace the current shape in place and remove every replaced
-reader, alias, shim, migration, fixture, and documentation reference in the
-same change across the contract and required implementations. Run:
+Run independent Node JCS checks, rebuild SHA256SUMS with contractctl manifest,
+validate, repository unittest and two byte-identical builds. Review semantic diffs;
+a digest proves bytes, not behavior. Canonical producer gates cover all 14 record
+kinds, eight inbox kinds, seven boundaries and four handles, codec negatives,
+admission/fencing, failure cuts, cursors, children, compaction and JSON-RPC exports.
 
 ```bash
-node scripts/verify_jcs.mjs --write  # only after intentional JCS input changes
+node scripts/verify_jcs.mjs
 python3 scripts/contractctl.py manifest
 python3 scripts/contractctl.py validate
-node scripts/verify_jcs.mjs
 python3 -m unittest discover -s tests
-python3 scripts/contractctl.py build --output-dir dist
+python3 scripts/contractctl.py build --output-dir dist-a
+python3 scripts/contractctl.py build --output-dir dist-b
+diff -r dist-a dist-b
 ```
 
-Review the semantic fixture diff. A digest change is evidence of changed bytes,
-not proof that the new behavior is correct.
+## Publication and required adoption
 
-## 3. Publish An Immutable Version
+Reviewed releases are immutable v<version> tags with deterministic artifact and
+SHA-256 metadata. Publication remains pending-adoption. Python is the only required
+implementation; F3 must pin the immutable v24 revision/artifact, synchronize its
+snapshot with checked-in tooling and update the actual default public producers.
+Adapt existing producer tests instead of retaining parallel fixture branches.
+Retire replaced execution loops, selectors, wires and writable history surfaces.
 
-Merge the reviewed contract, create tag `v<contract-version>`, and let the
-release workflow publish the deterministic zip plus SHA-256 metadata. The
-support matrix remains `pending-adoption` until all required implementations pass.
+Python's focused producer suite and full pytest/ruff/ty gates must pass. Applicable
+SQLite memory/file and real PostgreSQL transaction, concurrency and integrity
+semantics must pass; process-kill evidence applies to durable stores. Real broker
+integration remains part of the central gate. Optional live providers do not
+replace deterministic failure-cut evidence.
 
-## 4. Open Required Implementation Adoption Pull Requests
+Cross-repository CI accepts contract/Python review refs. It validates canonical
+fixtures, independent JCS, deterministic bundles, exact lock/artifact/manifest
+selection and real Python producers plus full gates with Redis and PostgreSQL.
+Do not weaken the workflow to accept pending implementation differences.
+Recording adoption requires contract and Python main refs. record_adoption.py
+records the exact Python revision/run URL and preserves the entire frozen Rust
+entry. Only then may the support matrix become verified.
 
-Each required implementation polls the latest contract release. Its adoption workflow
-checks out that release into a temporary CI directory, runs the local snapshot
-sync command, commits `contract.lock.json` plus the generated fixture snapshot,
-and opens a `chore/vv-agent-contract-<version>` pull request.
+## Frozen implementations
 
-The automated pull request may be red. Producer failures identify the exact
-runtime work still needed; the bot must not fabricate implementation changes.
+Support-matrix schema 2 explicitly lists required implementations and per-entry
+contract_version. Schema 1 rejects. Rust remains frozen at 23.0.0 / 0.21.x, baseline
+00f4240786f1adea1dc0c4730da8ddd06a5ab8ac. Its lock/fixtures do not follow v24 and it
+does not participate in active central CI. Security, data integrity, v23 correctness
+and nonbehavioral dependency/build upkeep are the maintenance scope. Reactivation
+requires a new Maker decision, full adoption of the then-current contract, all
+producer/full/central gates and restoring required status and CI/adoption tooling.
 
-## 5. Implement Required Implementations
+## Handoff
 
-Update public producers, consumers, focused behavior tests, examples, and local
-mapping docs in each required repository. Do not edit vendored fixtures directly.
-Run each repository's snapshot check, producer tests, and full quality gate.
-
-## 6. Run Cross-Repository CI
-
-Trigger `.github/workflows/cross-repository.yml` with the contract and Python
-refs under review. Python is currently the only required implementation. It verifies:
-
-1. Canonical fixtures, JCS vectors and deterministic artifact construction.
-2. The Python lock selects the release revision and matches its artifact and
-   fixture digests; the canonical checkout contains that revision.
-3. Real prompt, tool, public API, event, session and App Server producers pass.
-4. The Python full gate passes (`pytest`, `ruff`, `ty`), with a real Redis service.
-   PostgreSQL is provisioned and probed now; kernel tests can consume
-   `VV_AGENT_TEST_POSTGRES_DSN` when adopted.
-
-Record the successful run URL and required implementation revisions in
-`support-matrix.json`, then change the version state to `verified`. A recording
-run must use `main` for the contract and Python refs; feature branches may be
-used only for non-recording review runs. `record_adoption.py` updates Python
-and preserves the complete frozen Rust record.
-
-## Frozen Implementations
-
-Schema 2 lists `required_implementations` explicitly and gives every implementation
-its own `contract_version`. Schema 1 is rejected. Only required implementations
-must be verified for the current contract to be verified. Release tooling must
-use the schema 2 reader from `clients/contract_snapshot.py`; refreshing the
-fixture snapshot alone does not update a vendored client script.
-
-Rust is frozen at contract 23.0.0 / package series 0.21.x, with its verified
-baseline revision retained. Its lock and fixtures stay pinned to v23; it does
-not follow later releases and does not participate in the active central CI.
-The global contract version or verification run never establishes newer Rust
-support. v23 remains the current verified release; this process change does not
-bump the contract version or alter fixtures or prior verification evidence.
-
-Maintenance permits security, data integrity, v23 correctness fixes, and
-non-behavioral dependency/build upkeep. No new kernel, wire or public behavior.
-See the [approved plan §3 and reviewer decision](../../../docs/vv-agent-session-kernel-replacement-plan-2026-10.md).
-Reactivation requires a new Maker decision and full adoption of the then-current
-contract: update the lock, fixtures, real producers and tests, pass full gates
-and central CI, and only then record verified adoption. Restore Rust as a
-required implementation and its central CI/adoption tooling as part of that work.
-
-## Codex Session Checklist
-
-1. Read the local repository `AGENTS.md` and `contract.lock.json`.
-2. Read this workflow and identify the owning canonical fixture.
-3. Preserve dirty worktrees and record required revisions and frozen baselines.
-4. Make shared observable changes here first.
-5. Sync required implementations' vendored snapshots using checked-in scripts.
-6. Implement and test each required implementation's real producers.
-7. Run required full gates and central cross-repository CI.
-8. Leave a handoff containing all refs, checks, adaptations, and open debt.
-9. Confirm active repositories contain no replaced decoder or fixture. Frozen
-   implementations keep the canonical shape of their own pinned release.
+Record contract version/revision, required implementation revisions or PRs, frozen
+baseline, focused/full gates, fixture manifest digest, allowed adaptations, open
+differences and support-matrix status. Publishing alone is never adoption proof.

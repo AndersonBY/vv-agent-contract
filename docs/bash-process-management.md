@@ -27,12 +27,9 @@ is enforced independently of whether a caller subsequently queries the handle.
 
 A successful start or ongoing observation returns `ToolExecutionResult` with
 `status_code=SUCCESS` and `directive=continue`. JSON content and bounded host
-metadata include `status=running` and `session_id`. These are completed
-management operations: they are recorded once by the normal checkpoint receipt
-path and permit the next model cycle, including in a mixed tool batch. A later
-process exit or listener callback cannot rewrite that receipt or its digest.
-The generic `RUNNING` status and strict checkpoint/deferred result admission
-remain unchanged for other uses.
+metadata include `status=running` and `session_id`. These are completed management operations retained by immutable op_completed
+receipts and permit the next model cycle, including a mixed tool batch. Later
+process exit cannot rewrite the receipt or digest.
 
 Observed zero exit is success. Observed nonzero exit is `ERROR`, retaining the
 real platform exit code and bounded stdout/stderr. A timeout is `ERROR` even
@@ -82,12 +79,14 @@ one terminal artifact. Storage errors never claim that truncated output is
 recoverable. Captures remain recoverable across ordinary repeated queries.
 
 The manager is process-local memory, with the existing capture and artifact
-storage. Restarting it loses its session records. There is no distributed job
-store, scheduler, remote-process recovery claim, or new shell backend.
+storage. Restarting it loses its session records. Recovery may reattach only through the retained original owner and live process
+manager. OS/manager restart or a missing handle is unknown. PID guessing cannot
+authorize adoption or confirmed termination. This limit is explicit in the
+[session kernel](session-kernel.md).
 
 ## Required producer evidence
 
-Both real registries and checkpointed Runners must exercise immediate yield,
+Required implementation registries and kernel Runners must exercise immediate yield,
 yield expiry and running query, then call a ScriptedLLM for the next cycle.
 Local real children and a loopback HTTP service establish execution and stop
 behavior without external providers. Mixed tool batches retain the original

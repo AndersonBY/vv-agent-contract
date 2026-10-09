@@ -8,6 +8,8 @@ mandatory routing map; durable detail belongs in `docs/`.
 
 - Read `contract.json` and `support-matrix.json` before changing a contract.
 - Read `docs/parity-contract.md` for normative observable behavior.
+- Read `docs/session-kernel.md` for records, inbox and execution semantics;
+  `docs/session-consumers.md` owns projections; App Server wire is in the kernel doc.
 - Follow `docs/change-workflow.md` for contract authoring and adoption.
 - Read `docs/versioning-policy.md` before changing any schema, protocol, or
   public behavior.
@@ -33,7 +35,7 @@ mandatory routing map; durable detail belongs in `docs/`.
 - Preserve existing implementation worktrees. Contract synchronization is not
   permission to reset or overwrite unrelated changes.
 - Keep `HEAD` forward-only. It contains exactly one current canonical shape for
-  each public API, prompt, tool, runtime record, event, session, checkpoint,
+  each public API, prompt, tool, runtime record, event, session,
   and wire protocol. Delete replaced readers, aliases, shims, migrations,
   fixtures, and documentation in the same change; Git is the history.
 - Backward compatibility is not a contract goal. Prefer a breaking replacement
