@@ -19,13 +19,18 @@ class SupportMatrixTests(unittest.TestCase):
         self.matrix["status"] = "verified"
         self.matrix["implementations"]["python"].update(status="verified", verified_revision="a" * 40)
 
-    def test_current_python_adoption_is_pending_with_frozen_rust(self) -> None:
+    def test_current_python_adoption_with_frozen_rust(self) -> None:
+        # The recording run validates this file after record_adoption marks it verified.
         matrix = contractctl.load_json(ROOT / "support-matrix.json")
         self.assertEqual(matrix["contract_version"], "24.0.1")
-        self.assertEqual(matrix["status"], "pending-adoption")
         self.assertEqual(matrix["required_implementations"], ["python"])
-        self.assertEqual(matrix["implementations"]["python"]["status"], "pending-adoption")
-        self.assertIsNone(matrix["implementations"]["python"]["verified_revision"])
+        python = matrix["implementations"]["python"]
+        self.assertIn(matrix["status"], ("pending-adoption", "verified"))
+        self.assertEqual(python["status"], matrix["status"])
+        if matrix["status"] == "pending-adoption":
+            self.assertIsNone(python["verified_revision"])
+        else:
+            self.assertRegex(python["verified_revision"], r"^[0-9a-f]{40}$")
         rust = matrix["implementations"]["rust"]
         self.assertEqual((rust["contract_version"], rust["package_series"], rust["status"]),
                          ("23.0.0", "0.21.x", "frozen"))
