@@ -11,7 +11,7 @@
       "branch": "main",
       "contract_version": "24.0.1",
       "status": "verified",
-      "verified_revision": "53bdf326053de676d2ed0be0a59c9345c2ad3f20"
+      "verified_revision": "fac454a188f2b860504115a0c15d12d518c7e00f"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -23,6 +23,6 @@
     }
   },
   "adoption_note": "v24.0.1 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-10-09T18:53:03Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/37975246293"
+  "last_verified_at": "2026-10-09T22:10:41Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/37996799746"
 }
