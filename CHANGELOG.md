@@ -1,5 +1,18 @@
 # Changelog
 
+## 24.0.1 — patch
+
+Evidence correction; no wire shape or normative behavior change. The 24.0.0
+generator captured an App Server kernel defect: the frozen definition's
+`memory_settings` used default limits (`model_context_window` 279000,
+`model_max_output_tokens` null) instead of the resolved provider limits already
+recorded in task metadata (128000 / 16384). Regenerated from the corrected real
+producer: `session_records.jsonl` (line 46), `session_codec_vectors.json`
+(vector 45) and `session_projection.json` (thread_2, thread_3 turn_started),
+including the derived definition digest, canonical bytes and SHA-256. All other
+fixtures are byte-identical to 24.0.0. Python F3 adoption pending; Rust frozen at
+23.0.0 / 0.21.x.
+
 ## 24.0.0 — major
 
 One ordered session log/inbox kernel owns execution, recovery and projections.

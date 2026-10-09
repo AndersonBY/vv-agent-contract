@@ -20,7 +20,7 @@ evidence/docs without observable change. These labels do not promise old-wire
 reading. Each implementation pins an exact version/revision/artifact and manifest;
 consumers needing an older behavior pin its release.
 
-24.0.0 is major. Current wires are record/inbox schema 1, RunEvent v6, model-call
+24.0.0 is major; 24.0.1 is a patch correcting captured evidence only. Current wires are record/inbox schema 1, RunEvent v6, model-call
 v2, task-token-usage v3, TokenUsage v1, App Server protocolVersion v2 and public API
 v8. Execution is one ordered session log/inbox; records own recovery, same-turn
 waits, provider acceptance, budget reservations and child delivery. Creation seed

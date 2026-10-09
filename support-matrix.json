@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "contract_version": "24.0.0",
+  "contract_version": "24.0.1",
   "status": "pending-adoption",
   "required_implementations": [
     "python"
@@ -9,7 +9,7 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "24.0.0",
+      "contract_version": "24.0.1",
       "status": "pending-adoption",
       "verified_revision": null
     },

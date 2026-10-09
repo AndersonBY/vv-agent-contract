@@ -1,6 +1,6 @@
 # vv-agent-contract
 
-语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。当前 24.0.0
+语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。当前 24.0.1
 采用统一 session log/inbox kernel；Python F3 adoption 与中央 CI 尚待完成，状态为
 pending-adoption。Rust 冻结于已验证的 23.0.0 / 0.21.x，不声明 v24 支持。
 
