@@ -49,7 +49,7 @@ key order.
 
 Token totals are available only when every dispatched framework model attempt
 has the corresponding accounting. This includes `agent_cycle`,
-`session_memory`, and `memory_compaction`; opaque host callbacks are not
+`session_memory`, `memory_compaction`, and `output_repair`; opaque host callbacks are not
 fabricated. Missing usage is never zero. Tool counts include
 every invocation admitted for execution, regardless of success, tool error,
 timeout, approval interruption, or directive. A rejected batch is not admitted
@@ -61,12 +61,10 @@ available only from the typed cache observation's non-null
 `uncached_input_tokens`, including explicit zero. Native fields inside
 `provider_usage` do not make that metric available to the budget layer.
 
-Elapsed time is measured with monotonic clocks. Inline and thread runs count
-their active run interval. Distributed runs persist completed active intervals
-and continue from that accumulated value in the next worker; queue time between
-a committed checkpoint and the next worker claim is not fabricated from wall
-clock timestamps. Approval waits are also excluded. End-to-end scheduler
-deadlines remain a separate control.
+Elapsed time uses observed monotonic active intervals; parked intervals are
+excluded. Completed intervals survive reconstruction. A lost active interval is
+unavailable, never inferred from process downtime; strict stop policy must stop.
+End-to-end scheduling deadlines are separate controls.
 
 Elapsed nanoseconds are floored to whole milliseconds. Cumulative elapsed time
 never decreases. Overflow beyond the wire-safe integer range is latched as
@@ -104,11 +102,9 @@ The meter is sampled at every applicable enforcement boundary so a shared
 scope can change between local operations. A deterministic test meter returns
 its final scripted reading again after the script is exhausted.
 
-Distributed workers cannot serialize a process-local meter object. A
-distributed `RuntimeRecipe` uses `host_cost_meter_ref` in its existing
-capability registry; absence or failed resolution is the same typed meter
-unavailability seen by other backends. Limits themselves travel in the
-distributed run envelope.
+Hosts re-supply process-local meter references through required host bindings.
+Missing bindings fail before execution; a missing/error meter remains typed metric
+unavailability. Frozen limits and durable measurements survive reconstruction.
 
 ## Enforcement Boundaries
 
@@ -130,8 +126,11 @@ checked before another internal or primary model call is dispatched.
 
 Tool batches are preflighted as a whole. Total calls are checked first, then
 exact-name limits in lexicographic tool-name order. A batch that would exceed
-any limit executes no tools. A passing batch reserves every total and named
-call before the first tool side effect.
+any limit executes no tools. A passing batch atomically reserves every total and named call with the model
+receipt and complete ordered plans before any tool effect. A shortfall rejects the
+whole batch with zero effects. Reserved calls skipped by finish or wait still
+count; replay and retry cannot reserve twice. Dynamic wall/host checks still apply
+before each dispatch.
 
 Limits are inclusive. A natural terminal reached with an observed value equal
 to the limit remains valid. A post-operation value greater than the limit is
@@ -174,8 +173,8 @@ events carry the final snapshot when a budget was configured.
 
 `budget_snapshot` events are emitted only for configured budgets and only when
 accounting state changes at an enforcement boundary. Runs without limits emit
-no budget events and preserve the prior event order. These are current
-`RunEvent` records and therefore require `version=v5`.
+no budget events and preserve canonical event order. These are current
+`RunEvent` records and therefore require `version=v6`.
 
 For a configured budget, `run_started` remains first. A non-terminal
 `run_start` observation emits the initial snapshot, each completed LLM
@@ -189,22 +188,20 @@ App Server projects a budget stop as turn status `failed` and exposes optional
 `budgetUsage` and `budgetExhaustion`. Result, event, App Server, and durable
 terminal projections use the same wire objects.
 
-## Resume And Distributed State
+## Same-turn recovery
 
-Approval resume keeps the source run's budget usage while assigning a fresh run
-id and a fresh `max_cycles` allowance. Time spent waiting for approval is
-excluded. A new independent Runner invocation starts a fresh budget.
-
-The checkpoint persists the complete cumulative budget snapshot. Local resume,
-distributed continuation, and transport redelivery all restore that snapshot
-before the next enforcement boundary. This accounting continuity does not make
-an arbitrary external effect exactly once.
+User and approval replies resume the same turn and preserve its frozen limits,
+cycle allowance and accumulated usage. Receipts determine accounting rather than
+re-admission. Fresh turns get fresh counters unless the host explicitly supplies
+a shared scoped meter. Primary cycles exclude extraction, summary, repair and
+prompt-too-long recovery. An arbitrary external effect is not made exactly once
+by durable accounting. See [session kernel](session-kernel.md).
 
 ## Canonical Evidence
 
 `run_budget.json` contains executable evaluator and public Runner inputs.
-Both implementations must drive every `runner_cases` record through the public
+Required implementations must drive every `runner_cases` record through the public
 Runner and real runtime/tool producer path. `budget_events.jsonl` contains
-canonical event wire records that both event producers and decoders must
+canonical event wire records that required event producers and decoders must
 rebuild. Assertions that merely compare fixture-owned booleans are not
 sufficient adoption evidence.

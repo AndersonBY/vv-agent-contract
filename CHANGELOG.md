@@ -1,5 +1,83 @@
 # Changelog
 
+## 24.0.0 — major
+
+One ordered session log/inbox kernel owns execution, recovery and projections.
+Retire require_reconciliation, checkpoint, deferred, distributed and controller
+surfaces, their configuration, readers and tests. Storage layout remains outside
+the language-neutral contract. Python F3 adoption is pending; Rust is frozen at
+23.0.0 / 0.21.x, verified baseline
+00f4240786f1adea1dc0c4730da8ddd06a5ab8ac.
+
+| Source / item | v23 behavior | 24.0.0 behavior | Owning doc / fixture |
+| --- | --- | --- | --- |
+| Maker: execution authority | Checkpoint/controller/distributed and transcript stores | One log/inbox kernel; no require_reconciliation | session-kernel.md / session_semantics.json, public_api.json |
+| F2d-1 ask_user | Reply resumes a successor run | Reply completes original turn/op with one definitive receipt | session-kernel.md / completion_policy.json, runner_session_messages.jsonl |
+| F2d-1 no-tool wait | Returned WAIT_USER; successor resume | Real turn_parked; same-turn user reply, no fabricated tool | session-kernel.md / completion_policy.json |
+| F2d-1 approval deadline | Immediate provider decision can pass zero timeout | Absolute park deadline includes decision time; expired allow rejects | session-kernel.md / approval_tool_policy.json |
+| F2d-1 cancel | Function/SDK path can throw CancelledError without terminal event | Durable cancelled terminal/event; confirmed stop versus unknown | stream-events.md / runner_terminal.json, run_events.jsonl |
+| F2d-1 hooks | Process callbacks without unified boundary recovery | Committed result reused; precommit interruption may rerun | after-cycle-lifecycle.md / session_semantics.json |
+| F2d-1 Bash | Process-local manager | Explicit original-owner/live-manager reattach limit; otherwise unknown | bash-process-management.md / session_semantics.json |
+| F2d-2 boundary wire | No boundary_recorded | Seven closed stages retain callbacks/decisions | session-kernel.md / session_record.schema.json, session_records.jsonl |
+| F2d-2 added fields | No kernel endpoint/interaction/archive/completion evidence fields | endpoint_id, interaction_result, micro_usage, child_result.status | session-kernel.md / session_record.schema.json, session_inbox.schema.json |
+| F2d-2 tool budget | Preflight without durable whole-batch reservation | Atomic model receipt + reservation + plans; skipped reserved calls count | run-budgets.md / run_budget.json, budget_events.jsonl |
+| F2d-2 internal tokens | Repair absent from public call ledger | All internal calls/attempts counted, including repair | model-call-accounting.md / token_usage.json |
+| F2d-2 unavailable wall | Old process interval cannot be reconstructed uniformly | Lost interval unavailable; strict stop, no downtime estimate | run-budgets.md / run_budget.json |
+| F2d-2 tracing | Immediate processor delivery | ACK-first at most once; possible telemetry loss | stream-events.md / runner_trace_spans.json |
+| F2d-2 events | Immediate event/outbox paths | At-least-once projection; stable external deduplication IDs | stream-events.md / event_store_replay.jsonl |
+| F2d-2 child event ownership | Configured lifecycle belongs to child run | Parent record/run owns admission/completion and carries child identity | session-consumers.md / configured_sub_agent_events.jsonl |
+| F2d-2 endpoints | Internal client fallback/retry merged in ledger | Independent logged attempts; transport retry=1; max(2,endpoints) | model-call-accounting.md / token_usage.json, runner_events.jsonl |
+| F2d-2 coercion/repair | Coercion may throw; no repair public enum | Durable failed output; budgeted logged repair, unknown never retried | output-validation.md / output_validation.json, public_api.json |
+| F2d-2 rejected summary | Identical summary callback can repeat | Same source/mode/tail reuses receipt even if rejected | session-kernel.md / session_compaction.json, memory_lifecycle.json |
+| F2d-3 delegation | Separate configured/SDK/background/handoff execution adapters | One atomic child mechanism | session-kernel.md / configured_sub_agent.json, public_configured_sub_agent.json |
+| F2d-3 child wait | Intermediate child WAIT_USER can complete parent tool | Child keeps wait; parent adopts only terminal | session-consumers.md / manager_tool_envelope.json, session_semantics.json |
+| F2d-3 background | Start snapshot races child execution; in-process handles | Start=running; read/control from records/inbox after reconstruction | session-consumers.md / public_api.json, session_semantics.json |
+| F2d-3 handoff | Mutable live limit; over-limit RuntimeError; source marker guardrail | Admitted count/limit; durable failure; target validation only | session-kernel.md / handoff_contract.json |
+| F2d-3 shared_state | Arbitrary Python objects in state | Durable JSON plus explicit host bindings; MissingHostBinding | session-kernel.md / result_public.json, public_api.json |
+| F2d-3 Agent.as_tool cancel | Can throw CancelledError | Durable child cancelled terminal and failed/cancelled projection | session-kernel.md / public_configured_sub_agent.json |
+| F2d-3 added fields | No admitted child descriptor/siblings/delegation/binding namespace | Exact closed and reserved fields in §§2.4, 2.7 | session-kernel.md / session_record.schema.json, run_definition.json |
+| F2d-4 entrypoints | Old defaults; private selector only in F2 | Runner/interactive/CLI/App Server share kernel; selector deleted in F3 | parity-contract.md / public_api.json, cli_contract.json |
+| F2d-4 thread metadata | Independent ThreadStore | Thread=session, turn=run; attributes.app_server sole metadata home | session-kernel.md / app_server_observable.json |
+| F2d-4 multimodal | Input stored on old thread/run path | Original input + frozen vv_session.input_messages survive rebuild | session-kernel.md / app_server_observable.json, run_definition.json |
+| F2d-4 wait projection | turn/completed interpreted as final attempt/run result | interrupted attempt is nonterminal; same turn continues, one turn_ended | session-kernel.md / app_server_observable.json |
+| F2d-4 ask_user item | WAIT_RESPONSE tool item can appear before reply | Safe interaction projection until definitive tool receipt | session-kernel.md / app_server_observable.json |
+| F2d-4 restart owner/status | stale running thread→idle | Preserve active turn and original approval owner; no repeat calls | session-kernel.md / app_server_observable.json |
+| F2d-4 closed thread | Resume can reopen ephemeral closed status | Durable closed boundary; start fails -32602 Thread is closed | session-kernel.md / app_server_observable.json |
+| F2d-4 history | Default App Server has no shared transcript session | Later turns use same session's full retained context projection | session-kernel.md / app_server_observable.json, runner_session_messages.jsonl |
+| F2d-4 action | Controller receipt/revision/outbox-derived projection | Inbox admission; immediate accepted/running; no controller fields | session-kernel.md / app_server_observable.json |
+| F2d-4 approval order | Relative requested/request order unspecified | approval/requested projection precedes owner approval/request | session-kernel.md / app_server_observable.json |
+| F2d-4 resume wire | checkpointKey and summaries | Only threadId/turnId; records supply result, no summaries | session-kernel.md / app_server_observable.json |
+| F2d-4 client cursor | thread/read cursor; thread/resume lacks schema field | thread/resume afterItemId, stable timeline replay | session-kernel.md / app_server_observable.json |
+| F2d-4 interaction wire | Prompt-only sanitized status | Safe interaction identities and interactions[] | session-kernel.md / app_server_observable.json |
+| F2d-4 item/model identities | Separately generated turn/run/call identities | turnId=runId; record-derived operation/call/item identities | session-kernel.md / app_server_observable.json, token_usage.json |
+
+| Reviewer versions | RunEvent v5, model-call v1, task-token-usage v2, App Server v1, API v7 | RunEvent v6, model-call v2 with output_repair, task-token-usage v3, protocolVersion v2, public API v8; TokenUsage v1 retained | stream-events.md / token_usage.json, public_api.json |
+| Reviewer Q2 | Null summary ID stringified | compact/{source_digest}/{mode} omits final segment; non-null appends summary_operation_id | session-kernel.md / session_compaction.json |
+| Reviewer Q3 | Separate session_* reserved task/request keys; shared state inside usage | One closed vv_session per metadata map; compile rejects user vv_session; op_completed.shared_state separate from measurements | session-kernel.md / session_record.schema.json |
+| Reviewer Q5 | Thread snapshot/status have different enums | One idle/running/interrupted/archived/closed enum and projection everywhere | session-kernel.md / app_server_protocol.json |
+| Reviewer Q6/Q7 | Closed resume and disconnected owner behavior | All closed execution resumes -32602 Thread is closed; original approval owner retained, observer cannot approve; unanswered approval resolves at absolute deadline via timeoutDecision | session-kernel.md / approval_tool_policy.json |
+| Reviewer Q9 | Hash anchors could accept newline | Exactly 64 lowercase hex characters; full-match with trailing-newline negative | session-kernel.md / session_invalid.json |
+| Reviewer Q10 / v-claw | replace_messages hydration, replace_shared_state retry reset, clear_queues and writable session access | Creation-time closed attributes.seed={messages,shared_state}, both required; projects before first context/state; v-claw seeds a new durable session; no mid-session mutation | session-kernel.md / session_semantics.json |
+| Reviewer inbox | deferred_result | provider_result; provider authentication and retained evidence binding | session-kernel.md / session_inbox.schema.json |
+
+### Fixture actions
+
+- Delete (13): `checkpoint_codec.json`, `checkpoint_config.json`, `checkpoint_resume.json`, `checkpoint_sqlite_canonical.sql`, `checkpoint_store.json`, `controller_command.json`, `deferred_tool.json`, `distributed_run_driver.json`, `distributed_run_envelope.json`, `distributed_worker_response.json`, `operation_journal.json`, `resume_events.jsonl`, `session_sqlite_canonical.sql`.
+- Replace (34): `after_cycle_hook.json`, `app_server_observable.json`, `approval_tool_policy.json`, `bounded_tool_result.json`, `budget_events.jsonl`, `completion_policy.json`, `configured_sub_agent.json`, `configured_sub_agent_events.jsonl`, `event_store_replay.jsonl`, `handoff_contract.json`, `llm_stream_projection.json`, `manager_tool_envelope.json`, `memory_lifecycle.json`, `memory_local.json`, `output_validation.json`, `prompt_bundle.json`, `public_api.json`, `public_configured_sub_agent.json`, `result_public.json`, `run_budget.json`, `run_config_controls.json`, `run_definition.json`, `run_events.jsonl`, `run_events_invalid.json`, `run_handle.json`, `runner_events.jsonl`, `runner_session_messages.jsonl`, `runner_terminal.json`, `runner_trace.jsonl`, `runner_trace_spans.json`, `session_codec.json`, `session_items.jsonl`, `token_usage.json`, `tool_metadata.json`.
+- New (11): `app_server_protocol.json`, `session_codec_vectors.json`, `session_compaction.json`, `session_inbox.jsonl`, `session_inbox.schema.json`, `session_invalid.json`, `session_projection.json`, `session_record.schema.json`, `session_records.jsonl`, `session_recovery.json`, `session_semantics.json`.
+- Keep (7): `assistant_reasoning_history.json`, `bash_process_management.json`, `builtin_tool_behavior.json`, `builtin_tools.json`, `cli_contract.json`, `model_ref.json`, `model_settings.json`.
+
+Five action-ID golden vectors move byte-for-byte in identity value to
+app_server_observable.json actionAdmission.commandIdCases; app_server_protocol.json
+retains real child-reply identity evidence. Rendered prompts, summaries, artifacts,
+cursors and provider deltas preserve their independent content rules.
+
+v23 verification evidence: Python 951ffc4be155321c535d7bbb9cce1eb788b2c27e,
+Rust 00f4240786f1adea1dc0c4730da8ddd06a5ab8ac, central run
+https://github.com/AndersonBY/vv-agent-contract/actions/runs/37561132745,
+2026-10-07T02:32:42Z. This evidence verifies v23 only.
+
+
 ## 23.0.0 — adoption in progress
 
 - Replace history only after an accepted complete-prefix summary; retain an

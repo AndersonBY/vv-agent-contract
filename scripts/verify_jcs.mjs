@@ -6,8 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const WRITE = process.argv.includes("--write");
+const ROOT = path.resolve(process.env.CONTRACT_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
 
 function fail(message) {
   throw new Error(message);
@@ -52,9 +51,6 @@ function canonicalize(value) {
 
 function verifyVector(label, value, vector) {
   const actual = vectorValues(value);
-  if (WRITE) {
-    return;
-  }
   for (const [field, observed] of Object.entries(actual)) {
     if (vector[field] !== observed) {
       fail(`${label}: ${field} mismatch: expected ${vector[field]}, observed ${observed}`);
@@ -71,654 +67,165 @@ function vectorValues(value) {
   };
 }
 
-function receiptEventId(identity) {
-  return `evt_receipt_${vectorValues(identity).sha256}`;
+function sha256(bytes) {
+  return crypto.createHash("sha256").update(bytes).digest("hex");
 }
-
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, "fixtures", name), "utf8"));
 }
-
-function readJsonlFixture(name) {
-  return fs
-    .readFileSync(path.join(ROOT, "fixtures", name), "utf8")
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line, index) => {
-      try {
-        return JSON.parse(line);
-      } catch (error) {
-        fail(`${name}:${index + 1}: invalid JSONL record`);
-      }
-    });
+function decode(vector, label) {
+  const bytes = Buffer.from(vector.bytes_base64, "base64");
+  if (bytes.toString("base64") !== vector.bytes_base64 || sha256(bytes) !== vector.sha256) {
+    fail(`${label}: invalid base64 or byte hash`);
+  }
+  return bytes;
 }
-
-function writeGeneratedFields(name, vectors, valueField) {
-  const fixturePath = path.join(ROOT, "fixtures", name);
-  let source = fs.readFileSync(fixturePath, "utf8");
-  let cursor = 0;
-  for (const vector of vectors) {
-    const values = vectorValues(vector[valueField]);
-    for (const [field, value] of Object.entries(values)) {
-      const marker = `\"${field}\":`;
-      const start = source.indexOf(marker, cursor);
-      if (start < 0) {
-        fail(`${name}: cannot locate generated field ${field}`);
-      }
-      const end = source.indexOf("\n", start);
-      const oldLine = source.slice(start, end);
-      const comma = oldLine.endsWith(",") ? "," : "";
-      const newLine = `${marker} ${JSON.stringify(value)}${comma}`;
-      source = `${source.slice(0, start)}${newLine}${source.slice(end)}`;
-      cursor = start + newLine.length;
+function recordId(wire) {
+  const p = wire.payload;
+  switch (wire.kind) {
+    case "session_created": return `session/${wire.session_id}/created`;
+    case "turn_started": return `turn/${wire.turn_id}/started`;
+    case "turn_ended": return `turn/${wire.turn_id}/ended`;
+    case "turn_parked": return `turn/${wire.turn_id}/wait/${p.interaction_id}`;
+    case "input_applied": return `input/${p.input.input_id}/applied`;
+    case "boundary_recorded": return `turn/${wire.turn_id}/boundary/${p.stage}/${p.boundary_id}`;
+    case "context_compacted": return `compact/${p.source_digest}/${p.mode}${p.summary_operation_id === null ? "" : `/${p.summary_operation_id}`}`;
+    case "usage_observed": return `usage/${p.meter_id}/${p.observation}`;
+    default: {
+      const suffix = wire.kind === "op_completed" ? "result" : wire.kind.slice(3);
+      return `op/${wire.operation_id}/${wire.attempt}/${suffix}${wire.kind === "op_parked" ? `/${p.phase}` : ""}`;
     }
   }
-  fs.writeFileSync(fixturePath, source, "utf8");
 }
-
-function syncCheckpointRunDefinition(runDefinition) {
-  const fixturePath = path.join(ROOT, "fixtures", "checkpoint_codec.json");
-  const checkpoint = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
-  const minimal = runDefinition.golden_cases.find((entry) => entry.name === "minimal");
-  if (!minimal) {
-    fail("run_definition.json: missing minimal golden case");
+function nestedDigests(wire, label) {
+  const p = wire.payload;
+  const pairs = {
+    turn_started: [[p.definition_digest, p.definition]],
+    op_planned: [[p.request_digest, p.request]],
+    op_prepared: [[p.request_digest, p.request]],
+    op_completed: [[p.result_digest, p.result]],
+    input_applied: [[p.input_digest, p.input]],
+  }[wire.kind] ?? [];
+  const child = p.attributes?.child_admission;
+  if (child) pairs.push([child.definition_digest, child.definition]);
+  for (const [expected, value] of pairs) {
+    if (vectorValues(value).sha256 !== expected) fail(`${label}: nested digest mismatch`);
   }
-
-  const previousSchema = checkpoint.canonical_checkpoint.run_definition_schema;
-  if (typeof previousSchema !== "string") {
-    fail("checkpoint_codec.json: previous run definition schema is not a string");
-  }
-  const payloads = [
-    checkpoint.canonical_checkpoint,
-    ...checkpoint.valid_cases.map((entry) => entry.payload),
-    ...checkpoint.invalid_cases.map((entry) => entry.payload),
-  ].filter(
-    (payload) =>
-      payload?.run_definition_schema === previousSchema &&
-      payload.run_definition,
-  );
-  const previousDefinition = checkpoint.canonical_checkpoint.run_definition;
-  const previousCanonical = canonicalize(previousDefinition);
-  for (const payload of payloads) {
-    if (canonicalize(payload.run_definition) !== previousCanonical) {
-      fail("checkpoint_codec.json: embedded current run definitions have drifted");
-    }
-  }
-
-  const previousDigest = checkpoint.canonical_checkpoint.run_definition_digest;
-  if (typeof previousDigest !== "string") {
-    fail("checkpoint_codec.json: previous minimal definition digest is not a string");
-  }
-  const nextDigest = vectorValues(minimal.definition).sha256;
-  for (const payload of payloads) {
-    payload.run_definition_schema = runDefinition.schema_version;
-    payload.run_definition = structuredClone(minimal.definition);
-  }
-
-  function replaceDigest(value) {
-    if (Array.isArray(value)) {
-      for (let index = 0; index < value.length; index += 1) {
-        value[index] = replaceDigest(value[index]);
-      }
-      return value;
-    }
-    if (value && typeof value === "object") {
-      for (const [key, item] of Object.entries(value)) {
-        value[key] = replaceDigest(item);
-      }
-      return value;
-    }
-    return value === previousDigest ? nextDigest : value;
-  }
-  replaceDigest(checkpoint);
-  fs.writeFileSync(fixturePath, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
 }
-
-function promptScenarioSections(scenario) {
-  return scenario.output?.sections ?? [
-      ...(scenario.input?.instruction_bundle?.sections ?? []),
-      ...(scenario.input?.compiler_owned_sections ?? []),
-      ...[...(scenario.input?.provider_fragments ?? [])]
-        .sort((left, right) =>
-          (left.priority ?? 100) - (right.priority ?? 100) ||
-          Number(left.stable === false) - Number(right.stable === false) ||
-          (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
-        )
-        .map(({ priority: _priority, ...section }) => section),
+function verifyFact(vector, label, value) {
+  const bytes = decode(vector, label);
+  if (!bytes.equals(Buffer.from(canonicalize(value), "utf8"))) fail(`${label}: canonical bytes mismatch`);
+  if (value?.record_id !== undefined) {
+    const id = recordId(value);
+    if (value.record_id !== id || (vector.record_id !== undefined && vector.record_id !== id)) {
+      fail(`${label}: record_id mismatch`);
+    }
+    nestedDigests(value, label);
+  }
+}
+function walk(value, visit, label = "root") {
+  visit(value, label);
+  if (Array.isArray(value)) value.forEach((child, index) => walk(child, visit, `${label}[${index}]`));
+  else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) walk(child, visit, `${label}.${key}`);
+  }
+}
+function verifyFacts(fixture, name) {
+  walk(fixture, (v, label) => {
+    if (!v || typeof v !== "object" || !v.bytes_base64) return;
+    const bytes = decode(v, `${name}/${label}`);
+    if (label.endsWith(".artifact")) return;
+    const decoded = JSON.parse(bytes.toString("utf8"));
+    let value = v.wire ?? v.definition;
+    if (value === undefined) {
+      value = label.endsWith(".rejected_request") ? decoded : Object.fromEntries(Object.keys(decoded).map(key => [key, v[key]]));
+    }
+    verifyFact(v, `${name}/${label}`, value);
+  });
+}
+function verifyPrompts() {
+  const fixture = readFixture("prompt_bundle.json");
+  const scenarios = new Map();
+  for (const scenario of fixture.scenarios) {
+    const sections = scenario.output.sections ?? [
+      ...(scenario.input.instruction_bundle?.sections ?? []),
+      ...(scenario.input.compiler_owned_sections ?? []),
+      ...(scenario.input.provider_fragments ?? []).toSorted((a,b) =>
+        (a.priority ?? 100) - (b.priority ?? 100) ||
+        Number(a.stable === false) - Number(b.stable === false) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map(({priority, ...section}) => section),
     ];
+    scenarios.set(scenario.id, sections);
+    if (scenario.output.flat_prompt !== sections.map(x => x.text).join("\n\n")) fail(`prompt/${scenario.id}: flat text`);
+    if (scenario.output.stable_hash !== vectorValues(sections.filter(x => x.stable)).sha256) fail(`prompt/${scenario.id}: stable hash`);
+    if (scenario.output.section_ids && canonicalize(scenario.output.section_ids) !== canonicalize(sections.map(x => x.id))) fail(`prompt/${scenario.id}: section order`);
+  }
+  for (const vector of fixture.stable_hash_vectors) {
+    verifyVector(`prompt/${vector.scenario_ref}`, scenarios.get(vector.scenario_ref).filter(x => x.stable), vector);
+  }
+  for (const projection of fixture.provider_projection.projection_cases) {
+    const sections = scenarios.get(projection.scenario_ref);
+    let boundary = 0;
+    while (boundary < sections.length && sections[boundary].stable) boundary++;
+    boundary = boundary > 0 ? boundary - 1 : null;
+    const expected = projection.mode === "flatten_only"
+      ? {system_message: {role:"system", content:sections.map(x => x.text).join("\n\n")}, cache_control_fields:[]}
+      : {system_blocks:sections.map((x,i) => ({type:"text",text:x.text + (i+1 < sections.length ? "\n\n" : ""), ...(i===boundary ? {cache_control:{type:"ephemeral"}} : {})})), cache_boundary_block_index:boundary};
+    if (canonicalize(expected) !== canonicalize(projection.expected)) fail(`prompt/${projection.name}: provider projection`);
+  }
+  const definition = readFixture("run_definition.json");
+  for (const vector of definition.golden_cases) {
+    verifyFact(vector, `definition/${vector.name}`, vector.definition);
+    if (vector.definition_digest !== vector.sha256) fail(`definition/${vector.name}: digest`);
+  }
+  walk(definition, value => {
+    if (!value?.sections || !value.stable_hash) return;
+    if (value.stable_hash !== vectorValues(value.sections.filter(x => x.stable)).sha256) fail("definition: prompt hash");
+  });
 }
-
-function writePromptBundleHashes(promptBundle) {
-  const fixturePath = path.join(ROOT, "fixtures", "prompt_bundle.json");
-  const scenarios = new Map(promptBundle.scenarios.map((scenario) => [scenario.id, scenario]));
-  for (const scenario of promptBundle.scenarios) {
-    const sections = promptScenarioSections(scenario);
-    const sectionIds = sections.map((section) => section.id);
-    const flatPrompt = sections.map((section) => section.text).join("\n\n");
-    if (scenario.output.section_ids && canonicalize(scenario.output.section_ids) !== canonicalize(sectionIds)) {
-      fail(`prompt_bundle/${scenario.id}: section_ids mismatch`);
-    }
-    if (scenario.output.flat_prompt !== flatPrompt) {
-      fail(`prompt_bundle/${scenario.id}: flat_prompt mismatch`);
-    }
-    const stableSections = sections.filter((section) => section.stable);
-    const hash = vectorValues(stableSections).sha256;
-    if (WRITE) {
-      scenario.output.stable_hash = hash;
-    } else if (scenario.output.stable_hash !== hash) {
-      fail(`prompt_bundle/${scenario.id}: stable_hash mismatch`);
-    }
+function verifyToolResults() {
+  const fixture = readFixture("bounded_tool_result.json");
+  for (const result of Object.values(fixture.canonical_results)) {
+    if (result.truncated && (Buffer.byteLength(result.content, "utf8") !== result.visible_bytes || result.visible_bytes > result.original_bytes)) fail("tool result: preview bytes");
+    if (result.artifact && !new RegExp(fixture.artifact_contract.path.pattern).test(result.artifact.path)) fail("tool result: artifact path");
   }
-
-  for (const vector of promptBundle.stable_hash_vectors) {
-    const scenario = scenarios.get(vector.scenario_ref);
-    if (!scenario) {
-      fail(`prompt_bundle: unknown stable-hash scenario ${vector.scenario_ref}`);
-    }
-    const stableSections = promptScenarioSections(scenario).filter((section) => section.stable);
-    const values = vectorValues(stableSections);
-    for (const [field, value] of Object.entries(values)) {
-      if (WRITE) {
-        vector[field] = value;
-      } else if (vector[field] !== value) {
-        fail(`prompt_bundle/${vector.scenario_ref}: ${field} mismatch`);
-      }
-    }
-  }
-
-  for (const projection of promptBundle.provider_projection.projection_cases) {
-    const scenario = scenarios.get(projection.scenario_ref);
-    if (!scenario) {
-      fail(`prompt_bundle: unknown projection scenario ${projection.scenario_ref}`);
-    }
-    const sections = promptScenarioSections(scenario);
-    const flatPrompt = sections.map((section) => section.text).join("\n\n");
-    let expected;
-    if (projection.mode === "flatten_only") {
-      expected = {
-        system_message: { role: "system", content: flatPrompt },
-        cache_control_fields: [],
-      };
-    } else if (projection.mode === "explicit_section_cache") {
-      let leadingStableCount = 0;
-      while (leadingStableCount < sections.length && sections[leadingStableCount].stable) {
-        leadingStableCount += 1;
-      }
-      const boundary = leadingStableCount > 0 ? leadingStableCount - 1 : null;
-      expected = {
-        system_blocks: sections.map((section, index) => ({
-          type: "text",
-          text: `${section.text}${index + 1 < sections.length ? "\n\n" : ""}`,
-          ...(index === boundary ? { cache_control: { type: "ephemeral" } } : {}),
-        })),
-        cache_boundary_block_index: boundary,
-      };
-    } else {
-      fail(`prompt_bundle/${projection.name}: unknown projection mode ${projection.mode}`);
-    }
-    if (WRITE) {
-      projection.expected = expected;
-    } else if (canonicalize(projection.expected) !== canonicalize(expected)) {
-      fail(`prompt_bundle/${projection.name}: provider projection mismatch`);
-    }
-  }
-  if (WRITE) {
-    fs.writeFileSync(fixturePath, `${JSON.stringify(promptBundle, null, 2)}\n`, "utf8");
-  }
-}
-
-function writeRunDefinitionPromptBundleHashes(runDefinition) {
-  for (const vector of runDefinition.golden_cases) {
-    const bundle = vector.definition?.prompt_bundle;
-    if (!bundle || !Array.isArray(bundle.sections) || bundle.sections.length === 0) {
-      fail(`run_definition/${vector.name}: missing non-empty prompt bundle`);
-    }
-    const hash = vectorValues(
-      bundle.sections.filter((section) => section.stable === true),
-    ).sha256;
-    if (WRITE) {
-      bundle.stable_hash = hash;
-    } else if (bundle.stable_hash !== hash) {
-      fail(`run_definition/${vector.name}: prompt bundle stable_hash mismatch`);
-    }
-  }
-  if (WRITE) {
-    fs.writeFileSync(
-      path.join(ROOT, "fixtures", "run_definition.json"),
-      `${JSON.stringify(runDefinition, null, 2)}\n`,
-      "utf8",
-    );
-  }
-}
-
-function writeBoundedToolResultProjections(fixture) {
-  const fixturePath = path.join(ROOT, "fixtures", "bounded_tool_result.json");
-  const recoveryFields = fixture.tool_message_projection.recovery_fields;
-  for (const [name, result] of Object.entries(fixture.canonical_results)) {
-    if (result.truncated === true) {
-      if (Buffer.byteLength(result.content, "utf8") !== result.visible_bytes) {
-        fail(`bounded_tool_result/${name}: visible_bytes mismatch`);
-      }
-      if (result.visible_bytes > result.original_bytes) {
-        fail(`bounded_tool_result/${name}: visible_bytes exceeds original_bytes`);
-      }
-    }
-  }
-  const artifactPattern = new RegExp(fixture.artifact_contract.path.pattern);
-  for (const [name, result] of Object.entries(fixture.canonical_results)) {
-    if (result.artifact && !artifactPattern.test(result.artifact.path)) {
-      fail(`bounded_tool_result/${name}: unsafe canonical artifact path`);
-    }
-  }
-  const markerChars = Array.from(fixture.bash_contract.omission_marker).length;
-  if (
-    fixture.bash_contract.head_chars +
-      markerChars +
-      fixture.bash_contract.tail_chars !==
-    fixture.bash_contract.preview_limit_chars
-  ) {
-    fail("bounded_tool_result: bash preview allocation does not equal limit");
-  }
+  if (fixture.bash_contract.head_chars + Array.from(fixture.bash_contract.omission_marker).length + fixture.bash_contract.tail_chars !== fixture.bash_contract.preview_limit_chars) fail("tool result: preview allocation");
   for (const projection of fixture.tool_message_projection.cases) {
     const result = fixture.canonical_results[projection.result_ref];
-    if (!result) {
-      fail(`bounded_tool_result/${projection.name}: unknown result ref`);
-    }
-    const recovery = Object.fromEntries(
-      recoveryFields.filter((field) => field in result).map((field) => [field, result[field]]),
-    );
-    const expected = result.truncated === true
-      ? `${result.content}\n${canonicalize({ vv_agent_recovery: recovery })}`
-      : result.content;
-    if (WRITE) {
-      projection.expected_message = expected;
-    } else if (projection.expected_message !== expected) {
-      fail(`bounded_tool_result/${projection.name}: tool-message projection mismatch`);
-    }
-  }
-  if (WRITE) {
-    fs.writeFileSync(fixturePath, `${JSON.stringify(fixture, null, 2)}\n`, "utf8");
+    const recovery = Object.fromEntries(fixture.tool_message_projection.recovery_fields.filter(key => key in result).map(key => [key, result[key]]));
+    const expected = result.truncated ? `${result.content}\n${canonicalize({vv_agent_recovery:recovery})}` : result.content;
+    if (projection.expected_message !== expected) fail(`tool result/${projection.name}: recovery projection`);
   }
 }
-
-const runDefinition = readFixture("run_definition.json");
-writeRunDefinitionPromptBundleHashes(runDefinition);
-for (const vector of runDefinition.golden_cases) {
-  verifyVector(`run_definition/${vector.name}`, vector.definition, vector);
-}
-
-const promptBundle = readFixture("prompt_bundle.json");
-writePromptBundleHashes(promptBundle);
-
-const distributedRun = readFixture("distributed_run_envelope.json");
-const distributedPromptBundle = distributedRun.canonical_envelope?.task?.prompt_bundle;
-if (!distributedPromptBundle || !Array.isArray(distributedPromptBundle.sections) || distributedPromptBundle.sections.length === 0) {
-  fail("distributed_run_envelope: task is missing a non-empty prompt bundle");
-}
-const distributedStableHash = vectorValues(
-  distributedPromptBundle.sections.filter((section) => section.stable === true),
-).sha256;
-if (WRITE) {
-  const fixturePath = path.join(ROOT, "fixtures", "distributed_run_envelope.json");
-  let source = fs.readFileSync(fixturePath, "utf8");
-  const taskStart = source.indexOf('"task": {');
-  const hashStart = source.indexOf('"stable_hash":', taskStart);
-  if (taskStart < 0 || hashStart < 0) {
-    fail("distributed_run_envelope: cannot locate task prompt bundle stable_hash");
-  }
-  const hashEnd = source.indexOf("\n", hashStart);
-  const oldLine = source.slice(hashStart, hashEnd);
-  const comma = oldLine.endsWith(",") ? "," : "";
-  const nextLine = `"stable_hash": ${JSON.stringify(distributedStableHash)}${comma}`;
-  source = `${source.slice(0, hashStart)}${nextLine}${source.slice(hashEnd)}`;
-  fs.writeFileSync(fixturePath, source, "utf8");
-} else if (distributedPromptBundle.stable_hash !== distributedStableHash) {
-  fail("distributed_run_envelope: task prompt bundle stable_hash mismatch");
-}
-
-const boundedToolResult = readFixture("bounded_tool_result.json");
-writeBoundedToolResultProjections(boundedToolResult);
-
-if (WRITE) {
-  syncCheckpointRunDefinition(runDefinition);
-}
-
-const operationJournal = readFixture("operation_journal.json");
-const operationRequestVectors = new Map();
-for (const vector of operationJournal.request_digest.golden_cases) {
-  const values = vectorValues(vector.request);
-  operationRequestVectors.set(vector.name, values);
-  if (WRITE) {
-    Object.assign(vector, values);
-  } else {
-    verifyVector(`operation_request/${vector.name}`, vector.request, vector);
-  }
-}
-for (const entryCase of operationJournal.valid_entries) {
-  const vector = operationRequestVectors.get(entryCase.request_golden_case);
-  if (!vector) {
-    fail(`operation_journal/${entryCase.name}: unknown request golden case`);
-  }
-  if (WRITE) {
-    entryCase.entry.request_digest = vector.sha256;
-  } else if (entryCase.entry.request_digest !== vector.sha256) {
-    fail(`operation_journal/${entryCase.name}: request_digest mismatch`);
-  }
-}
-for (const entryCase of operationJournal.valid_entries) {
-  const entry = entryCase.entry;
-  if (entry.kind !== "tool" || !["succeeded", "failed"].includes(entry.state)) {
-    continue;
-  }
-  if (entry.result === null) {
-    if (entryCase.name !== "tool_failed_tool_cancelled_closure" || "result_digest" in entry) {
-      fail(`operation_journal/${entryCase.name}: resultless closure shape mismatch`);
-    }
-    continue;
-  }
-  if (!entry.result || typeof entry.result !== "object" || typeof entry.result_digest !== "string") {
-    fail(`operation_journal/${entryCase.name}: result digest is required`);
-  }
-  const resultDigest = vectorValues(entry.result).sha256;
-  if (entry.result_digest !== resultDigest) {
-    fail(`operation_journal/${entryCase.name}: result_digest mismatch`);
-  }
-}
-if (WRITE) {
-  fs.writeFileSync(
-    path.join(ROOT, "fixtures", "operation_journal.json"),
-    `${JSON.stringify(operationJournal, null, 2)}\n`,
-    "utf8",
-  );
-}
-for (const vector of operationJournal.receipt_identity?.identity_vectors ?? []) {
-  const expected = vectorValues(vector.object).sha256;
-  if (vector.identity_key !== expected) {
-    fail(`operation_journal/${vector.name}: identity_key mismatch`);
-  }
-}
-
-const checkpoint = readFixture("checkpoint_codec.json");
-for (const vector of checkpoint.extension_limits.canonicalization_vectors) {
-  verifyVector(`checkpoint_extension/${vector.name}`, vector.entry, vector);
-}
-const checkpointPayloads = [
-  ["canonical_checkpoint", checkpoint.canonical_checkpoint],
-  ...checkpoint.valid_cases.map((entry) => [`valid_case/${entry.name}`, entry.payload]),
-];
-let checkpointOutboxChanged = false;
-for (const [label, payload] of checkpointPayloads) {
-  for (const entry of payload.event_outbox) {
-    const actual = vectorValues(entry.event).sha256;
-    if (actual !== entry.payload_digest) {
-      if (!WRITE) {
-        fail(`${label}/${entry.event_id}: outbox payload digest mismatch`);
-      }
-      entry.payload_digest = actual;
-      checkpointOutboxChanged = true;
-    }
-  }
-}
-if (checkpointOutboxChanged) {
-  fs.writeFileSync(
-    path.join(ROOT, "fixtures", "checkpoint_codec.json"),
-    `${JSON.stringify(checkpoint, null, 2)}\n`,
-    "utf8",
-  );
-}
-
-const checkpointStore = readFixture("checkpoint_store.json");
-for (const vector of checkpointStore.event_payload_digest.golden_cases) {
-  verifyVector(`checkpoint_event/${vector.name}`, vector.event, vector);
-}
-const retainedDeferredReceipt = checkpointStore.deferred_cases
-  ?.find((entry) => entry.name === "terminal_checkpoint_replays_retained_deferred_receipt")
-  ?.initial?.receipt_index?.entries?.[0];
-if (retainedDeferredReceipt) {
-  const handle = retainedDeferredReceipt.handle;
-  const identity = {
-    attempt: handle.attempt,
-    checkpoint_key: handle.checkpoint_key,
-    operation_id: handle.operation_id,
-    request_digest: handle.request_digest,
-    tool_call_id: retainedDeferredReceipt.result.tool_call_id,
-  };
-  if (retainedDeferredReceipt.event_id !== receiptEventId(identity)) {
-    fail("checkpoint_store/retained_deferred_receipt: receipt event_id mismatch");
-  }
-}
-
-const deferredTool = readFixture("deferred_tool.json");
-const deferredDigestVectors = deferredTool.resolution?.receipt_index?.golden_digest_vectors;
-if (!Array.isArray(deferredDigestVectors) || deferredDigestVectors.length === 0) {
-  fail("deferred_tool.json: missing receipt golden digest vectors");
-}
-for (const vector of deferredDigestVectors) {
-  const actual = vectorValues(vector.value);
-  if (WRITE) {
-    vector.rfc8785_sha256 = actual.sha256;
-  } else if (vector.rfc8785_sha256 !== actual.sha256) {
-    fail(`deferred_tool/${vector.name}: receipt digest mismatch`);
-  }
-}
-const requestProvenance = deferredTool.handle?.request_digest_provenance;
-if (!requestProvenance || requestProvenance.source_fixture !== "operation_journal.json#request_digest.golden_cases") {
-  fail("deferred_tool: missing operation-request digest provenance");
-}
-const provenanceByOperation = new Map();
-for (const provenance of requestProvenance.cases ?? []) {
-  const source = operationRequestVectors.get(provenance.request_golden_case);
-  if (!source) {
-    fail(`deferred_tool/${provenance.operation_id}: unknown request golden case`);
-  }
-  if (WRITE) {
-    provenance.request_digest = source.sha256;
-  } else if (provenance.request_digest !== source.sha256) {
-    fail(`deferred_tool/${provenance.operation_id}: request digest provenance mismatch`);
-  }
-  provenanceByOperation.set(provenance.operation_id, provenance);
-}
-function verifyDeferredHandleProvenance(value) {
-  if (Array.isArray(value)) {
-    for (const item of value) verifyDeferredHandleProvenance(item);
-    return;
-  }
-  if (!value || typeof value !== "object") return;
-  if (value.schema_version === "vv-agent.deferred-tool-handle.v2" && value.operation_id) {
-    const provenance = provenanceByOperation.get(value.operation_id);
-    if (!provenance) {
-      fail(`deferred_tool/${value.operation_id}: missing request digest provenance`);
-    }
-    if (value.request_digest !== provenance.request_digest) {
-      fail(`deferred_tool/${value.operation_id}: handle request digest mismatch`);
-    }
-  }
-  for (const item of Object.values(value)) verifyDeferredHandleProvenance(item);
-}
-verifyDeferredHandleProvenance(deferredTool);
-for (const name of ["canonical_entry", "canonical_failed_entry"]) {
-  const receipt = deferredTool.resolution.receipt_index[name];
-  const handle = receipt.handle;
-  const identity = {
-    attempt: handle.attempt,
-    checkpoint_key: handle.checkpoint_key,
-    operation_id: handle.operation_id,
-    request_digest: handle.request_digest,
-    tool_call_id: receipt.result.tool_call_id,
-  };
-  if (receipt.event_id !== receiptEventId(identity)) {
-    fail(`deferred_tool/${name}: receipt event_id mismatch`);
-  }
-}
-const deferredEventRecords = [
-  ...readJsonlFixture("run_events.jsonl"),
-  ...readJsonlFixture("resume_events.jsonl"),
-];
-const deferredHandles = new Map(
-  deferredEventRecords
-    .filter((record) => record.type === "tool_call_deferred" && record.handle?.operation_id)
-    .map((record) => [record.handle.operation_id, record.handle]),
-);
-for (const record of deferredEventRecords) {
-  if (
-    record.type !== "tool_call_completed"
-    || !deferredHandles.has(record.operation_id)
-  ) {
-    continue;
-  }
-  const handle = deferredHandles.get(record.operation_id);
-  if (!handle) {
-    fail(`deferred event/${record.operation_id}: missing paired handle identity`);
-  }
-  const identity = {
-    attempt: handle.attempt,
-    checkpoint_key: handle.checkpoint_key,
-    operation_id: record.operation_id,
-    request_digest: handle.request_digest,
-    tool_call_id: record.tool_call_id,
-  };
-  if (record.attempt !== handle.attempt) {
-    fail(`deferred event/${record.operation_id}: attempt does not match handle`);
-  }
-  if (record.event_id !== receiptEventId(identity)) {
-    fail(`deferred event/${record.operation_id}: receipt event_id mismatch`);
-  }
-}
-if (WRITE) {
-  fs.writeFileSync(
-    path.join(ROOT, "fixtures", "deferred_tool.json"),
-    `${JSON.stringify(deferredTool, null, 2)}\n`,
-    "utf8",
-  );
-}
-
-const controllerCommand = readFixture("controller_command.json");
-const c18Receipt = controllerCommand.fault_matrix
-  ?.find((entry) => entry.id === "C18")
-  ?.after?.continuation?.record_tool_receipt;
-if (c18Receipt) {
-  const identity = {
-    attempt: c18Receipt.attempt,
-    checkpoint_key: c18Receipt.checkpoint_key,
-    operation_id: c18Receipt.operation_id,
-    request_digest: c18Receipt.request_digest,
-    tool_call_id: c18Receipt.tool_call_id,
-  };
-  if (c18Receipt.event_id !== receiptEventId(identity)) {
-    fail("controller_command/C18: receipt event_id mismatch");
-  }
-}
-const producerDigest = controllerCommand.host_interaction_producer?.request_wire?.request_digest?.golden;
-if (!producerDigest) {
-  fail("controller_command: missing host interaction producer digest vector");
-}
-if (WRITE) {
-  Object.assign(producerDigest, vectorValues(producerDigest.request_without_digest));
+if (process.argv.includes("--write")) fail("Producer fixtures are immutable here; regenerate them at source");
+if (process.argv.includes("--canonicalize")) {
+  let source = "";
+  process.stdin.setEncoding("utf8");
+  for await (const chunk of process.stdin) source += chunk;
+  const values = JSON.parse(source);
+  process.stdout.write(JSON.stringify(values.map(value => Buffer.from(canonicalize(value), "utf8").toString("base64"))));
 } else {
-  verifyVector(
-    "controller_command/host_interaction_producer/request_digest",
-    producerDigest.request_without_digest,
-    producerDigest,
-  );
-}
-for (const vector of controllerCommand.jcs_vectors ?? []) {
-  if (WRITE) {
-    Object.assign(vector, vectorValues(vector.value));
-  } else {
-    verifyVector(`controller_command/jcs/${vector.name}`, vector.value, vector);
+  const codec = readFixture("session_codec_vectors.json");
+  for (const [index, vector] of codec.vectors.entries()) verifyFact(vector, `codec/${index}`, vector.wire);
+  for (const [index, vector] of readFixture("session_invalid.json").vectors.entries()) decode(vector, `invalid/${index}`);
+  for (const name of ["session_semantics.json", "session_recovery.json", "session_projection.json", "session_compaction.json", "app_server_protocol.json"]) verifyFacts(readFixture(name), name);
+  for (const vector of readFixture("app_server_observable.json").actionAdmission.commandIdCases) {
+    const value = {schema_version:"vv-agent.controller-command-id.v1", thread_id:vector.threadId, turn_id:vector.turnId, action_id:vector.actionId};
+    verifyFact(vector, `action/${vector.name}`, value);
+    const bytes = Buffer.from(canonicalize(value), "utf8");
+    const length = Buffer.alloc(8);
+    length.writeBigUInt64BE(BigInt(bytes.length));
+    const actual = sha256(Buffer.concat([Buffer.from(value.schema_version), Buffer.from([0]), length, bytes]));
+    if (vector.expectedCommandId !== actual) fail(`action/${vector.name}: action identity`);
   }
+  const app = readFixture("app_server_protocol.json");
+  const reply = app.transcripts.find(x => x.request?.method === "turn/action");
+  const params = reply.request.params;
+  const value = {schema_version:"vv-agent.controller-command-id.v1", thread_id:params.threadId, turn_id:params.turnId, action_id:params.actionId};
+  const bytes = Buffer.from(canonicalize(value), "utf8");
+  const length = Buffer.alloc(8); length.writeBigUInt64BE(BigInt(bytes.length));
+  if (sha256(Buffer.concat([Buffer.from(value.schema_version), Buffer.from([0]), length, bytes])) !== app.facts.child_reply_command_id) fail("app: child reply identity");
+  verifyPrompts();
+  verifyToolResults();
+  process.stdout.write(`JCS verified: ${codec.vectors.length} session vectors, invalid byte hashes, nested digests, action identities, projections and prompts\n`);
 }
-for (const vector of controllerCommand.digest_vectors ?? []) {
-  const digestInput = vector.command_digest_input ?? vector.response_digest_input;
-  const actual = vectorValues(digestInput);
-  if (WRITE) {
-    Object.assign(vector, actual);
-  } else {
-    if (vector.sha256 !== actual.sha256) {
-      fail(`controller_command/${vector.name}: digest mismatch`);
-    }
-    if (vector.canonical_json_utf8_bytes !== actual.canonical_json_utf8_bytes) {
-      fail(`controller_command/${vector.name}: byte length mismatch`);
-    }
-  }
-}
-if (WRITE) {
-  fs.writeFileSync(
-    path.join(ROOT, "fixtures", "controller_command.json"),
-    `${JSON.stringify(controllerCommand, null, 2)}\n`,
-    "utf8",
-  );
-}
-
-const checkpointResume = readFixture("checkpoint_resume.json");
-const summaryReplay = checkpointResume.summary_receipt_replay;
-if (!summaryReplay) fail("checkpoint_resume: missing summary receipt replay");
-for (const [label, vector] of [
-  ["summary_receipt_replay", summaryReplay.summary_request_golden],
-  ["summary_receipt_changed_request", summaryReplay.changed_request.golden],
-]) {
-  if (WRITE) Object.assign(vector, vectorValues(vector.request));
-  else verifyVector(`checkpoint_resume/${label}`, vector.request, vector);
-}
-const summaryDigest = summaryReplay.summary_request_golden.sha256;
-if (WRITE) {
-  summaryReplay.input.retained_receipt.request_digest = summaryDigest;
-  summaryReplay.expected.request_digest = summaryDigest;
-} else if (
-  summaryReplay.input.retained_receipt.request_digest !== summaryDigest
-  || summaryReplay.expected.request_digest !== summaryDigest
-  || summaryReplay.changed_request.golden.sha256 === summaryDigest
-) {
-  fail("checkpoint_resume: summary receipt request digest mismatch");
-}
-const frozenPromptResume = checkpointResume.runner_cases.find(
-  (entry) => entry.name === "frozen_prompt_bundle_resume_does_not_reinvoke_producers",
-);
-if (!frozenPromptResume) {
-  fail("checkpoint_resume.json: missing frozen prompt bundle resume case");
-}
-const frozenPromptBundle = frozenPromptResume.run?.frozen_prompt_bundle;
-if (!frozenPromptBundle || !Array.isArray(frozenPromptBundle.sections)) {
-  fail("checkpoint_resume.json: frozen prompt bundle resume case is malformed");
-}
-const frozenStableHash = vectorValues(
-  frozenPromptBundle.sections.filter((section) => section.stable === true),
-).sha256;
-if (WRITE) {
-  frozenPromptBundle.stable_hash = frozenStableHash;
-  fs.writeFileSync(
-    path.join(ROOT, "fixtures", "checkpoint_resume.json"),
-    `${JSON.stringify(checkpointResume, null, 2)}\n`,
-    "utf8",
-  );
-} else if (frozenPromptBundle.stable_hash !== frozenStableHash) {
-  fail("checkpoint_resume/frozen_prompt_bundle: stable_hash mismatch");
-}
-verifyVector(
-  "checkpoint_session_commit/golden_case",
-  checkpointResume.session_persistence.golden_case.payload,
-  checkpointResume.session_persistence.golden_case,
-);
-
-if (WRITE) {
-  writeGeneratedFields("run_definition.json", runDefinition.golden_cases, "definition");
-  writeGeneratedFields(
-    "checkpoint_codec.json",
-    checkpoint.extension_limits.canonicalization_vectors,
-    "entry",
-  );
-  writeGeneratedFields(
-    "checkpoint_store.json",
-    checkpointStore.event_payload_digest.golden_cases,
-    "event",
-  );
-  writeGeneratedFields(
-    "checkpoint_resume.json",
-    [checkpointResume.session_persistence.golden_case],
-    "payload",
-  );
-  console.log("RFC 8785 generated fields updated");
-  process.exit(0);
-}
-
-console.log("RFC 8785 golden vectors verified");

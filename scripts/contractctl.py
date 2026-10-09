@@ -34,7 +34,9 @@ def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def strict_json_loads(source: str) -> Any:
-    return json.loads(source, object_pairs_hook=reject_duplicate_keys)
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"nonfinite JSON number: {value}")
+    return json.loads(source, object_pairs_hook=reject_duplicate_keys, parse_constant=reject_constant)
 
 
 def sha256_file(path: Path) -> str:
@@ -230,10 +232,12 @@ def validate_contract(root: Path) -> dict[str, Any]:
         )
 
     domains = contract.get("domains")
-    if not isinstance(domains, list) or len(domains) != 20 or len(set(domains)) != len(domains):
-        raise ContractError("contract.json must list 20 unique domain ids")
+    if not isinstance(domains, list) or len(domains) != 18 or len(set(domains)) != len(domains):
+        raise ContractError("contract.json must list 18 unique domain ids")
     if not all(isinstance(domain, str) and domain for domain in domains):
         raise ContractError("contract domain ids must be non-empty strings")
+    if "session-kernel" not in domains:
+        raise ContractError("contract.json must include the session-kernel domain")
 
     matrix = load_json(root / "support-matrix.json")
     validate_support_matrix(matrix, version)
@@ -246,15 +250,41 @@ def validate_contract(root: Path) -> dict[str, Any]:
         root / "docs" / "change-workflow.md",
         root / "docs" / "versioning-policy.md",
         root / "docs" / "run-budgets.md",
-        root / "docs" / "checkpoint-resume.md",
-        root / "docs" / "controller-command.md",
+        root / "docs" / "session-kernel.md",
+        root / "docs" / "session-consumers.md",
         root / "docs" / "model-call-accounting.md",
         root / "docs" / "prompt-bundles-and-tool-results.md",
-        root / "docs" / "durable-deferred-tools.md",
+        root / "docs" / "after-cycle-lifecycle.md",
+        root / "docs" / "bash-process-management.md",
+        root / "docs" / "output-validation.md",
+        root / "docs" / "stream-events.md",
+        root / "docs" / "tool-metadata-and-telemetry.md",
     ]
     missing_docs = [str(path.relative_to(root)) for path in required_docs if not path.is_file()]
     if missing_docs:
         raise ContractError(f"missing contract documentation: {missing_docs}")
+
+    from session_validation import ValidationError, validate_session_fixtures
+    try:
+        session_report = validate_session_fixtures(root)
+    except ValidationError as exc:
+        raise ContractError(f"session fixtures: {exc}") from exc
+    public_api = load_json(fixtures / "public_api.json")
+    if public_api.get("schema_version") != 8 or public_api.get("contract") != "vv-agent-public-api-v8":
+        raise ContractError("public_api.json must use the current v8 inventory")
+    for path in required_docs + list((root / "docs").glob("*.md")):
+        if path.name == "CHANGELOG.md":
+            continue
+        source = path.read_text(encoding="utf-8")
+        for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", source):
+            target = target.split("#", 1)[0]
+            if target and not re.match(r"[a-z]+://", target):
+                if not (path.parent / target).exists():
+                    raise ContractError(f"unresolved document link in {path.name}: {target}")
+    for path in fixture_files(fixtures):
+        for relative in re.findall(r"fixtures/([a-z][a-z0-9_]+\.(?:jsonl?|sql))", path.read_text()):
+            if not (fixtures / relative).is_file():
+                raise ContractError(f"unresolved fixture reference in {path.name}: {relative}")
 
     return {
         "version": version,
@@ -263,6 +293,7 @@ def validate_contract(root: Path) -> dict[str, Any]:
         "manifest_entries": len(entries),
         "manifest_sha256": manifest_digest,
         "adoption_status": matrix["status"],
+        **session_report,
     }
 
 

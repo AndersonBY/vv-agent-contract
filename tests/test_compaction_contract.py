@@ -266,50 +266,21 @@ class CompactionContractTests(unittest.TestCase):
         for case in invalid:
             self.assertIn('_vv_agent_compaction', case['input']['metadata'])
 
-    def test_receipt_replay_uses_exact_request_response_and_projection(self):
-        memory = fixture('memory_local.json')
-        case = next(c for c in memory['summary_compaction']['cases'] if c['name'] == 'recompression_merges_and_deduplicates_evidence')
-        replay = fixture('checkpoint_resume.json')['summary_receipt_replay']
-        expected_prompt = render_prompt(memory['summary_compaction'], replay['input']['language'], replay['input']['summary_event_limit'], case['expected_summary_input'])
-        vector = replay['summary_request_golden']
-        self.assertEqual(vector['request']['request']['messages'], [dict(role='user', content=expected_prompt)])
-        for v in (vector, replay['changed_request']['golden']):
-            wire = canonical(v['request']).encode()
-            self.assertEqual(v['sha256'], hashlib.sha256(wire).hexdigest())
-            self.assertEqual(v['canonical_json_utf8_bytes'], len(wire))
-            self.assertEqual(v['canonical_json_base64'], base64.b64encode(wire).decode())
-        self.assertNotEqual(vector['sha256'], replay['changed_request']['golden']['sha256'])
-        receipt = replay['input']['retained_receipt']
-        self.assertEqual(receipt['request_digest'], vector['sha256'])
-        self.assertEqual(receipt['response']['content'], case['input']['summary_response'])
-        self.assertEqual(receipt['response']['token_usage'], replay['input']['retained_model_call']['usage'])
-        self.assertEqual(replay['expected']['messages'], case['expected']['messages'])
-        self.assertEqual(replay['second_replay']['messages'], replay['expected']['messages'])
-        self.assertEqual(replay['after_transcript_commit']['messages'], replay['expected']['messages'])
-        self.assertEqual(replay['exchange_directions'], ['python_to_rust', 'rust_to_python'])
-        for key in ('new_model_dispatches', 'new_model_call_records', 'new_budget_total_tokens', 'repeated_tool_effects'):
-            self.assertEqual(replay['expected'][key], 0)
 
     def test_accounting_and_emergency_reuse_existing_shapes(self):
         usage = fixture('token_usage.json')
         for case in usage['compaction_cases']:
-            previous = case['input']['existing_model_calls']
-            added = case['expected']['model_calls'][len(previous):]
-            self.assertEqual(len(added), len(case['input']['provider_responses']))
-            self.assertEqual(len(added), len(case['input']['allocated_operations']))
-            filename, pointer = case['input']['transcript_ref'].split('#')
-            transcript = fixture(filename)
-            for part in pointer.strip('/').split('/'):
-                transcript = transcript[int(part)] if isinstance(transcript, list) else transcript[part]
-            self.assertIn('messages', transcript['input'])
-            self.assertIn('messages', transcript['expected'])
-            self.assertEqual(case['expected']['model_calls'], previous + added)
-            self.assertEqual(case['expected']['new_model_dispatches'], len(added))
-            self.assertEqual(case['expected']['new_model_call_records'], len(added))
-            self.assertEqual(case['expected']['new_budget_total_tokens'], sum(r['usage']['total_tokens'] for r in added))
-            for record in previous + added:
-                self.assertEqual(set(record), set(usage['wire']['model_call_shape']))
-                self.assertEqual(record['operation'], 'memory_compaction')
+            calls = case['expected']['model_calls']
+            for call in calls:
+                self.assertEqual(call['schema_version'], 'vv-agent.model-call.v2')
+                self.assertEqual(call['operation'], 'memory_compaction')
+            if case['name'] == 'summary_receipt_replay':
+                self.assertEqual(case['expected']['new_model_dispatches'], 0)
+                self.assertEqual(case['expected']['new_budget_total_tokens'], 0)
+            else:
+                values = [call['usage']['total_tokens'] for call in calls]
+                self.assertEqual(case['expected']['new_budget_total_tokens'],
+                                 None if any(v is None for v in values) else sum(values))
         lifecycle = fixture('memory_lifecycle.json')
         emergency = lifecycle['provider_attempts']['strategies'][1]
         self.assertTrue(emergency['requires_summary'])

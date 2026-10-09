@@ -1,6 +1,6 @@
 # Prompt Bundles And Bounded Tool Results
 
-Contract `14.0.0` defines one resolved prompt representation, one sparse
+Contract `24.0.0` defines one resolved prompt representation, one sparse
 bounded-result extension, and the current artifact-backed Message and
 microcompaction behavior. These are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's
@@ -59,14 +59,15 @@ unless that provider capability explicitly consumes them.
 ## Run Scope And Resume
 
 Time and every other volatile section are resolved once when a new run is
-compiled. They may differ between separately started runs. The run definition
-stores `prompt_bundle`, not a second flattened prompt string. Checkpoint,
-distributed execution, and resume reconstruct the task from that frozen bundle
-and must neither invoke instruction/context producers nor read the clock again.
+compiled. They may differ between separately started runs. The opaque definition
+in `turn_started.definition` stores `task.prompt_bundle`, not a second flattened
+prompt string. Session reconstruction and resume reconstruct the task from that
+frozen bundle and must neither invoke instruction/context producers nor read the
+clock again.
 
-The current durable definition discriminator is
-`vv-agent.run-definition.v5`. Readers reject every other run-definition
-version. `compiled_prompt`, metadata section side channels, and their readers
+The frozen logical definition is the object in `run_definition.json`, bound by
+turn_started.definition_digest and the current record discriminator. Readers
+reject missing, stale, malformed and unknown record versions. `compiled_prompt`, metadata section side channels, and their readers
 are not current shapes.
 
 ## Bounded Tool Results
@@ -76,9 +77,8 @@ the minimal result with required
 `tool_call_id`, `content`, `status_code`, and `directive`. Optional fields are
 omitted when absent. A truncated result additionally has:
 
-`status_code` accepts only the current completed-result values. Deferred is a
-closed `ToolCallOutcome.Deferred(DeferredToolHandle)` variant and never a
-`ToolExecutionResult` status; a completed result carrying deferred is rejected.
+`status_code` accepts only the current completed-result values. Provider acceptance
+retains a handle through op_parked and is not a completed ToolExecutionResult.
 
 - `truncated: true`;
 - `truncation_reason` (`output_limit` or `read_limit`);
@@ -104,8 +104,7 @@ backend; there is no artifact bypass API.
 
 The canonical host `Message` may carry the same object as optional
 `artifact_ref: ToolArtifactRef`. The field is omitted when absent and survives
-session, result, checkpoint, run-definition, journal, and distributed
-round-trips. It is host-only: every provider/model message projection removes
+session record, result and frozen-definition round-trips. It is host-only: every provider/model message projection removes
 `artifact_ref` without changing `content`.
 
 For terminal output, `WorkspaceBackend.write_text_chunks_exclusive` is the
@@ -117,7 +116,7 @@ the complete terminal output in application memory. Local adapters map the
 logical artifact path to private storage, while other backends provide the same
 exclusive streaming semantics in their own storage domain.
 
-A `cursor` is a closed object with `kind`, `offset_chars`, and source
+A `cursor` is a closed object with `kind`, `path`, `offset_chars`, and source
 `sha256`. `read_file` accepts the same cursor together with its required path,
 verifies the digest before reading, and returns the next bounded slice. The
 offset unit is Unicode scalar values. A changed source fails with the stable
@@ -128,7 +127,7 @@ the 12,000-character preview limit. The preview is deterministic head/tail
 text, not a first-only slice. `read_file` returns a bounded slice plus cursor
 instead of `content: null`; a single oversized line is therefore recoverable.
 All sparse result fields survive tool messages, cycle records, AgentResult,
-operation journals, checkpoints, distributed responses, and strict readers.
+operation receipts, terminal projections and strict readers.
 
 ## Archive-Backed Microcompaction
 
@@ -141,8 +140,8 @@ compaction.
 `MicrocompactionPolicy` is a public, closed value with
 `trigger_ratio`, `target_ratio`, `keep_recent_cycles`, and
 `min_result_chars`. It is configured through `RunConfig`, copied explicitly to
-`AgentTask`, and frozen as `runtime_controls.microcompaction_policy` in the
-current run definition. Generic metadata is not a policy transport. The default
+`AgentTask`, and frozen in the task runtime controls in the
+frozen run definition. Generic metadata is not a policy transport. The default
 policy is `0.75`, `0.60`, `3`, and `500`; `0 < target_ratio < trigger_ratio <=
 1`. Ratios must be finite numbers. `keep_recent_cycles` is an integer in
 `0..4294967295`, while `min_result_chars` is an integer in
@@ -193,7 +192,7 @@ model-facing recovery path.
 
 ## Summary And Recovery Projection
 
-Contract `23.0.0` uses the history-preserving pipeline in
+Contract `24.0.0` uses the history-preserving pipeline in
 `parity-contract.md#history-preserving-compaction`. Microcompaction is the only
 pruner. Relative transcript age and an atomic raw tail protect recent calls;
 no image or tool-call skeleton is stripped to fit a threshold. Summary input
@@ -209,8 +208,8 @@ host evidence and persistence integrity boundaries remain strict.
 
 Summary metadata retains complete typed artifacts and cursors across repeated
 summaries. Its path list is deterministic, requires the policy-checked recovery
-surface, and does not perform automatic file restoration. Session/checkpoint
-storage preserves that metadata, while provider projection strips the reserved
+surface, and does not perform automatic file restoration. Session record
+projection preserves that metadata, while provider projection strips the reserved
 `_vv_agent_compaction` item. Hashes and byte counts are not rendered into summary
 text. This does not change ordinary bounded tool-result recovery envelopes.
 
@@ -218,25 +217,22 @@ text. This does not change ordinary bounded tool-result recovery envelopes.
 
 Only `direct` and `hidden` are current `ToolExposure` values. `direct` is
 eligible for the model-visible schema subject to normal policy; `hidden` is
-not model-visible but may be invoked by trusted host/runtime code. The former
-`deferred` value had no discovery or execution semantics and is removed rather
-than being represented as a misleading capability.
-
+not model-visible but may be invoked by trusted host/runtime code.
 The model-visible `compress_memory` tool and its `memory_notes` state are also
 removed. Framework-owned proactive, micro, summary, and recovery compaction
 remain internal behavior and do not expose a replacement model tool.
 
 ## Required Producer Evidence
 
-Both implementations must prove real producer paths for:
+Required implementations must prove real producer paths for:
 
 1. bundle order, stable hash, flattening, and explicit provider projection;
 2. one run's fixed time, a new run's independently resolved time, and unchanged
-   time after checkpoint resume;
-3. strict rejection of stale prompt/run-definition wires and no metadata
+   time after session resume;
+3. strict rejection of stale prompt/record wires and no metadata
    section side channel;
 4. bounded foreground/background bash recovery, read-file cursor recovery,
-   stale-cursor rejection, and checkpoint/distributed serialization;
+   stale-cursor rejection, and session record serialization;
 5. candidate-aware archive-backed microcompaction for built-in and custom
    tools, `preserve` retention, persistence and artifact-integrity failure
    safety, actual-token target application, compact marker shape, and one pass
