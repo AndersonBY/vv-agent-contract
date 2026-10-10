@@ -40,3 +40,44 @@ Fixtures: `session_projection.json`, `session_semantics.json`,
 `configured_sub_agent.json`, `configured_sub_agent_events.jsonl`,
 `public_configured_sub_agent.json`, `manager_tool_envelope.json`,
 `handoff_contract.json`, `runner_trace.jsonl` and `runner_trace_spans.json`.
+
+## Custom child batches
+
+A custom child callback MAY return one child specification or a nonempty sequence.
+Every member MUST be a child specification with the same background flag. Empty,
+invalid-member and mixed-background batches raise a typed invalid-batch error
+before child creation or parent park. Callback host SQL writes, every child and
+initial input, parent started/parked records and background result MUST commit
+in one transaction or roll back together. Nontransactional effects inside the
+callback have no rollback guarantee and MUST NOT be used for admission. Custom
+and delegated batches use the same siblings, completion, cancellation and
+late/duplicate evidence rules.
+
+## Isolated supervision and retry
+
+A scan MUST handle later items after any individual runtime factory, drive,
+projection or dispatch exception and MUST surface all failures after the scan.
+The host MAY supply dispatch(session identity) instead of inline execution. In
+dispatch mode the scanner MUST NOT construct runtimes or execute drives. Scan
+time is independent of drive duration; SQL, dispatch and inline projection
+callbacks MUST have host-enforced bounded I/O timeouts. Inline execution remains
+the default for in-process hosts and cannot bound scan time independently of
+drives. No thread pool or cancellation of arbitrary host code is implied.
+
+Scheduled execution resolves the runtime factory under a lease. A typed
+not-ready exception with positive integer retry_after_ms MUST defer admission or
+the existing turn without a failed terminal or consuming pending input. Other
+factory/driver exceptions back off and re-raise. A retry gate MUST cover ready
+inbox, due schedules, direct wakes and duplicate lease acquisition. A stale or
+expired lease MUST NOT defer work. Deferral MUST preserve every newer execution
+schedule and MUST NOT rewrite the log. Consumer failure backoff is independent
+of execution leases and other consumers. Backoff expires using database time;
+work MUST become discoverable again without a new external signal.
+
+Dispatch itself is at least once, not a queue claim. Hosts MUST bound queued
+not-yet-leased duplicate messages with expiry no longer than the scan interval,
+or equivalent coalescing, including wake deliveries; bound prefetched/reserved
+work too. Lost/expired messages remain runnable for the next scan. Host queue
+latency, callback/SQL timeouts and inline-mode drive time are separate from the
+beat interval. Fixtures: session_supervision.json; real producer acceptance
+requires the Python batch, supervisor and fake transport suites on both stores.

@@ -1,6 +1,6 @@
 # Session kernel
 
-Contract 24.0.0 defines one execution authority: the ordered session log and inbox.
+Contract 25.0.0 defines one execution authority: the ordered session log and inbox.
 MUST, MUST NOT and SHOULD are normative. Logical bytes, admission, authenticity,
 fencing and delivery are public requirements. SQL tables, DDL, Redis keys, store
 constructors, method signatures, connection ownership and thread layout are out of

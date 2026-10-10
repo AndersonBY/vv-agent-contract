@@ -1,5 +1,12 @@
 # Changelog
 
+## 25.0.0 — major (local candidate)
+
+- Add atomic custom child batches and typed invalid-batch rejection.
+- Add isolated dispatch supervision and lease-fenced readiness/failure retry.
+- Public API inventory v9; existing wire shapes unchanged.
+- Python adoption pending; no central verification recorded. Rust stays frozen.
+
 ## 24.0.1 — patch
 
 Evidence correction; no wire shape or normative behavior change. The 24.0.0

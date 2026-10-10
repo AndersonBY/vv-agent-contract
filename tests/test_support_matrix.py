@@ -16,13 +16,14 @@ import record_adoption  # noqa: E402
 class SupportMatrixTests(unittest.TestCase):
     def setUp(self) -> None:
         self.matrix = contractctl.load_json(ROOT / "support-matrix.json")
-        self.matrix["status"] = "verified"
+        self.matrix.update(status="verified", last_verified_at="2026-10-10T00:00:00Z",
+                           cross_repository_run="https://github.com/AndersonBY/vv-agent-contract/actions/runs/1")
         self.matrix["implementations"]["python"].update(status="verified", verified_revision="a" * 40)
 
     def test_current_python_adoption_with_frozen_rust(self) -> None:
         # The recording run validates this file after record_adoption marks it verified.
         matrix = contractctl.load_json(ROOT / "support-matrix.json")
-        self.assertEqual(matrix["contract_version"], "24.0.1")
+        self.assertEqual(matrix["contract_version"], "25.0.0")
         self.assertEqual(matrix["required_implementations"], ["python"])
         python = matrix["implementations"]["python"]
         self.assertIn(matrix["status"], ("pending-adoption", "verified"))
@@ -35,7 +36,7 @@ class SupportMatrixTests(unittest.TestCase):
         self.assertEqual((rust["contract_version"], rust["package_series"], rust["status"]),
                          ("23.0.0", "0.21.x", "frozen"))
         self.assertEqual(rust["verified_revision"], "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac")
-        contractctl.validate_support_matrix(matrix, "24.0.1")
+        contractctl.validate_support_matrix(matrix, "25.0.0")
 
     def test_future_python_adoption_preserves_entire_frozen_record(self) -> None:
         frozen = copy.deepcopy(self.matrix["implementations"]["rust"])
@@ -57,11 +58,11 @@ class SupportMatrixTests(unittest.TestCase):
             contractctl.validate_support_matrix(recorded, "24.0.0")
 
     def test_only_required_implementations_must_be_verified(self) -> None:
-        self.matrix["implementations"]["rust"].update(status="in-progress", contract_version="24.0.1", verified_revision=None)
-        contractctl.validate_support_matrix(self.matrix, "24.0.1")
+        self.matrix["implementations"]["rust"].update(status="in-progress", contract_version="25.0.0", verified_revision=None)
+        contractctl.validate_support_matrix(self.matrix, "25.0.0")
         self.matrix["required_implementations"].append("rust")
         with self.assertRaisesRegex(contractctl.ContractError, "verified rust"):
-            contractctl.validate_support_matrix(self.matrix, "24.0.1")
+            contractctl.validate_support_matrix(self.matrix, "25.0.0")
 
     def test_invalid_matrix_boundaries_are_rejected(self) -> None:
         mutations = [
@@ -81,7 +82,7 @@ class SupportMatrixTests(unittest.TestCase):
             (("implementations", "rust"), "verified_revision", "00f4240"),
             (("implementations", "rust"), "status", []),
             (("implementations", "rust"), "unexpected", True),
-            (("implementations", "python"), "contract_version", "25.0.0"),
+            (("implementations", "python"), "contract_version", "26.0.0"),
             (("implementations", "python"), "status", "in-progress"),
         ]
         for path, key, value in mutations:
@@ -92,7 +93,7 @@ class SupportMatrixTests(unittest.TestCase):
                     target = target[part]
                 target[key] = value
                 with self.assertRaises(contractctl.ContractError):
-                    contractctl.validate_support_matrix(matrix, "24.0.1")
+                    contractctl.validate_support_matrix(matrix, "25.0.0")
         for path, key in (((), "schema_version"), ((), "required_implementations"),
                           (("implementations", "rust"), "contract_version")):
             matrix = copy.deepcopy(self.matrix)
@@ -101,7 +102,7 @@ class SupportMatrixTests(unittest.TestCase):
                 target = target[part]
             del target[key]
             with self.assertRaises(contractctl.ContractError):
-                contractctl.validate_support_matrix(matrix, "24.0.1")
+                contractctl.validate_support_matrix(matrix, "25.0.0")
 
     def test_recording_invalid_matrix_never_writes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
