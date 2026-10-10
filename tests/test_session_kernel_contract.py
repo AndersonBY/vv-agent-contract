@@ -56,7 +56,7 @@ class SessionKernelContractTests(unittest.TestCase):
             self.assertEqual(case["completion_count"], 1)
             self.assertEqual(case["replay_disposition"], "noop")
             usage = case["projected_usage"]
-            self.assertEqual((usage["input_tokens"], usage["output_tokens"]), (12000, 300))
+            self.assertEqual((usage["input_tokens"], usage["output_tokens"]), (10, 5))
             self.assertEqual(usage["provider_usage"], case["usage"])
             self.assertEqual(usage["usage_source"], "provider_reported")
             self.assertEqual(usage["schema_version"], "vv-agent.token-usage.v1")
