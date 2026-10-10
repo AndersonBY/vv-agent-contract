@@ -1,5 +1,17 @@
 # Changelog
 
+## 26.0.0 — major (candidate)
+
+- Inbox schema 2 requires provider_result.usage as an object; empty means no
+  observed usage. Missing, null, invalid and extra fields reject.
+- Retain authenticated late usage in canonical completions and typed billing
+  projections, including audit attempts. Result and usage bytes both participate
+  in completed-attempt replay/conflict checks; replay never bills twice.
+- Public API inventory v10 records the inbox/accounting rule. Record schema 1,
+  RunEvent v6, model-call v2, task-token-usage v3, TokenUsage v1 and App Server v2
+  keep their shapes. Provider submit/query usage remains authoritative.
+- Python adoption and central verification pending; Rust stays frozen at v23.
+
 ## 25.0.0 — major (local candidate)
 
 - Add atomic custom child batches and typed invalid-batch rejection.

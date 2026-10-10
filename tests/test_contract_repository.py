@@ -139,7 +139,7 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "25.0.0")
+        self.assertEqual(report["version"], "26.0.0")
         self.assertEqual(report["domains"], 18)
         self.assertEqual(report["fixture_files"], 54)
         self.assertEqual(report["manifest_entries"], 53)
@@ -735,8 +735,8 @@ class ContractRepositoryTests(unittest.TestCase):
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(public_api["contract"], "vv-agent-public-api-v9")
-        self.assertEqual(public_api["schema_version"], 9)
+        self.assertEqual(public_api["contract"], "vv-agent-public-api-v10")
+        self.assertEqual(public_api["schema_version"], 10)
         capabilities = {
             item["id"]
             for domain in public_api["domains"]

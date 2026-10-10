@@ -33,7 +33,33 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertGreater(report["records"], 100)
         self.assertGreater(report["inbox_items"], 50)
         self.assertEqual(report["codec_vectors"], 77)
-        self.assertEqual(report["invalid_vectors"], 47)
+        self.assertEqual(report["invalid_vectors"], 52)
+
+    def test_authenticated_provider_usage_and_late_billing(self) -> None:
+        inbox = copy.deepcopy(next(v["wire"] for v in self.vectors["vectors"]
+                                   if v["type"] == "inbox" and v["wire"]["kind"] == "provider_result"))
+        self.assertEqual(inbox["schema_version"], 2)
+        for usage in [{}, {"prompt_tokens": 12000, "completion_tokens": 300}]:
+            inbox["payload"]["usage"] = usage
+            self.codec.validate(inbox, inbox=True)
+        for payload in [{k: v for k, v in inbox["payload"].items() if k != "usage"},
+                        inbox["payload"] | {"extra": True},
+                        *[inbox["payload"] | {"usage": v} for v in (None, [], 1, True, "usage")]]:
+            with self.subTest(payload=payload), self.assertRaises(session.ValidationError):
+                self.codec.validate(inbox | {"payload": payload}, inbox=True)
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(inbox | {"schema_version": 1}, inbox=True)
+        cases = {v["case"]: v for v in contractctl.load_json(ROOT / "fixtures/session_semantics.json")["cases"]}
+        for context in ("normal", "audit"):
+            case = cases["late_usage_" + context]
+            self.assertEqual(case["context"], context)
+            self.assertEqual(case["completion_count"], 1)
+            self.assertEqual(case["replay_disposition"], "noop")
+            usage = case["projected_usage"]
+            self.assertEqual((usage["input_tokens"], usage["output_tokens"]), (10, 5))
+            self.assertEqual(usage["provider_usage"], case["usage"])
+            self.assertEqual(usage["usage_source"], "provider_reported")
+            self.assertEqual(usage["schema_version"], "vv-agent.token-usage.v1")
 
     def test_strict_versions_types_nullability_and_identity(self) -> None:
         sample = self.record("op_started")

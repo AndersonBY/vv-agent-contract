@@ -312,7 +312,9 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
     require({"missing_version", "stale_version", "unknown_version", "malformed_version",
              "float_integer", "boolean_integer", "duplicate_member", "embedded_digest",
              "wrong_identity", "trailing_newline_hash", "closed_reserved_metadata",
-             "closed_task_metadata", "closed_child_task_metadata"} <= classes, "codec negative coverage")
+             "closed_task_metadata", "closed_child_task_metadata", "stale_inbox_version",
+             "missing_provider_usage", "extra_provider_field", "null_provider_usage",
+             "nonobject_provider_usage"} <= classes, "codec negative coverage")
     for name in ("session_semantics.json", "session_recovery.json"):
         cases = documents[name]["cases"]
         require(bool(cases), f"empty {name}")
