@@ -270,8 +270,8 @@ def validate_contract(root: Path) -> dict[str, Any]:
     except ValidationError as exc:
         raise ContractError(f"session fixtures: {exc}") from exc
     public_api = load_json(fixtures / "public_api.json")
-    if public_api.get("schema_version") != 9 or public_api.get("contract") != "vv-agent-public-api-v9":
-        raise ContractError("public_api.json must use the current v9 inventory")
+    if public_api.get("schema_version") != 10 or public_api.get("contract") != "vv-agent-public-api-v10":
+        raise ContractError("public_api.json must use the current v10 inventory")
     for path in required_docs + list((root / "docs").glob("*.md")):
         if path.name == "CHANGELOG.md":
             continue

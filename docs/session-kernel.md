@@ -1,6 +1,6 @@
 # Session kernel
 
-Contract 25.0.0 defines one execution authority: the ordered session log and inbox.
+Contract 26.0.0 defines one execution authority: the ordered session log and inbox.
 MUST, MUST NOT and SHOULD are normative. Logical bytes, admission, authenticity,
 fencing and delivery are public requirements. SQL tables, DDL, Redis keys, store
 constructors, method signatures, connection ownership and thread layout are out of
@@ -26,7 +26,7 @@ and array elements are not implicitly normalized, trimmed, sorted or deduplicate
 | Envelope | Required fields (no other fields) |
 | --- | --- |
 | Record | `schema_version:integer const 1`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload:J` selected by kind |
-| InboxItem | `schema_version:integer const 1`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
+| InboxItem | `schema_version:integer const 2`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
 
 The logical record has no top-level sequence, receiving time, writer epoch or
 digest member. Storage supplies ordered positions, timestamps and integrity
@@ -67,7 +67,7 @@ validation and fold rules supply their existing typed boundaries.
 | `user` | `content:V` |
 | `steer` | `content:V` |
 | `follow_up` | `content:V` |
-| `provider_result` | `operation_id:T`, `attempt:P`, `request_digest:H`, `provider_binding:T\|null`, `result:V`, `evidence:[T]` |
+| `provider_result` | `operation_id:T`, `attempt:P`, `request_digest:H`, `provider_binding:T\|null`, `result:V`, `usage:J`, `evidence:[T]` |
 | `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:[T]`, `reason?:S`, `metadata?:J` |
 | `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:V`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
 | `control` | `action:close/archive/suspend/resume/cancel/abort` |
@@ -76,6 +76,20 @@ validation and fold rules supply their existing typed boundaries.
 User content remains opaque at the generic boundary. Kernel reply producers currently use
 `{operation_id,interaction_id,text}` for ask_user and `{interaction_id,text}` for
 turn-level waits; the target turn/generation is supplied in the envelope.
+
+`provider_result.usage` MUST be a required JSON object, just like
+`op_completed.usage`; `{}` means no observed usage. Missing, null, non-object
+usage and unknown payload members MUST reject. Authentication MUST cover usage
+as well as result and the attempt identity. An authenticated result MUST retain
+usage unchanged in `op_completed.usage`, including normal, correction and audit
+completions. Synchronous model returns and provider submit/query Definitive
+outcomes MUST retain the same upstream usage bytes. Hosts MUST bill from the
+canonical typed usage projections, including late audit attempts: the provider
+call happened even when its result cannot affect execution. They MUST NOT decode
+usage from opaque `result` content. Re-delivery for an already completed attempt
+with a new input ID is a noop only when both result and usage have identical
+RFC8785 bytes; differing result or usage MUST be rejected as a result conflict.
+Replay MUST NOT create another completion or bill the attempt again.
 
 ## Nested values and attributes
 
