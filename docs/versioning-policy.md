@@ -20,9 +20,11 @@ evidence/docs without observable change. These labels do not promise old-wire
 reading. Each implementation pins an exact version/revision/artifact and manifest;
 consumers needing an older behavior pin its release.
 
-24.0.0 is major; 24.0.1 is a patch correcting captured evidence only. Current wires are record/inbox schema 1, RunEvent v6, model-call
-v2, task-token-usage v3, TokenUsage v1, App Server protocolVersion v2 and public API
-v8. Execution is one ordered session log/inbox; records own recovery, same-turn
+25.0.0 is major: public API v9 adds custom-child batches, scheduled runtime
+factory/not-ready handling, isolated dispatch scans and required retry gates on
+stores. Current wires remain record/inbox schema 1, RunEvent v6, model-call v2,
+task-token-usage v3, TokenUsage v1 and App Server protocolVersion v2.
+Execution is one ordered session log/inbox; records own recovery, same-turn
 waits, provider acceptance, budget reservations and child delivery. Creation seed
 and reserved vv_session objects define bootstrap/state boundaries. Storage layout
 is not contracted. The consolidated behavior and fixture actions are in
@@ -37,9 +39,10 @@ exists without all evidence; verified requires every required lock, real produce
 full gate and central cross-repository workflow. Frozen is implementation-only and
 retains its own pinned version, package series and verified baseline.
 
-Python alone is required and v24 remains pending-adoption until F3 and central CI
-pass. Rust is frozen at verified 23.0.0 / 0.21.x. New Python verification cannot
-claim newer Rust support. The complete frozen record must remain untouched.
+Python alone is required and v25 remains pending-adoption until Python 0.23.0
+adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
+New Python verification cannot claim newer Rust support. The complete frozen
+record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see
 [change workflow](change-workflow.md#frozen-implementations).
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "contract_version": "24.0.1",
-  "status": "verified",
+  "contract_version": "25.0.0",
+  "status": "pending-adoption",
   "required_implementations": [
     "python"
   ],
@@ -9,9 +9,9 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "24.0.1",
-      "status": "verified",
-      "verified_revision": "fac454a188f2b860504115a0c15d12d518c7e00f"
+      "contract_version": "25.0.0",
+      "status": "pending-adoption",
+      "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v24.0.1 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-10-09T22:10:41Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/37996799746"
+  "adoption_note": "F5 local candidate: batch custom children and isolated host dispatch. Python adoption and central CI remain open.",
+  "last_verified_at": null,
+  "cross_repository_run": null
 }

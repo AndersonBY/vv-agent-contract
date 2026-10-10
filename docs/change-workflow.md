@@ -36,8 +36,8 @@ diff -r dist-a dist-b
 
 Reviewed releases are immutable v<version> tags with deterministic artifact and
 SHA-256 metadata. Publication remains pending-adoption. Python is the only required
-implementation; F3 must pin the immutable v24 revision/artifact, synchronize its
-snapshot with checked-in tooling and update the actual default public producers.
+implementation; it must pin the immutable current revision/artifact, synchronize
+its snapshot with checked-in tooling and update the actual default public producers.
 Adapt existing producer tests instead of retaining parallel fixture branches.
 Retire replaced execution loops, selectors, wires and writable history surfaces.
 
@@ -59,8 +59,8 @@ entry. Only then may the support matrix become verified.
 
 Support-matrix schema 2 explicitly lists required implementations and per-entry
 contract_version. Schema 1 rejects. Rust remains frozen at 23.0.0 / 0.21.x, baseline
-00f4240786f1adea1dc0c4730da8ddd06a5ab8ac. Its lock/fixtures do not follow v24 and it
-does not participate in active central CI. Security, data integrity, v23 correctness
+00f4240786f1adea1dc0c4730da8ddd06a5ab8ac. Its lock/fixtures do not follow the current
+contract and it does not participate in active central CI. Security, data integrity, v23 correctness
 and nonbehavioral dependency/build upkeep are the maintenance scope. Reactivation
 requires a new Maker decision, full adoption of the then-current contract, all
 producer/full/central gates and restoring required status and CI/adoption tooling.
