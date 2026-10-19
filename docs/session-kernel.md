@@ -375,10 +375,12 @@ rejection semantics, including after consumption.
 
 Accepted non-null inputs MUST retain `model_binding` on input_applied:
 `ModelBinding = {backend:T, model:T, endpoints:[T], context_length:P|null,
-max_output_tokens:P|null}`. Each new primary request MUST carry model, route,
+max_output_tokens:N|null}`. Each new primary request MUST carry model, route,
 canonical model_settings and metadata.vv_session.model_binding. Resolution and
-execution MUST use the retained request alone and reject binding drift. A resolver
-failure after planning uses ordinary model attempt failure/unknown handling.
+execution MUST use the retained request alone and reject binding drift.
+Primary endpoint order MUST match the retained request binding, including retries, rather
+than the turn's frozen default endpoints.
+Resolver failure after planning uses ordinary model attempt failure/unknown handling.
 Retries, recovery, replay, projection and late provider_result MUST preserve the
 original plan and accounting identity. Already in-flight work is unaffected.
 Compaction/context budgeting MUST follow the selected model capacity and output

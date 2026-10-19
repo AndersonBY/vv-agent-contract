@@ -48,6 +48,10 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(request["model_settings"]["reasoning"], {"effort": "high"})
         self.assertEqual(request["metadata"]["vv_session"]["model_binding"]["backend"], "anthropic")
         self.assertEqual([c["model"] for c in case["calls"]], ["m", "m", "B"])
+        self.assertEqual([c["backend"] for c in case["calls"]], ["scripted", "scripted", "anthropic"])
+        zero_capability = copy.deepcopy(case["selection_record"])
+        zero_capability["payload"]["model_binding"]["max_output_tokens"] = 0
+        self.codec.validate(zero_capability)
         item = case["selection_record"]["payload"]["input"]
         self.assertEqual(item["schema_version"], 3)
         self.codec.validate(item, inbox=True)
