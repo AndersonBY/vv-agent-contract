@@ -32,13 +32,41 @@ class SessionKernelContractTests(unittest.TestCase):
         report = session.validate_session_fixtures(ROOT)
         self.assertGreater(report["records"], 100)
         self.assertGreater(report["inbox_items"], 50)
-        self.assertEqual(report["codec_vectors"], 77)
-        self.assertEqual(report["invalid_vectors"], 52)
+        self.assertEqual(report["codec_vectors"], 81)
+        self.assertEqual(report["invalid_vectors"], 70)
+
+    def test_model_selection_retains_retry_model_route_and_billing(self) -> None:
+        cases = contractctl.load_json(ROOT / "fixtures/session_semantics.json")["cases"]
+        case = next(c for c in cases if c["case"] == "model_selection_mid_session_retry")
+        plans = case["plans"]
+        self.assertEqual([p["payload"]["request"]["model"] for p in plans], ["m", "m", "B"])
+        self.assertEqual(plans[0]["payload"]["request"], plans[1]["payload"]["request"])
+        self.assertEqual(plans[0]["operation_id"], plans[1]["operation_id"])
+        self.assertEqual([p["attempt"] for p in plans], [1, 2, 1])
+        request = plans[2]["payload"]["request"]
+        self.assertEqual(request["route"], {"backend_type": "anthropic"})
+        self.assertEqual(request["model_settings"]["reasoning"], {"effort": "high"})
+        self.assertEqual(request["metadata"]["vv_session"]["model_binding"]["backend"], "anthropic")
+        self.assertEqual([c["model"] for c in case["calls"]], ["m", "m", "B"])
+        item = case["selection_record"]["payload"]["input"]
+        self.assertEqual(item["schema_version"], 3)
+        self.codec.validate(item, inbox=True)
+        self.codec.validate(item | {"payload": {"selection": None}}, inbox=True)
+        negatives = [{}, {"model": "B"}, {"model": "B", "route": []},
+                     {"model": "B", "route": {}, "extra": True},
+                     {"model": "B", "route": {}, "model_settings": {"timeout_seconds": 0}},
+                     {"model": "B", "route": {}, "model_settings": {"extra_headers": {"x": 1}}},
+                     {"model": "B", "route": {}, "model_settings": {"extra_body": None}}]
+        for selection in negatives:
+            with self.subTest(selection=selection), self.assertRaises(session.ValidationError):
+                self.codec.validate(item | {"payload": {"selection": selection}}, inbox=True)
+        classes = {v["rejection_class"] for v in contractctl.load_json(ROOT / "fixtures/session_invalid.json")["vectors"]}
+        self.assertIn("model_selection_input_id_conflict", classes)
 
     def test_authenticated_provider_usage_and_late_billing(self) -> None:
         inbox = copy.deepcopy(next(v["wire"] for v in self.vectors["vectors"]
                                    if v["type"] == "inbox" and v["wire"]["kind"] == "provider_result"))
-        self.assertEqual(inbox["schema_version"], 2)
+        self.assertEqual(inbox["schema_version"], 3)
         for usage in [{}, {"prompt_tokens": 12000, "completion_tokens": 300}]:
             inbox["payload"]["usage"] = usage
             self.codec.validate(inbox, inbox=True)

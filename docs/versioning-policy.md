@@ -20,9 +20,9 @@ evidence/docs without observable change. These labels do not promise old-wire
 reading. Each implementation pins an exact version/revision/artifact and manifest;
 consumers needing an older behavior pin its release.
 
-26.0.0 is major: the closed provider_result inbox payload requires usage.
-Inbox schema 2 rejects schema 1; record schema 1 embeds only current inbox values.
-Public API inventory v10 records this changed inbox and accounting behavior.
+27.0.0 is major: closed model_selection inbox kind and durable selection log semantics.
+Inbox schema 3 rejects all earlier versions; record schema 1 embeds current inbox values
+and resolved selection binding. Public API inventory v11 includes the selection resolver.
 Current projection wires remain RunEvent v6, model-call v2,
 task-token-usage v3, TokenUsage v1 and App Server protocolVersion v2.
 Execution is one ordered session log/inbox; records own recovery, same-turn
@@ -40,7 +40,7 @@ exists without all evidence; verified requires every required lock, real produce
 full gate and central cross-repository workflow. Frozen is implementation-only and
 retains its own pinned version, package series and verified baseline.
 
-Python alone is required and v26 remains pending-adoption until Python 0.23.0
+Python alone is required and v27 remains pending-adoption until Python 0.24.0
 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
