@@ -81,3 +81,8 @@ work too. Lost/expired messages remain runnable for the next scan. Host queue
 latency, callback/SQL timeouts and inline-mode drive time are separate from the
 beat interval. Fixtures: session_supervision.json; real producer acceptance
 requires the Python batch, supervisor and fake transport suites on both stores.
+
+Model selection is session-local durable execution state. Consumers MUST attribute
+model-call usage/backend/model from the original planned request, including late
+receipts and replay; current selection is never a billing source. Child sessions
+retain their own selection state and do not inherit later parent inputs.

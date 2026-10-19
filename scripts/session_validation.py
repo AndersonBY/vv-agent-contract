@@ -22,7 +22,7 @@ RECORD_KINDS = {
 }
 INBOX_KINDS = {
     "user", "steer", "follow_up", "provider_result", "approval_answer",
-    "child_result", "control", "provider_evidence",
+    "child_result", "control", "provider_evidence", "model_selection",
 }
 BOUNDARY_STAGES = {
     "before_memory", "after_cycle", "memory_started", "memory_completed",
@@ -32,7 +32,7 @@ HANDLE_VARIANTS = {"provider", "approval", "user", "child"}
 KEYWORDS = {
     "$schema", "type", "const", "enum", "oneOf", "anyOf", "allOf", "if", "then",
     "properties", "required", "additionalProperties", "items", "minLength",
-    "maxLength", "pattern", "minimum", "maximum",
+    "maxLength", "pattern", "minimum", "maximum", "exclusiveMinimum",
 }
 
 
@@ -114,6 +114,9 @@ def validate_schema(value: Any, schema: dict[str, Any]) -> None:
         properties = schema.get("properties", {})
         if schema.get("additionalProperties") is False:
             require(set(value) <= set(properties), "unknown fields")
+        if isinstance(schema.get("additionalProperties"), dict):
+            for key in value.keys() - properties.keys():
+                validate_schema(value[key], schema["additionalProperties"])
         for key in value.keys() & properties.keys():
             validate_schema(value[key], properties[key])
     if isinstance(value, list) and "items" in schema:
@@ -125,6 +128,7 @@ def validate_schema(value: Any, schema: dict[str, Any]) -> None:
         if "pattern" in schema:
             require(re.search(schema["pattern"], value) is not None, "pattern mismatch")
     if type(value) in (int, float):
+        require(value > schema.get("exclusiveMinimum", -math.inf), "exclusive minimum")
         require(schema.get("minimum", -math.inf) <= value <= schema.get("maximum", math.inf), "number bounds")
 
 
@@ -204,6 +208,8 @@ class Codec:
         json_value(wire)
         validate_schema(wire, self.inbox_schema if inbox else self.record_schema)
         if inbox:
+            if wire["kind"] == "model_selection":
+                require(wire["target_turn_id"] is None and wire["generation"] is None, "model selection scope")
             return
         kind, p = wire["kind"], wire["payload"]
         require(wire["record_id"] == record_id(wire), "wrong record identity")
@@ -285,7 +291,7 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
         require(label not in classes, f"duplicate rejection class: {label}")
         classes.add(label)
         raw = decode(vector)
-        if layer in {"fold", "admission"}:
+        if layer in {"fold", "admission", "input_conflict"}:
             require(bool(vector.get("reason")), f"missing {layer} rejection reason: {label}")
             if layer == "fold":
                 require(bool(vector.get("prefix_ids")), f"missing fold prefix: {label}")
@@ -293,6 +299,12 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
                 require(set(vector["prefix_ids"]) <= source_ids, f"unretained fold prefix: {label}")
             else:
                 require(bool(vector.get("audit_record_id")), f"missing admission audit: {label}")
+                if layer == "input_conflict":
+                    original = next(r for r in documents["session_invalid.json"]["source_records"]
+                                    if r["session_id"] == vector["session_id"] and r["record_id"] == vector["audit_record_id"])
+                    incoming = strict_json_loads(raw.decode("utf-8"))
+                    require(original["payload"]["input"]["input_id"] == incoming["input_id"], "conflict input identity")
+                    require(original["payload"]["input"] != incoming, "conflict needs changed payload")
             continue
         require(layer in {"codec", "inbox_codec", "constructor"}, f"unknown rejection layer: {layer}")
         if layer == "constructor":

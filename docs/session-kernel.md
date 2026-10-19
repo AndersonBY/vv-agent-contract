@@ -1,6 +1,6 @@
 # Session kernel
 
-Contract 26.0.0 defines one execution authority: the ordered session log and inbox.
+Contract 27.0.0 defines one execution authority: the ordered session log and inbox.
 MUST, MUST NOT and SHOULD are normative. Logical bytes, admission, authenticity,
 fencing and delivery are public requirements. SQL tables, DDL, Redis keys, store
 constructors, method signatures, connection ownership and thread layout are out of
@@ -26,7 +26,7 @@ and array elements are not implicitly normalized, trimmed, sorted or deduplicate
 | Envelope | Required fields (no other fields) |
 | --- | --- |
 | Record | `schema_version:integer const 1`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload:J` selected by kind |
-| InboxItem | `schema_version:integer const 2`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
+| InboxItem | `schema_version:integer const 3`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
 
 The logical record has no top-level sequence, receiving time, writer epoch or
 digest member. Storage supplies ordered positions, timestamps and integrity
@@ -42,7 +42,7 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 | --- | --- |
 | `session_created` | `principal:T`, `workspace:T`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:J` |
 | `turn_started` | `input_ids:[T]`, `definition:J`, `definition_digest:H`, `handler_version:T`, `budget:J`, `binding:T\|null`, `generation:N` |
-| `input_applied` | `input:InboxItem`, `input_digest:H`, `disposition:applied/rejected/noop/queued`, `reason:T\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T` |
+| `input_applied` | `input:InboxItem`, `input_digest:H`, `disposition:applied/rejected/noop/queued`, `reason:T\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, `model_binding?:ModelBinding` |
 | `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:J`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:J\|null`, `idempotency_key:T\|null`, `budget_admission:J`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]` |
 | `op_prepared` | `request:J`, `request_digest:H`, `op_kind:tool/interaction`, `tool:J`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:V`, `shared_state:J` |
 | `turn_parked` | `interaction_id:T`, `question:S`, `source_operation_id:T`, `source_attempt:P` |
@@ -67,6 +67,7 @@ validation and fold rules supply their existing typed boundaries.
 | `user` | `content:V` |
 | `steer` | `content:V` |
 | `follow_up` | `content:V` |
+| `model_selection` | `selection:ModelSelection\|null` |
 | `provider_result` | `operation_id:T`, `attempt:P`, `request_digest:H`, `provider_binding:T\|null`, `result:V`, `usage:J`, `evidence:[T]` |
 | `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:[T]`, `reason?:S`, `metadata?:J` |
 | `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:V`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
@@ -352,3 +353,47 @@ their canonical behavior.
 `app_server_protocol.json` contains real request/result/notification transcripts,
 schema exports and `#/host_interaction_values` for HostInteractionRequest and
 HostInteractionOutcome wires. Both fixtures describe one protocol.
+
+## Per-session model selection
+
+`ModelSelection = {model:T, model_settings?:ModelSettings, route:J}` is closed.
+ModelSettings uses its existing canonical fields (fixture `model_settings.json`);
+reasoning effort belongs in `reasoning:{effort:...}`, not route. Omitted settings
+mean empty settings for the new model, with one transport attempt per logged
+attempt. The explicitly opaque route carries host routing such as backend_type.
+Both target_turn_id and generation MUST be null. Selection targets this session
+only; it MUST NOT propagate to child sessions.
+
+The holder MUST consume selections in inbox order at a new-cycle boundary after
+the active operation batch and retries close, or while idle. It MUST resolve the
+selection without provider submission. Unresolvable/unauthorized selections MUST
+be logged rejected with reason `model_selection_unresolvable`, leaving the prior
+selection intact. Later valid inputs MUST remain admissible. Latest accepted
+selection persists across turns until replaced; null restores the frozen task
+model/settings. Input IDs have ordinary identical-byte replay / conflicting-byte
+rejection semantics, including after consumption.
+
+Accepted non-null inputs MUST retain `model_binding` on input_applied:
+`ModelBinding = {backend:T, model:T, endpoints:[T], context_length:P|null,
+max_output_tokens:N|null}`. Each new primary request MUST carry model, route,
+canonical model_settings and metadata.vv_session.model_binding. Resolution and
+execution MUST use the retained request alone and reject binding drift.
+Primary endpoint order MUST match the retained request binding, including retries, rather
+than the turn's frozen default endpoints.
+Resolver failure after planning uses ordinary model attempt failure/unknown handling.
+Retries, recovery, replay, projection and late provider_result MUST preserve the
+original plan and accounting identity. Already in-flight work is unaffected.
+Compaction/context budgeting MUST follow the selected model capacity and output
+reserve; internal summary/extraction models keep their independently frozen routes.
+Prompt-too-long recovery retains one receipt/accounting entry per call and does
+not spend another logical primary cycle. Events/usage MUST use each plan's model
+and backend, including late audit usage, rather than the current selection.
+
+App Server `thread/model/select` params are exactly `{threadId:T,inputId:T,
+selection:ModelSelection|null}`; result is exactly `{threadId:T,inputId:T,
+accepted:true}`. It submits the same inbox input, with inputId unchanged. This is
+admission acknowledgement, not selection validation; conflicting inputId returns
+-32602. Schema exports retain closed params and the current ModelSettings shape.
+Canonical evidence: `session_semantics.json` case
+`model_selection_mid_session_retry`, `session_codec_vectors.json`,
+`session_invalid.json` and `app_server_protocol.json`.

@@ -19,7 +19,7 @@ Storage layouts and constructor/method signature catalogs are outside contract.
 Run independent Node JCS checks, rebuild SHA256SUMS with contractctl manifest,
 validate, repository unittest and two byte-identical builds. Review semantic diffs;
 a digest proves bytes, not behavior. Canonical producer gates cover all 14 record
-kinds, eight inbox kinds, seven boundaries and four handles, codec negatives,
+kinds, nine inbox kinds, seven boundaries and four handles, codec negatives,
 admission/fencing, failure cuts, cursors, children, compaction and JSON-RPC exports.
 
 ```bash

@@ -1,5 +1,12 @@
 # Changelog
 
+## 27.0.0
+
+Durable session-scoped model_selection inbox (schema 3), retained route/settings
+and resolved model binding, boundary-only latest-wins/clear behavior, rejection
+without poisoning, per-plan execution/billing/capacity and App Server submission.
+Public API inventory v11. Python 0.24.0 adoption pending; Rust remains frozen.
+
 ## 26.0.0 — major (candidate)
 
 - Inbox schema 2 requires provider_result.usage as an object; empty means no
