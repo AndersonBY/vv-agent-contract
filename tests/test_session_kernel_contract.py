@@ -213,10 +213,10 @@ class SessionKernelContractTests(unittest.TestCase):
         with self.assertRaises(session.ValidationError):
             session.validate_schema({"kind": "typed", "value": True}, schema)
 
-    def test_app_server_current_wire_owner_and_closed_boundary(self) -> None:
+    def test_app_server_current_wire_shared_control_and_closed_boundary(self) -> None:
         app = contractctl.load_json(ROOT / "fixtures/app_server_protocol.json")
-        self.assertEqual(app["protocol_version"], "v2")
-        self.assertTrue(app["facts"]["observer_cannot_approve"])
+        self.assertEqual(app["protocol_version"], "v3")
+        self.assertTrue(app["facts"]["observer_can_approve"])
         self.assertTrue(app["facts"]["timeout_at_absolute_deadline"])
         closed_methods = {transcript["request"]["method"] for transcript in app["transcripts"]
                           for response in transcript.get("responses", [])
@@ -237,7 +237,7 @@ class SessionKernelContractTests(unittest.TestCase):
 
     def test_app_server_exports_use_one_status_and_current_optional_fields(self) -> None:
         app = contractctl.load_json(ROOT / "fixtures/app_server_protocol.json")
-        expected = ["idle", "running", "interrupted", "archived", "closed"]
+        expected = ["idle", "running", "provider_running", "child_running", "user_wait", "approval_wait", "retry_backoff", "suspended", "terminal", "archived", "closed"]
         schemas = {name: json.loads(value) for name, value in app["schemas"]["jsonSchema"].items()}
         self.assertEqual(schemas["AppThread"]["properties"]["status"]["enum"], expected)
         for name, schema in schemas.items():

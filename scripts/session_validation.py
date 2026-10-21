@@ -336,11 +336,11 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
     require(all(v["wire"]["kind"] == "context_compacted"
                 for v in documents["session_compaction.json"]["vectors"]), "invalid compaction vector kind")
     app = documents["app_server_protocol.json"]
-    require(app["protocol_version"] == "v2", "App Server version mismatch")
+    require(app["protocol_version"] == "v3", "App Server version mismatch")
     require(bool(app["transcripts"]), "empty App Server transcripts")
     require(len(app["schemas"]["jsonSchema"]) == 19, "App Server JSON bundle coverage")
     require(len(app["schemas"]["typescript"]) == 18, "App Server TypeScript bundle coverage")
-    statuses = ["idle", "running", "interrupted", "archived", "closed"]
+    statuses = ["idle", "running", "provider_running", "child_running", "user_wait", "approval_wait", "retry_backoff", "suspended", "terminal", "archived", "closed"]
     for source in app["schemas"]["jsonSchema"].values():
         for node in walk(strict_json_loads(source)):
             if isinstance(node, dict) and "enum" in node and "archived" in node["enum"]:
