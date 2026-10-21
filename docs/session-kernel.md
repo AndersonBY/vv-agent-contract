@@ -265,94 +265,151 @@ JSON-RPC behavior is defined below.
 
 ## App Server
 
-JSON-RPC 2.0 uses initialized `protocolVersion=v2`. Params, results and notifications
-are closed and reject unknown fields. Thread identity equals session identity;
-turnId equals runId. `attributes.app_server` is the sole durable thread metadata
-home. There is no independent thread or transcript ledger.
+JSON-RPC 2.0 uses initialized `protocolVersion=v3`. Objects are closed.
+Thread identity equals session identity; turnId equals runId. The session log
+and inbox own execution; connections are subscribers, never execution owners.
+The host authenticates connections. Before every thread read or action, including
+creation and listing, the processor calls `authorize(connection_id, method, params)`.
+A refusal returns -32027 `permission_denied` without reading or changing the thread.
+The local single-user DefaultAppServerHost allows everything; distributed hosts
+MUST implement the hook and apply their account and thread permissions.
 
-### Requests and results
+### Submission and control
 
-| Surface | Current shape and behavior |
-| --- | --- |
-| turn/resume params | Exactly `{threadId:T,turnId:T}`; missing/extra fields return -32602 `turn/resume requires exactly threadId and turnId`. No new input. |
-| turn/resume result | Required threadId, turnId, runId, status (`running/completed/failed/interrupted`); optional finalOutput, completionReason, completionToolName, partialOutput, waitReason, error, tokenUsage, budgetUsage, budgetExhaustion. |
-| thread/resume params | `{threadId:T,subscribe?:B,afterItemId?:S}`; subscribe defaults true. |
-| thread/resume result | `{thread:AppThread,turns:[AppTurn],items:[AppItem]}` with cursor-filtered items. |
-| turn/action params | Exactly threadId, turnId, actionId, action. action is a closed respond/suspend/resume/cancel/abort variant; respond carries the current strict user Message. |
-| turn/action result | Exactly `{threadId,turnId,actionId,accepted:true,status:'running'}`; identical retry returns retained admission outcome even after state advances; different bytes conflict. |
-| thread/status and thread/status/changed | Required threadId/status; optional waitReason, prompt, interactionId, sessionId, childTurnId, interactions. |
-| Interaction | Exactly `{sessionId:T,turnId:T,prompt?:S,interactionId?:T}`. |
-| turn/completed | Required threadId/turnId/status; optional runId, finalOutput, completionReason, completionToolName, partialOutput, waitReason, error, tokenUsage, budgetUsage, budgetExhaustion. Interrupted describes an attempt; only turn_ended is terminal. |
+`thread/start` requires `inputId`, with optional agentKey, cwd and metadata.
+The host supplies a globally unique stable inputId; it is also the threadId.
+For creation authorization, the host maps params.inputId directly to threadId.
+Creation uses the atomic session creation receipt, without listing sessions.
+Client inputId and actionId values match `^[A-Za-z0-9._:-]{1,128}$` (ASCII,
+no slash or whitespace). Internal session/input identities contain `/` and cannot
+be submitted as client identities. Invalid client IDs return -32602 before admission.
+The result has threadId, agentKey, cwd, current status, accepted and replayed.
+Identical creation retries return the creation receipt with current status. Changed creation bytes
+return -32024 `submission_conflict`.
 
-T is a nonempty string, S a string, B a boolean. Optional members are omitted,
-never filled with null. Strict accounting objects retain their canonical
-camel-cased shape, including output_repair and complete modelCalls; native keys
-inside providerUsage remain opaque. Identity strings have the existing 512-byte
-limits; response content keeps the 65536-byte limit.
+`turn/start` requires threadId, inputId, expectedTurnId (null for the first
+turn, otherwise the last admitted turn), and input; metadata is optional.
+`turn/steer` and `turn/followUp` require threadId, inputId, expectedTurnId and
+input. The expected turn must match the active turn for steering and the last
+admitted turn for follow-up. Input IDs are session-scoped and stored unchanged
+in the inbox. No connection or JSON-RPC request identity enters submission bytes.
+Expected turn and submission kind are retained in opaque input content.
+Admission and fencing are one store transaction. Identical retries are checked
+before current execution state and return the original threadId, turnId, inputId,
+inputSeq, accepted=true and replayed=true. Initial receipts use replayed=false.
+Changed bytes return -32024 `submission_conflict`; a stale expected turn returns
+-32025 `turn_mismatch`. Reconnect and lost replies cannot admit another turn.
 
-### Status and recovery
+`turn/action` retains its strict threadId, turnId, actionId, action shape and
+controller command digest algorithm; the inbox ID is `controller/` followed by
+that digest, outside the client-ID grammar. Actions are respond (strict user Message),
+suspend, resume, cancel and abort. Any authorized connection can submit them.
+`turn/interrupt` requires exactly threadId, expectedTurnId and actionId;
+it submits durable cancel even without a local handle. Its result is
+the turn/action admission receipt. Resume uses durable execution state, preserves
+lease fencing and reuses an available local handle. It never requires the
+original connection. Terminal resume returns the retained result without driving.
+Closed and archived sessions reject execution as before.
+All stable submissions, including approval answers, model selections and actions,
+return -32024 `submission_conflict` for an identical ID with different bytes.
+Each request receives exactly one JSON-RPC response. Failures after an admission
+receipt are notifications, never another response for that request.
 
-One projection function computes the single thread status enum
-`idle/running/interrupted/archived/closed` for AppThread.status, thread/status and
-thread/status/changed. AppTurn.status is pending/running/interrupted/completed/failed.
-Parked or suspended work is interrupted. Cancellation and abort project failed
-with their retained observation. Restart preserves the active turn and wait;
-it cannot infer a terminal or replay a completed model/tool call.
+A non-holder attempts the lease once and schedules an automatic retry
+at the observed holder's lease expiry, for root and foreground child sessions.
+If the holder renewed or another epoch took over, the retry waits for the new
+expiry without acquiring. Record progress does not cancel recovery: that writer
+may also die. An acquisition that still fails after expiry emits a typed
+error/warning with code lease_retry_exhausted. Embedded hosts call the public
+AppServer.wake(thread_id) after an inbox commit or from their scheduler; it is
+a trusted host entry point, not a client authorization bypass on the wire.
+Child completion delivery wakes the parent after the inbox transaction commits.
+Wake and expiry retries use a currently registered local subscriber, or drive
+without subscribing when none exists. Approvals then remain durably parked for
+approval/resolve from any authorized connection, subject to their retained deadline.
+Lease waits use bounded backoff. Local start-or-attach is atomic
+per thread; completion clears only its own handle. Lifecycle notifications derive
+turn identity from committed records. Every subscribed node observes turn/started
+and turn/completed for each turn, including queued follow-ups, through record
+tailing or host wake delivery. Notification observers never acquire execution leases.
+Each session has its own 50 ms to 1 s idle/error backoff; an observer reads only
+due sessions in bounded pages without session-row locks. Transient failures warn
+at a bounded rate and keep observing. Projection and transport writes happen
+outside store transactions and connection locks. On the last local unsubscribe
+or disconnect, discard that session's notification position. A first subscriber
+starts at the current head, or immediately before an active turn's start; history
+belongs to thread/events/list, not live notifications.
 
-Execution on a closed thread through turn/start, turn/resume or thread/resume with
-execution subscription (`subscribe=true` or omitted) returns -32602 `Thread is closed`.
-`thread/resume` with `subscribe=false` remains a read-only snapshot; read/list remain
-available. Archive retains the existing THREAD_ARCHIVED error. Resume subscribes
-before future events, reuses a local handle, honors the live lease after restart,
-and returns a terminal's original retained result without driving.
+`approval/resolve` accepts threadId, turnId, requestId, decision, optional reason
+and metadata from any authorized connection. The server resolves the pending
+request to its retained operation, attempt, scope and request digest, and pushes
+an approval_answer inbox input. It never accepts caller-selected binding fields.
+The original absolute deadline and timeoutDecision remain authoritative.
 
-Original non-text input survives read/resume. Later turns use full same-session
-projected history after accepted compaction. WAIT_USER replies continue the same
-turn and operation with one definitive receipt. ask_user has no tool item before
-that receipt; safe interaction projection comes first. A child wait retains the
-parent wire turn, with childTurnId naming the actual child wait. Reply targeting
-comes from retained evidence. Interactions expose no operation/request digest,
-arguments, lease or handle.
+### Replay
 
-Normal completion projects idle status before turn/completed. Interrupted-attempt
-ordering is retained, followed by interrupted status with safe interactions;
-stable IDs and subsequent status reads recover the parked fact. Tool lifecycle
-notifications remain under toolLifecycle.executed. Model identity has exactly
-callId, operationId, attempt, operation, cycleIndex, backend and model. App item
-identity is `item_{event_id}` and retained timeline replay uses afterItemId.
+`thread/read` and `thread/resume` return the complete snapshot; afterItemId is
+removed. Resume optionally accepts subscribe (default true).
+`thread/events/list` requires threadId and limit (integer 1..256), with optional
+afterCursor and throughCursor. A cursor is the closed object
+`{threadId,seq,offset,recordDigest}`. seq is a positive durable record sequence;
+offset is the number of events already consumed in that record (zero is the
+boundary before its first event); recordDigest is the SHA-256 of the canonical record bytes.
+Several events from one record have distinct offsets and stable event IDs.
+The fixed throughCursor is inclusive and defaults to the head record's final
+event boundary captured at request start. Return `{events,nextCursor,
+throughCursor,more}`. Each event is `{cursor,event}` with the canonical RunEvent
+wire. Empty pages still advance nextCursor across non-event records. A page
+reads at most limit records and emits at most limit events, plus indexed
+projection dependencies and cursor validation reads. It never folds a full log.
+The returned throughCursor is reused across pages for a fixed replay window.
+Unknown, out-of-range, cross-thread, stale or malformed cursors return -32026
+`invalid_cursor`; they never restart replay. Clients deduplicate by event_id and
+persist the last cursor. Live deltas are volatile and have no durable cursor;
+final durable events/items replace their accumulated display via callId or
+toolCallId. App item identity remains `item_{event_id}`.
 
-### Approval and action identity
+### Status
 
-Commit and project approval/requested before sending approval/request to the
-original authenticated owner. Observers cannot approve and disconnect does not
-transfer ownership. Resume preserves that owner. Every unanswered approval
-resolves at its original absolute deadline using timeoutDecision, including time
-spent obtaining the provider decision; a vanished owner cannot block forever.
-The four case-sensitive decisions remain approve/deny/allow_session/timeout.
+AppThread.status, thread/status and thread/status/changed use one projection:
+idle, running, provider_running, child_running, user_wait, approval_wait,
+retry_backoff, suspended, terminal, archived, closed. Terminal means the last
+turn ended and there is no queued next turn; idle means no turn yet.
+thread/status and thread/status/changed contain exactly threadId, status, phase,
+waitKind (nullable provider/child/user/approval/retry), nextDriveAt (nullable
+Unix milliseconds), pendingInteraction (nullable Interaction), unconfirmedCount
+and projectionWatermark (last record seq). unconfirmedCount covers only the current
+turn (the latest turn when terminal), using its unconfirmed_operations rule.
+thread/unsubscribe returns only threadId and subscribed; there is no thread/closed
+notification. TurnActionResponse has no waitReason.
+Interaction contains exactly
+sessionId, turnId, optional prompt, interactionId and approval requestId. Approval has precedence
+over user, then child, then provider; suspended and terminal take precedence.
+Retry backoff is retained future retry scheduling; provider/child waits are
+machine work, never user interruption. Pending interactions may come from a
+child. No job handles, credentials, arguments or request digests are exposed.
+AppTurn.status remains pending/running/interrupted/completed/failed;
+interrupted denotes a parked attempt, and only turn_ended is terminal.
 
-Action identity preserves this algorithm: JCS canonical object
-`{schema_version:'vv-agent.controller-command-id.v1',thread_id,turn_id,action_id}`;
-SHA-256 over UTF-8 domain `vv-agent.controller-command-id.v1`, NUL, unsigned
-64-bit big-endian JCS byte length, then JCS bytes. The domain string defines
-identity only. Action IDs are scoped to the exact thread and turn. Inbox turn and
-generation fences are server-owned. Immediate accepted/running means admission.
-Five golden vectors are in `app_server_observable.json#actionAdmission.commandIdCases`;
-`app_server_protocol.json#facts.child_reply_command_id` binds a real child reply.
+### Resolver and exports
 
-### Exports and evidence
+The App Server host supplies a deterministic, non-submitting model resolver
+returning client and resolved config for the exact selected model ID. The default
+filters its configured backend before matching the resolved model_id, including
+the first endpoint's model_id override, and rejects nonempty routes.
+Zero or multiple matching entries within that effective backend reject with
+model_selection_unresolvable. model/list advertises these same selectable IDs.
+The frozen model with empty route always reuses its frozen client/config before
+any host hook. CLI and interactive use the same default provider resolver through
+SessionDriver; the App Server additionally binds its host hook.
+Primary call usage and billing identify the actual retained model/backend.
+Record schema 1, inbox schema 3 and SQL schemas are unchanged.
 
-Schema export is self-contained and strict. Its jsonSchema values are JSON strings.
-Keep the 19 JSON and 18 TypeScript bundle names listed in
-`app_server_observable.json#schema`; embed current Interaction/status definitions
-in reachable $defs and the existing bundles. InitializeResponse requires v2.
-No retired summaries or alternate protocol definitions remain. Model/list filtering,
-model summaries, timestamps, request IDs, channels and non-text validation retain
-their canonical behavior.
-
-`app_server_observable.json` is the expectations inventory;
-`app_server_protocol.json` contains real request/result/notification transcripts,
-schema exports and `#/host_interaction_values` for HostInteractionRequest and
-HostInteractionOutcome wires. Both fixtures describe one protocol.
+Schema export is self-contained and strict. jsonSchema values are JSON strings;
+current JSON/TypeScript bundle names are listed in app_server_observable.json.
+InitializeResponse requires v3. Accounting and host interaction wires retain
+their current shapes. app_server_protocol.json contains real producer transcripts
+and exports; app_server_observable.json inventories their expectations.
 
 ## Per-session model selection
 
@@ -393,7 +450,7 @@ App Server `thread/model/select` params are exactly `{threadId:T,inputId:T,
 selection:ModelSelection|null}`; result is exactly `{threadId:T,inputId:T,
 accepted:true}`. It submits the same inbox input, with inputId unchanged. This is
 admission acknowledgement, not selection validation; conflicting inputId returns
--32602. Schema exports retain closed params and the current ModelSettings shape.
+-32024. Schema exports retain closed params and the current ModelSettings shape.
 Canonical evidence: `session_semantics.json` case
 `model_selection_mid_session_retry`, `session_codec_vectors.json`,
 `session_invalid.json` and `app_server_protocol.json`.

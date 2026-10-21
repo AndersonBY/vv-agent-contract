@@ -224,7 +224,7 @@ if (process.argv.includes("--canonicalize")) {
   const value = {schema_version:"vv-agent.controller-command-id.v1", thread_id:params.threadId, turn_id:params.turnId, action_id:params.actionId};
   const bytes = Buffer.from(canonicalize(value), "utf8");
   const length = Buffer.alloc(8); length.writeBigUInt64BE(BigInt(bytes.length));
-  if (sha256(Buffer.concat([Buffer.from(value.schema_version), Buffer.from([0]), length, bytes])) !== app.facts.child_reply_command_id) fail("app: child reply identity");
+  if ("controller/" + sha256(Buffer.concat([Buffer.from(value.schema_version), Buffer.from([0]), length, bytes])) !== app.facts.child_reply_command_id) fail("app: child reply identity");
   verifyPrompts();
   verifyToolResults();
   process.stdout.write(`JCS verified: ${codec.vectors.length} session vectors, invalid byte hashes, nested digests, action identities, projections and prompts\n`);

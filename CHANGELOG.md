@@ -1,5 +1,24 @@
 # Changelog
 
+## 28.0.0
+
+App Server v3 adds stable inbox submissions, cross-connection control and
+approval, bounded record cursor replay and detailed execution status. Default
+SessionDriver surfaces share the provider model ID resolver; App Server also
+binds its host resolver hook and authorizes thread methods. Client IDs cannot overlap internal IDs. Lifecycle
+notifications follow durable turns on every subscribed node. Python adoption is
+pending-adoption; Rust remains frozen. No record, inbox or SQL schema changes.
+The embedded server exposes wake(thread_id). Lease retries wait for each renewed
+or replacement holder's expiry; child delivery wakes the parent after commit.
+Disconnected recovery does not subscribe dead connections; approvals remain durable.
+Observers back off independently per session, survive
+transient errors and release store locks before projection or transport I/O.
+Re-subscription starts at the head or active turn, and releases unused positions.
+Default model-ID resolution filters the configured backend first and uses the
+resolved endpoint model_id. Controller actionIds written before the 0.25.0
+upgrade are not deduplicated afterwards: drain them or do not retry them across
+the upgrade.
+
 ## 27.0.0
 
 Durable session-scoped model_selection inbox (schema 3), retained route/settings
