@@ -20,6 +20,9 @@ evidence/docs without observable change. These labels do not promise old-wire
 reading. Each implementation pins an exact version/revision/artifact and manifest;
 consumers needing an older behavior pin its release.
 
+29.1.0 adds host-requested compaction and summary-dependent child admission through
+existing metadata extension maps. Record, inbox, event and App Server versions stay unchanged.
+
 29.0.0 is major: endpoint routing no longer participates in identity checks,
 and missing endpoints have a definitive undispatched result. Existing record
 and inbox versions remain readable; there is no SQL store boundary.
@@ -47,8 +50,8 @@ exists without all evidence; verified requires every required lock, real produce
 full gate and central cross-repository workflow. Frozen is implementation-only and
 retains its own pinned version, package series and verified baseline.
 
-Python alone is required and v29 remains in-progress until Python 0.26.0
-adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
+Python alone is required. Contract 29.1.0 remains in-progress until Python
+0.27.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see

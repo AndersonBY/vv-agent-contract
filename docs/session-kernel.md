@@ -246,6 +246,10 @@ JSON state. Other explicitly opaque J/V locations keep their content boundaries.
 
 ## Boundaries, budgets and compaction
 
+Host-requested compaction and pre-admission child summaries use the existing
+model operation ledger. See [tool summary requests](tool-metadata-and-telemetry.md#host-requested-summaries).
+
+
 | Area | Requirement |
 | --- | --- |
 | Hooks/decisions | Committed `boundary_recorded` / operation receipts MUST prevent callback replay. Interruption before their commit permits another invocation: hooks are at least once, not exactly once. JSON state and composed denials/steering MUST survive restart. |
