@@ -1,5 +1,12 @@
 # Changelog
 
+## 29.1.0
+
+Add durable tool compaction intent and fresh summary dependencies before child
+admission. Summary-only child preparation preserves parent context. Reuse the
+model ledger, receipt selection and Unknown fences. No store boundary. Python
+adoption and central CI remain in progress; Rust stays frozen.
+
 ## 29.0.0
 
 Endpoint IDs are routing, not model or runtime identity. Each new model plan

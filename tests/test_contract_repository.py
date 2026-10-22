@@ -139,10 +139,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "29.0.0")
+        self.assertEqual(report["version"], "29.1.0")
         self.assertEqual(report["domains"], 18)
-        self.assertEqual(report["fixture_files"], 54)
-        self.assertEqual(report["manifest_entries"], 53)
+        self.assertEqual(report["fixture_files"], 55)
+        self.assertEqual(report["manifest_entries"], 54)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_json_duplicate_object_keys_are_rejected(self) -> None:
@@ -735,8 +735,8 @@ class ContractRepositoryTests(unittest.TestCase):
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(public_api["contract"], "vv-agent-public-api-v12")
-        self.assertEqual(public_api["schema_version"], 12)
+        self.assertEqual(public_api["contract"], "vv-agent-public-api-v13")
+        self.assertEqual(public_api["schema_version"], 13)
         capabilities = {
             item["id"]
             for domain in public_api["domains"]
@@ -1708,7 +1708,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 54)
+            self.assertEqual(synced["fixture_files"], 55)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

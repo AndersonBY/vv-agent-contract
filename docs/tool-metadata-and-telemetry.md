@@ -104,8 +104,8 @@ code, `execution_started`, nullable `duration_ms`, and optional typed metadata.
 The objects are closed. Missing required fields and unknown fields are rejected.
 
 Completed status values are `success`, `error`, `wait_response`, `running`,
-and `pending_compress`. Parked handles are not completed results. pending_compress is internal automatic
-compaction and does not expose a model tool. Directive values are `continue`, `finish`, and `wait_user`.
+and `pending_compress`. Parked handles are not completed results. pending_compress remains internal automatic
+compaction. Hosts may expose a tool that returns the compaction intent described below. Directive values are `continue`, `finish`, and `wait_user`.
 Successful results use `error_code=null`; calls that did not cross the started
 boundary use `duration_ms=null`.
 
@@ -146,3 +146,38 @@ Required implementations must prove:
 - strict event round-trip and App Server projection;
 - current run-definition bytes and resume mismatch checks;
 - neutral behavior when typed metadata is omitted.
+
+
+## Host-requested summaries
+
+A successful tool completion may set `metadata.request_compaction` to `true`.
+The kernel adds `metadata.compaction_source` with the tool operation ID and
+context digest. The receipt records intent, not a summary or a paid call.
+After the batch completes, the driver runs an ordinary tools-free compaction
+operation, then accepts `context_compacted` and completes memory telemetry
+before the next primary cycle. Requests in one batch coalesce. A threshold
+trigger in that cycle shares the same operation. Finish and wait-user take
+precedence: no summary runs before the turn ends or parks. Finish discards
+remaining intent; wait-user defers it until a valid reply resumes the same turn.
+
+Empty or ineligible history, a rejected summary, or an exhausted failed summary
+keeps the context and consumes the request. A committed source request is never
+replanned after restart. Unknown tools retain their existing fences.
+
+A host child binding may require a fresh summary before admission. The driver
+freezes the source history and digest in a tools-free `purpose=compaction`
+operation with `metadata.mode=child_summary`. It includes the full parent
+history available before that tool's admission, including the recent tail.
+It does not replace parent context or consume the parent's unresolved tool outcomes.
+The child callback receives the accepted
+summary text and reads no provider. Admission and host child input commit in
+one transaction. If the summary is invalid, cannot fit, fails, or exhausts
+Unknown retries, the tool fails with `child_summary_unavailable`; no child is
+admitted. Every real request follows the existing endpoint attempt, accounting
+and Unknown rules. A saved receipt is reused after a crash.
+
+Both paths use existing record schema 1 and inbox schema 3. Request metadata and
+tool result metadata are extension maps; no new record kind or directive is
+needed. A 0.26 reader can load these records, but ignores the new tool intent
+and does not enforce the new child dependency. Hosts must use the new runtime
+for these capabilities and must not downgrade a session with pending intent.
