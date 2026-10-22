@@ -1,9 +1,9 @@
 # Language-neutral parity contract
 
-Contract 27.0.0 has one execution authority: the [session kernel](session-kernel.md)
+Contract 29.0.0 has one execution authority: the [session kernel](session-kernel.md)
 log/inbox. Observable public behavior is language-neutral; symbol spellings are
 adaptation mappings. Python is the only required implementation. Rust remains
-frozen at its verified contract 23.0.0 / 0.21.x baseline and does not adopt v28.
+frozen at its verified contract 23.0.0 / 0.21.x baseline and does not adopt newer contracts.
 Matching schemas or fixture bytes alone do not establish real-producer parity.
 
 ## Domains

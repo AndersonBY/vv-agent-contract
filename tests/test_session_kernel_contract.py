@@ -32,8 +32,19 @@ class SessionKernelContractTests(unittest.TestCase):
         report = session.validate_session_fixtures(ROOT)
         self.assertGreater(report["records"], 100)
         self.assertGreater(report["inbox_items"], 50)
-        self.assertEqual(report["codec_vectors"], 81)
+        self.assertEqual(report["codec_vectors"], 82)
         self.assertEqual(report["invalid_vectors"], 70)
+
+    def test_endpoint_routing_uses_host_order_and_closes_missing_attempt(self) -> None:
+        cases = contractctl.load_json(ROOT / "fixtures/session_semantics.json")["cases"]
+        case = next(c for c in cases if c["case"] == "endpoint_routing")
+        self.assertEqual(case["calls"], ["B", "C"])
+        self.assertEqual(case["preferences"], [None, "B", "B"])
+        missing = case["missing"]["payload"]
+        self.assertEqual(missing["result"]["error_code"], "endpoint_unavailable")
+        self.assertFalse(missing["execution_started"])
+        self.assertEqual(missing["usage"], {})
+        self.assertEqual(missing["evidence"], [])
 
     def test_model_selection_retains_retry_model_route_and_billing(self) -> None:
         cases = contractctl.load_json(ROOT / "fixtures/session_semantics.json")["cases"]

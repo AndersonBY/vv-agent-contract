@@ -431,12 +431,39 @@ model/settings. Input IDs have ordinary identical-byte replay / conflicting-byte
 rejection semantics, including after consumption.
 
 Accepted non-null inputs MUST retain `model_binding` on input_applied:
-`ModelBinding = {backend:T, model:T, endpoints:[T], context_length:P|null,
-max_output_tokens:N|null}`. Each new primary request MUST carry model, route,
-canonical model_settings and metadata.vv_session.model_binding. Resolution and
-execution MUST use the retained request alone and reject binding drift.
-Primary endpoint order MUST match the retained request binding, including retries, rather
-than the turn's frozen default endpoints.
+`ModelBinding = {backend:T, model:T, context_length:P|null,
+max_output_tokens:N|null, endpoints:[T]}`. The required `endpoints` field retains
+routing evidence, not model identity. Its schema and type stay unchanged.
+Identity checks MUST compare backend, model and both limits, excluding endpoints.
+Each new primary request MUST carry model, route, canonical model_settings and
+metadata.vv_session.model_binding. Resolution and execution use that retained
+logical model; changing endpoint IDs MUST NOT cause binding drift.
+
+Runtime definitions MUST exclude endpoint IDs, including internal model routes.
+New definitions retain both model limits. Existing definitions containing
+endpoints MUST remain readable with record schema 1 and inbox schema 3. When
+checking an existing definition, use its recorded endpoint fields only to
+reproduce its original digest; they MUST NOT be compared with current routing.
+Limits absent from those definitions cannot be checked retroactively. All other
+recorded definition fields and the stored digest remain authoritative.
+
+Every new model plan MUST resolve the current client for its purpose. Primary
+plans, including retained selections, use the runtime resolver. Compaction,
+session memory and output repair keep their own routes. The client's
+`ordered_targets(preferred_endpoint_id)` is the single ordering policy. Freeze
+its nonempty, unique endpoint IDs in `endpoint_order` for this operation only.
+The kernel MUST NOT promote a preferred ID itself. An ID absent from the current
+client is ignored. The order need not match any historical binding endpoints.
+
+Before starting an attempt, prepare its current client and select exactly the
+endpoint at `(attempt - 1) % len(endpoint_order)`. If it is absent, complete the
+attempt definitively with `error_code=endpoint_unavailable`, empty usage,
+`execution_started=false`, and no dispatch or provider I/O. Close that operation;
+a new primary cycle can plan with current routing. This result MUST NOT carry
+unknown-outcome or duplicate-cost risk and MUST NOT extend the retry limit.
+It MUST NOT observe provider token usage or mark a token budget unavailable.
+Already-started attempts retain their original dispatch endpoint and evidence,
+including during crash recovery and late receipt replay.
 Resolver failure after planning uses ordinary model attempt failure/unknown handling.
 Retries, recovery, replay, projection and late provider_result MUST preserve the
 original plan and accounting identity. Already in-flight work is unaffected.
