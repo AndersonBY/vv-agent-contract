@@ -1,5 +1,14 @@
 # Changelog
 
+## 29.0.0
+
+Endpoint IDs are routing, not model or runtime identity. Each new model plan
+uses its current client ordering hook, including after model selection. A
+missing endpoint closes an undispatched attempt with endpoint_unavailable and
+empty usage. Started attempts retain their evidence and retry limits. Existing
+0.24/0.25 records remain readable; record, inbox and SQL schemas do not change.
+Python adoption and central CI are pending. Rust stays at its frozen baseline.
+
 ## 28.0.0
 
 App Server v3 adds stable inbox submissions, cross-connection control and

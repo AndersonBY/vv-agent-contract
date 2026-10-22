@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "contract_version": "28.0.0",
-  "status": "verified",
+  "contract_version": "29.0.0",
+  "status": "in-progress",
   "required_implementations": [
     "python"
   ],
@@ -9,9 +9,8 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "28.0.0",
-      "status": "verified",
-      "verified_revision": "9151a1c8ca94ed1bf42b898bd70e39b0c6078dd4"
+      "contract_version": "29.0.0",
+      "status": "in-progress"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -22,7 +21,5 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v28.0.0 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-10-21T20:26:23Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/39668527934"
+  "adoption_note": "Python endpoint routing adoption is in progress; central CI and immutable release pins are pending."
 }
