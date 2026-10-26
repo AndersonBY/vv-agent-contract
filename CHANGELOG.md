@@ -1,5 +1,13 @@
 # Changelog
 
+## 30.1.0
+
+- Add thread/fork with stable cross-node creation, ended-turn cuts, copied context,
+  frozen model selection, lineage and opaque host workspace binding.
+- Retain readable compaction artifact references without copying workspace files.
+- No record, inbox, SQL store or App Server version boundary. Python adoption is
+  in-progress pending immutable release and central CI; Rust remains frozen.
+
 ## 30.0.0
 
 App Server v4 adds context reads and durable manual compaction. Model listing

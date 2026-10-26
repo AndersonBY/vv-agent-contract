@@ -338,8 +338,8 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
     app = documents["app_server_protocol.json"]
     require(app["protocol_version"] == "v4", "App Server version mismatch")
     require(bool(app["transcripts"]), "empty App Server transcripts")
-    require(len(app["schemas"]["jsonSchema"]) == 21, "App Server JSON bundle coverage")
-    require(len(app["schemas"]["typescript"]) == 20, "App Server TypeScript bundle coverage")
+    require(len(app["schemas"]["jsonSchema"]) == 22, "App Server JSON bundle coverage")
+    require(len(app["schemas"]["typescript"]) == 21, "App Server TypeScript bundle coverage")
     statuses = ["idle", "running", "provider_running", "child_running", "user_wait", "approval_wait", "retry_backoff", "suspended", "terminal", "archived", "closed"]
     for source in app["schemas"]["jsonSchema"].values():
         for node in walk(strict_json_loads(source)):
