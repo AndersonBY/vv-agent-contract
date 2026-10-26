@@ -20,6 +20,10 @@ evidence/docs without observable change. These labels do not promise old-wire
 reading. Each implementation pins an exact version/revision/artifact and manifest;
 consumers needing an older behavior pin its release.
 
+30.0.0 replaces the closed model/list response and selects App Server v4. New
+context/read and compact/start methods alone would be minor additions. There is
+no record, inbox or SQL store boundary.
+
 29.1.0 adds host-requested compaction and summary-dependent child admission through
 existing metadata extension maps. Record, inbox, event and App Server versions stay unchanged.
 
@@ -50,8 +54,8 @@ exists without all evidence; verified requires every required lock, real produce
 full gate and central cross-repository workflow. Frozen is implementation-only and
 retains its own pinned version, package series and verified baseline.
 
-Python alone is required. Contract 29.1.0 remains in-progress until Python
-0.27.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
+Python alone is required. Contract 30.0.0 remains in-progress until Python
+0.28.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see

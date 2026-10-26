@@ -269,7 +269,7 @@ JSON-RPC behavior is defined below.
 
 ## App Server
 
-JSON-RPC 2.0 uses initialized `protocolVersion=v3`. Objects are closed.
+JSON-RPC 2.0 uses initialized `protocolVersion=v4`. Objects are closed.
 Thread identity equals session identity; turnId equals runId. The session log
 and inbox own execution; connections are subscribers, never execution owners.
 The host authenticates connections. Before every thread read or action, including
@@ -411,7 +411,7 @@ Record schema 1, inbox schema 3 and SQL schemas are unchanged.
 
 Schema export is self-contained and strict. jsonSchema values are JSON strings;
 current JSON/TypeScript bundle names are listed in app_server_observable.json.
-InitializeResponse requires v3. Accounting and host interaction wires retain
+InitializeResponse requires v4. Accounting and host interaction wires retain
 their current shapes. app_server_protocol.json contains real producer transcripts
 and exports; app_server_observable.json inventories their expectations.
 
@@ -485,3 +485,64 @@ admission acknowledgement, not selection validation; conflicting inputId returns
 Canonical evidence: `session_semantics.json` case
 `model_selection_mid_session_retry`, `session_codec_vectors.json`,
 `session_invalid.json` and `app_server_protocol.json`.
+
+
+### App Server context management (v4)
+
+`thread/context/read` is a pure projection. It MUST NOT acquire a lease, drive,
+write, acknowledge inputs or call a provider. It returns a SHA-256 contextVersion
+of durable model-visible messages, tools, effective model binding/settings and
+ordered accepted pending inputs, including future-available inputs. Availability
+uses the stored timestamp, not a wall-time filter. Operational records alone do
+not change it.
+Reads from different nodes at the same durable cut return the same version.
+Private reasoning, encrypted reasoning and provider blobs MUST NOT be returned.
+New App Server sessions retain an initial compiled definition in the existing
+attributes.app_server_context JSON extension. Reads use it before the first
+turn, then the latest admitted turn definition. Existing sessions without a
+definition report unknown parts until admission. This is a projection baseline,
+not an execution plan; it cannot dispatch work. Baseline compilation and
+compaction-only turns MUST NOT run input guardrails or context providers for an
+empty synthetic prompt. Compaction-only completion MUST NOT run final-output
+guardrails or output repair. Unknown token parts make the total unknown.
+Token counts are estimates: instructions, tools, history, active summary and
+pending input are separate. Counts distinguish logged raw history from the
+visible projection. Model limits are nullable; runtime policy values use the
+same memory-settings resolver as execution, including its explicit fallback.
+Host callbacks that have not run cannot be predicted; the projection names that
+boundary rather than invoking callbacks during a read.
+
+`thread/compact/start` takes threadId, stable actionId and optional
+expectedContextVersion. Admission locks the session, checks retained identity
+before the version, and commits one authenticated intent. Equal params replay
+the original requestId/inputSeq; different params conflict (-32024). A stale
+version returns context_version_mismatch (-32028) without a write. The intent
+uses the existing user-content JSON extension, with metadata.request_compaction
+and a closed app_server_compaction params object. It is control intent, never
+model input or an answer to a parked user interaction. It cannot be supplied
+through App Server turn input. No inbox or record schema changes are needed.
+
+The holder consumes this intent at the next safe boundary and feeds its input
+identity into the existing requested_by summary path. While idle it admits a
+compaction-only turn using existing turn records; that turn makes no primary
+call and adds no user message. While a turn is running it waits for its batch;
+while suspended or waiting for a person it waits for resume/reply. Cancel wins.
+The holder MUST preserve concurrently accepted input and cancel. Summary source
+is an immutable prefix; acceptance precedes later context-changing input, so a
+replacement cannot overwrite it. Logged same-source summary receipts are reused.
+
+Existing memory lifecycle RunEvents carry requested_by identities and a reserved
+nullable compaction_error. Host callback metadata cannot override that outcome. App Server
+maps them to contextCompaction/started, /completed and /failed, with a stable
+requestId and eventId. Completion with no eligible history is a successful no-op;
+summary failure or cancellation is failed and leaves history intact. Terminal
+records project failure for requests without a completion, so events/list can
+replay interruption even if no summary started. No new event schema is introduced.
+
+`model/list` uses the provider catalog and resolved limits used for execution.
+contextLength, maxOutputTokens, supportsTools, supportsVision, inputModalities,
+supportsReasoning, supportedReasoningEfforts, defaultReasoningEffort,
+supportsPromptCache and supportsContinuation are required nullable fields.
+Null means the catalog does not know; false and [] mean known unsupported.
+Never infer support from a model name or provider name. Selection remains only
+thread/model/select.

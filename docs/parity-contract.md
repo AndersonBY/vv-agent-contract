@@ -76,7 +76,7 @@ RunEvent v6, model-call v2, task-token-usage v3 and TokenUsage v1 are current st
 wires. Events/results/transcripts are consistent-prefix projections. Events are
 at least once with stable identity; deltas are volatile and trace is ACK-first,
 at most once. [Session consumers](session-consumers.md) and
-[typed events](stream-events.md) own these boundaries. App Server protocol v3, detailed thread
+[typed events](stream-events.md) own these boundaries. App Server protocol v4, detailed thread
 status, cross-connection approval and retained deadline, safe interaction projection and closed
 execution rejection are defined in [App Server](session-kernel.md#app-server).
 

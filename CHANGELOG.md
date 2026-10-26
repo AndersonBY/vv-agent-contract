@@ -1,5 +1,13 @@
 # Changelog
 
+## 30.0.0
+
+App Server v4 adds context reads and durable manual compaction. Model listing
+replaces the previous closed shape with nullable catalog capabilities and limits.
+This shape change requires a major contract release. Record schema 1, inbox
+schema 3, SQL layouts and RunEvent v6 stay unchanged. Python adoption and
+central CI are in progress; Rust keeps its frozen baseline.
+
 ## 29.1.0
 
 Add durable tool compaction intent and fresh summary dependencies before child
