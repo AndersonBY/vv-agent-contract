@@ -226,7 +226,7 @@ class SessionKernelContractTests(unittest.TestCase):
 
     def test_app_server_current_wire_shared_control_and_closed_boundary(self) -> None:
         app = contractctl.load_json(ROOT / "fixtures/app_server_protocol.json")
-        self.assertEqual(app["protocol_version"], "v3")
+        self.assertEqual(app["protocol_version"], "v4")
         self.assertTrue(app["facts"]["observer_can_approve"])
         self.assertTrue(app["facts"]["timeout_at_absolute_deadline"])
         closed_methods = {transcript["request"]["method"] for transcript in app["transcripts"]
