@@ -546,3 +546,60 @@ supportsPromptCache and supportsContinuation are required nullable fields.
 Null means the catalog does not know; false and [] mean known unsupported.
 Never infer support from a model name or provider name. Selection remains only
 thread/model/select.
+
+### App Server completed-boundary forks (30.1)
+
+`thread/fork` requires threadId and stable forkId (the client-ID grammar).
+Optional throughTurnId and beforeTurnId are mutually exclusive nonempty turn IDs.
+Optional workspace is an opaque JSON object. No other fields are accepted.
+An unknown cut turn or a turn without turn_ended returns -32602 with a clear
+reason. Missing source returns the ordinary thread-not-found error. A cut with
+neither a retained turn definition nor a creation baseline returns -32602; the
+producer cannot reconstruct a past effective model from current host settings.
+Neither cut selects the last retained turn_ended, excluding a running suffix.
+Through includes the named ended turn; before selects the preceding ended turn.
+Before the first turn, or with no ended turns, the cut is creation (seq 1).
+Failed/cancelled turns with a retained turn_ended are ended boundaries too.
+
+The new identity is `fork/` plus lowercase SHA-256 of RFC8785 `[threadId,forkId]`.
+Atomic session creation retains the original request and receipt. Retries on any
+node check that request before reading the source again: equal params return
+the retained threadId/lineage with accepted=true and replayed=true; changed
+params return -32024 submission_conflict, even if a changed cut is invalid.
+Omission differs from explicit workspace={}, and cut selectors are request facts.
+Only the first creator fixes the cut. No source lease or source mutation is needed.
+
+The result contains exactly threadId, accepted=true, replayed and lineage.
+Lineage contains sourceThreadId, nullable cutTurnId, sourceRecordSeq,
+sourceRecordDigest (SHA-256 of the cut record bytes), and contextDigest (SHA-256
+of RFC8785 of the copied Message dictionaries). Copy the context/read projection
+at that immutable prefix: visible history and accepted active summary, never raw
+records or pending inputs. Copy no controls, requests, attempts, interactions,
+approvals, compaction intents or unfinished work. Existing attributes.seed remains
+exactly {messages,shared_state}; shared_state is empty, not a copied execution state.
+The attributes extension app_server_fork retains params, lineage, effective_model
+and last_compaction. app_server_context retains the cut definition. The effective
+model (model, settings, route and binding) becomes the fork's frozen default;
+later thread/model/select changes only the fork. Clearing it restores that default.
+
+Thread read/list expose lineage in the existing thread.metadata.lineage map.
+Context/read optionally returns lineage for forked sessions, and returns the
+inherited lastCompaction until a newer accepted summary replaces it. workspace,
+when supplied, is retained in thread.metadata.workspace and returned to both
+host binding callbacks in their metadata. It is never interpreted as a path.
+Authorization precedes all reads and creation and covers the source, derived
+identity and requested workspace through thread/fork params.
+
+Artifacts keep their existing relative paths and digests; artifact_scope only
+names future writes. The host prepares the business workspace, then calls fork.
+The producer resolves source and destination artifact backends through host
+bindings. Shared references are reused. Missing destination artifacts are copied
+with the existing exclusive immutable write API at the same relative path. Both
+source bytes and destination bytes are checked against length and SHA-256.
+Existing corrupt artifacts are never overwritten. Unavailable or corrupt
+evidence returns -32602 before session creation. A concurrent identical copy
+reuses the winning bytes after verification. A failed session creation may leave
+only reusable immutable artifact bytes; it never leaves a partial session. It never copies business
+files, snapshots a directory, or creates a worktree. Source artifact retention is
+host-owned and must include surviving forks. Source and fork then admit independent
+turns. Record schema 1, inbox schema 3, SQL schemas and App Server v4 stay unchanged.

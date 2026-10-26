@@ -253,3 +253,5 @@ and full quality gates, applicable SQLite and PostgreSQL failure cuts and centra
 cross-repository CI. Frozen Rust evidence remains scoped to its pinned release.
 Publishing is pending adoption until those gates pass; see
 [change workflow](change-workflow.md) and [version policy](versioning-policy.md).
+
+Completed-boundary App Server forks follow [session kernel](session-kernel.md#app-server-completed-boundary-forks-301). Python maps the typed request to AppServerClient.fork_thread. Artifact references reuse or populate the existing immutable backend through host bindings.

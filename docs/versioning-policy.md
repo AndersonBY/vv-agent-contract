@@ -45,6 +45,10 @@ and reserved vv_session objects define bootstrap/state boundaries. Storage layou
 is not contracted. The consolidated behavior and fixture actions are in
 [CHANGELOG](../CHANGELOG.md).
 
+30.1.0 adds the independent thread/fork method and optional lineage on fork context
+reads. Existing thread metadata carries lineage/workspace; no existing response
+is replaced. This is a minor release, with no store or protocol boundary.
+
 ## Adoption states
 
 Support-matrix schema 2 is mandatory. Top-level contract_version/status applies to
@@ -54,8 +58,8 @@ exists without all evidence; verified requires every required lock, real produce
 full gate and central cross-repository workflow. Frozen is implementation-only and
 retains its own pinned version, package series and verified baseline.
 
-Python alone is required. Contract 30.0.0 remains in-progress until Python
-0.28.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
+Python alone is required. Contract 30.1.0 remains in-progress until Python
+0.29.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see

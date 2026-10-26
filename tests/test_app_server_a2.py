@@ -33,6 +33,30 @@ class AppServerA2Tests(unittest.TestCase):
         self.assertEqual([e['method'] for e in c['lifecycle']], ['contextCompaction/started', 'contextCompaction/completed'])
         self.assertEqual({e['params']['requestId'] for e in c['lifecycle']}, {c['receipt']['requestId']})
 
+    def test_fork_identity_lineage_and_summary_seed(self):
+        c = json.loads((ROOT / 'fixtures/app_server_a2.json').read_text())
+        f = c['fork']
+        expected_id = hashlib.sha256(b'["a2","branch"]').hexdigest()
+        self.assertEqual(f['receipt']['threadId'], 'fork/' + expected_id)
+        self.assertEqual(f['replay'], f['receipt'] | {'replayed': True})
+        self.assertEqual(f['conflict']['code'], -32024)
+        self.assertEqual(set(f['seed']), {'messages', 'shared_state'})
+        self.assertEqual(f['seed']['shared_state'], {})
+        encoded = json.dumps(f['seed']['messages'], ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+        self.assertEqual(f['receipt']['lineage']['contextDigest'], hashlib.sha256(encoded).hexdigest())
+        self.assertEqual(f['context']['lineage'], f['receipt']['lineage'])
+        self.assertEqual(f['context']['lastCompaction'], c['after']['lastCompaction'])
+        self.assertEqual(f['context']['counts']['pendingInputs'], 0)
+        self.assertEqual(f['context']['counts']['rawRecordCount'], 1)
+        self.assertEqual(sum(m.get('name') == 'memory_summary' for m in f['seed']['messages']), 1)
+        self.assertEqual(f['receipt']['lineage']['cutTurnId'], c['after']['lastCompaction']['turnId'])
+        schema = json.loads(json.loads((ROOT / 'fixtures/app_server_protocol.json').read_text())['schemas']['jsonSchema']['ClientRequest'])
+        params = schema['$defs']['ThreadForkParams']
+        self.assertFalse(params['additionalProperties'])
+        self.assertEqual(params['required'], ['threadId', 'forkId'])
+        self.assertEqual(params['not'], {'required': ['throughTurnId', 'beforeTurnId']})
+        self.assertNotIn('model', params['properties'])
+
     def test_catalog_unknowns_are_not_defaults(self):
         models = json.loads((ROOT / 'fixtures/app_server_a2.json').read_text())['models']
         known, unknown = models
