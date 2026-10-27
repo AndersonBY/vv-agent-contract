@@ -1,5 +1,14 @@
 # Changelog
 
+## 31.0.0
+
+Require renewal throughout runtime factory preparation and fenced handoff of the
+latest lease, including failure and not-ready cleanup. Require captured-prefix
+state reads without history-sized session row lock holds. These replace the
+previous preparation lifetime behavior, so this is a major behavior release.
+Record schema 1, inbox schema 3, SQL layouts, public API inventory v14 and
+App Server v4 stay unchanged. Python adoption is in-progress; Rust stays frozen.
+
 ## 30.1.0
 
 - Add thread/fork with stable cross-node creation, ended-turn cuts, copied context,

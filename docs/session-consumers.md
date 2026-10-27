@@ -64,7 +64,30 @@ callbacks MUST have host-enforced bounded I/O timeouts. Inline execution remains
 the default for in-process hosts and cannot bound scan time independently of
 drives. No thread pool or cancellation of arbitrary host code is implied.
 
-Scheduled execution resolves the runtime factory under a lease. A typed
+Scheduled execution resolves the runtime factory under a lease. Lease renewal
+MUST start before calling the factory and continue through preparation until
+execution's heartbeat takes over. The starting TTL is explicit and documented;
+it is a renewable ownership interval, not a preparation deadline. The returned
+runtime's TTL MUST apply at handoff. Renewal uses an independent store connection
+(or the memory store's serialized connection). If renewal fails or the epoch is
+fenced, the factory result MUST NOT grant execution authority. Every factory
+exit MUST stop and join its renewal worker; exception and not-ready deferral and
+release MUST use the most recently renewed lease, with normal fencing checks.
+Host callbacks and SQL still require bounded I/O; arbitrary factory code cannot
+be forcibly cancelled and MUST NOT dispatch execution effects during preparation.
+
+State reads MUST capture one committed record head, inbox watermark and lease
+epoch, then read, validate and fold the immutable prefix without holding the
+session row lock. Record sequences MUST be bounded by the captured head;
+consumed inputs MUST be bounded by that head and the captured inbox watermark.
+Later appends, inputs or consumption cannot enter that result. Digest, gap and
+reducer validation remain required. Snapshot copying, projections and scans
+MUST NOT hold the session row while doing history-sized read work. Mutations
+that prepare from history MUST recheck their captured position under the write
+lock before committing. Transactional admission and new-record validation keep
+their atomicity and fencing requirements.
+
+A typed
 not-ready exception with positive integer retry_after_ms MUST defer admission or
 the existing turn without a failed terminal or consuming pending input. Other
 factory/driver exceptions back off and re-raise. A retry gate MUST cover ready
