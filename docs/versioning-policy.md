@@ -58,8 +58,12 @@ exists without all evidence; verified requires every required lock, real produce
 full gate and central cross-repository workflow. Frozen is implementation-only and
 retains its own pinned version, package series and verified baseline.
 
-Python alone is required. Contract 30.1.0 remains in-progress until Python
-0.29.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
+31.0.0 changes the existing factory lease lifetime and requires renewal-safe
+captured-prefix reads. It is a major behavior release without a record, inbox,
+SQL, public API inventory or wire version change.
+
+Python alone is required. Contract 31.0.0 remains in-progress until Python
+0.30.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see
