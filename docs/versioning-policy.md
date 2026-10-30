@@ -37,7 +37,7 @@ wire shapes and adds public API inventory v12; it introduces no record, inbox or
 27.0.0 introduced: closed model_selection inbox kind and durable selection log semantics.
 Inbox schema 3 rejects all earlier versions; record schema 1 embeds current inbox values
 and resolved selection binding. Public API inventory v11 includes the selection resolver.
-Current projection wires remain RunEvent v6, model-call v2,
+That release used RunEvent v6, model-call v2,
 task-token-usage v3, TokenUsage v1 and App Server protocolVersion v2.
 Execution is one ordered session log/inbox; records own recovery, same-turn
 waits, provider acceptance, budget reservations and child delivery. Creation seed
@@ -48,6 +48,12 @@ is not contracted. The consolidated behavior and fixture actions are in
 30.1.0 adds the independent thread/fork method and optional lineage on fork context
 reads. Existing thread metadata carries lineage/workspace; no existing response
 is replaced. This is a minor release, with no store or protocol boundary.
+
+32.0.0 selects App Server v5 and public API inventory v15. Named tool provider
+registration and strict result acceptance share the existing record schema 1,
+inbox schema 3, SQLite user_version 3 and RunEvent v6. No store boundary is
+introduced. Results/resources and structured interactions belong to the same
+release and remain pending.
 
 ## Adoption states
 
@@ -62,8 +68,9 @@ retains its own pinned version, package series and verified baseline.
 captured-prefix reads. It is a major behavior release without a record, inbox,
 SQL, public API inventory or wire version change.
 
-Python alone is required. Contract 31.0.0 remains in-progress until Python
-0.30.0 adoption and central CI pass. Rust is frozen at verified 23.0.0 / 0.21.x.
+Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
+`support-matrix.json` owns the current adoption status. Contract 32.0.0 is in
+progress and is not yet released or verified. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see

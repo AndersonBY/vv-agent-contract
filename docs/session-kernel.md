@@ -269,7 +269,7 @@ JSON-RPC behavior is defined below.
 
 ## App Server
 
-JSON-RPC 2.0 uses initialized `protocolVersion=v4`. Objects are closed.
+JSON-RPC 2.0 uses initialized `protocolVersion=v5`. Objects are closed.
 Thread identity equals session identity; turnId equals runId. The session log
 and inbox own execution; connections are subscribers, never execution owners.
 The host authenticates connections. Before every thread read or action, including
@@ -277,6 +277,61 @@ creation and listing, the processor calls `authorize(connection_id, method, para
 A refusal returns -32027 `permission_denied` without reading or changing the thread.
 The local single-user DefaultAppServerHost allows everything; distributed hosts
 MUST implement the hook and apply their account and thread permissions.
+
+### Host tool providers
+
+The host registers trusted adapters by exact tool name. Registration does not
+create a tool schema. It rejects empty or normalized names, incomplete adapters,
+and conflicts with model, interaction or child-delegation bindings. Effective
+configuration merges defaults with explicit bindings; explicit names win.
+Each runtime copies the map. Children inherit it on creation and reconstruction;
+their tool policy can only restrict the parent's permissions.
+
+App Server start and recovery rebuild these bindings through the host's existing
+run-configuration builder. Building bindings, reading resources and replaying
+history do not submit work. Python maps this to `RunConfig.tool_providers`,
+`AppServerHost.build_run_config` and `SessionDriver.runtime`. `Provider`,
+`Accepted`, `Definitive` and `Unknown` are public SDK exports.
+
+Name, arguments, policy, approval and budget checks precede submission. Once an
+acceptance handle is committed, every wake, resume and reconnect queries that
+same handle. Only the explicit `function` binding selects the synchronous
+function provider. A missing named binding raises `MissingHostBinding`, reports
+`missing_host_binding` and keeps the wait; it cannot invoke a synchronous tool.
+
+Before a provider submit, query, cancel or authenticated callback becomes an
+`op_completed`, the kernel validates the result. Tool results must parse as the
+current `ToolExecutionResult`, have a definitive SUCCESS or ERROR status, and
+match the prepared request's tool call ID. Ambiguous transport, timeout and stop
+errors need `metadata.definitive_outcome=true`. Evidence must be nonempty for
+dispatched work and contain the original acceptance evidence when a handle was
+retained. Provider handles and callbacks must bind the original provider,
+operation, attempt and prepared request digest. Callbacks also bind the turn and
+generation; authentication covers result and usage together.
+
+Invalid results report `provider_result_invalid`. Query and cancel keep the
+original handle and wait. Invalid submit results without a retainable handle
+become Unknown with dispatch evidence and MUST NOT trigger automatic retry,
+even when the tool normally supports idempotency. Callback rejection is retained
+in the applied-input receipt. Invalid submit/cancel and rejected callback facts
+project a `DiagnosticEvent(code="provider_result_invalid")` and App Server
+`error/warning` from existing records; invalid query warnings leave no new
+completion record. No invalid result becomes a business failure or
+proof of a stop.
+
+Cancellation has three meanings. An accepted control receipt means requested.
+A valid Definitive result confirms the original operation's terminal outcome;
+it does not claim every successful result was stopped by that request. Accepted,
+Unknown, timeout and invalid cancellation replies cannot confirm the stop. The
+turn may end cancelled while its original operation remains unconfirmed. Late
+trusted results are audit-only and cannot revive that turn.
+
+There is an accept-before-record crash window: the external service may accept
+work before the kernel records its handle. Only a provider that actually dedupes
+and recovers by the stable `context.idempotency_key` may declare
+`ToolMetadata.idempotency="supported"`. Retries reuse that key across attempts.
+Otherwise the outcome stays Unknown until trusted evidence reconciles it.
+There is no unconditional exactly-once guarantee.
 
 ### Submission and control
 

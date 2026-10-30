@@ -1,5 +1,16 @@
 # Changelog
 
+## 32.0.0 (unreleased)
+
+App Server v5 and public API v15 register host tool providers and validate their
+results before completion. Missing bindings retain waits. Cancellation retains
+unconfirmed external work. Record schema 1, inbox schema 3, SQLite user_version 3
+and RunEvent v6 stay unchanged; this is not a store boundary.
+
+Provider adoption is in progress. Result/resource and structured-interaction
+work remain pending in this same release. No central verification is claimed.
+
+
 ## 31.0.0
 
 Require renewal throughout runtime factory preparation and fenced handoff of the

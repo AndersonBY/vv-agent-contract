@@ -139,10 +139,10 @@ class ContractRepositoryTests(unittest.TestCase):
         report = contractctl.validate_contract(ROOT)
         matrix = json.loads((ROOT / "support-matrix.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(report["version"], "31.0.0")
+        self.assertEqual(report["version"], "32.0.0")
         self.assertEqual(report["domains"], 18)
-        self.assertEqual(report["fixture_files"], 56)
-        self.assertEqual(report["manifest_entries"], 55)
+        self.assertEqual(report["fixture_files"], 57)
+        self.assertEqual(report["manifest_entries"], 56)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_json_duplicate_object_keys_are_rejected(self) -> None:
@@ -735,8 +735,8 @@ class ContractRepositoryTests(unittest.TestCase):
         public_api = json.loads(
             (ROOT / "fixtures/public_api.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(public_api["contract"], "vv-agent-public-api-v14")
-        self.assertEqual(public_api["schema_version"], 14)
+        self.assertEqual(public_api["contract"], "vv-agent-public-api-v15")
+        self.assertEqual(public_api["schema_version"], 15)
         capabilities = {
             item["id"]
             for domain in public_api["domains"]
@@ -1447,7 +1447,7 @@ class ContractRepositoryTests(unittest.TestCase):
         session_names = {
             "Record", "InboxItem", "SessionSpec", "SessionStore", "SessionTx",
             "SQLiteStore", "PostgresStore", "Conflict", "LeaseLost", "MissingHostBinding",
-            "Definitive", "Accepted", "Unknown", "SessionRunEventStore",
+            "Provider", "Definitive", "Accepted", "Unknown", "SessionRunEventStore",
             "ChildSession", "InvalidChildBatch", "Runtime", "RuntimeNotReady",
         }
         self.assertEqual(
@@ -1503,8 +1503,10 @@ class ContractRepositoryTests(unittest.TestCase):
             self.assertTrue(surface["behavior"])
             if name == "SessionStore":
                 self.assertEqual({m["id"] for m in surface["members"]}, {"defer_drive", "defer_projection"})
+            elif name == "Provider":
+                self.assertEqual([m["id"] for m in surface["members"]], ["submit", "query", "cancel", "authenticate"])
             elif name == "Runtime":
-                self.assertEqual([m["id"] for m in surface["members"]], ["children", "model_resolver", "resolve_model"])
+                self.assertEqual([m["id"] for m in surface["members"]], ["children", "providers", "model_resolver", "resolve_model"])
             else:
                 self.assertTrue({"members", "protocol_operations", "supporting_operations"}.isdisjoint(surface))
         self.assertTrue(
@@ -1708,7 +1710,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 56)
+            self.assertEqual(synced["fixture_files"], 57)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

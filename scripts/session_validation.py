@@ -336,7 +336,7 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
     require(all(v["wire"]["kind"] == "context_compacted"
                 for v in documents["session_compaction.json"]["vectors"]), "invalid compaction vector kind")
     app = documents["app_server_protocol.json"]
-    require(app["protocol_version"] == "v4", "App Server version mismatch")
+    require(app["protocol_version"] == "v5", "App Server version mismatch")
     require(bool(app["transcripts"]), "empty App Server transcripts")
     require(len(app["schemas"]["jsonSchema"]) == 22, "App Server JSON bundle coverage")
     require(len(app["schemas"]["typescript"]) == 21, "App Server TypeScript bundle coverage")

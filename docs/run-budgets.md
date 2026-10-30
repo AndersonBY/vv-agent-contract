@@ -5,6 +5,10 @@ Budgets control resource admission and accounting. They do not decide whether
 an Agent has answered a task correctly or whether a task is semantically
 complete.
 
+Budgets are per-turn; child sessions count separately. A resumed turn keeps
+its counters, and a new turn starts fresh. A host meter may aggregate children,
+but a strict shared allowance also needs atomic admission in the host.
+
 ## Public Configuration
 
 `RunBudgetLimits` contains only optional limits:
