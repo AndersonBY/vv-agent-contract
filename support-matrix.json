@@ -21,5 +21,5 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Provider registration, bounded result/resource reads, typed retained interactions and targeted answers are implemented locally. Python full gates and immutable release/central adoption evidence are required before verification. Rust remains frozen."
+  "adoption_note": "v32.0.0 provider registration, bounded result/resource reads, typed retained interactions and targeted answers await immutable revisions and central Python adoption. Rust remains frozen."
 }
