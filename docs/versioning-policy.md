@@ -52,8 +52,8 @@ is replaced. This is a minor release, with no store or protocol boundary.
 32.0.0 selects App Server v5 and public API inventory v15. Named tool provider
 registration and strict result acceptance share the existing record schema 1,
 inbox schema 3, SQLite user_version 3 and RunEvent v6. No store boundary is
-introduced. Results/resources and structured interactions belong to the same
-release and remain pending.
+introduced. Results/resources and structured interactions belong to this same release.
+Local implementation does not replace the required immutable release and central adoption gates.
 
 ## Adoption states
 

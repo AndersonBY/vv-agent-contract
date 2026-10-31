@@ -61,3 +61,5 @@ processor failure may lose telemetry. Ambient rollback-capable transactions are
 rejected before delivery; processors receive detached data. `runner_trace.jsonl`,
 `runner_trace_spans.json`, `event_store_replay.jsonl` and `session_projection.json`
 provide canonical evidence.
+
+HostInteractionRequestedEvent.metadata.interaction and turn-level RunStateChangedEvent.metadata.interaction carry the same normalized retained user form as App Server snapshots. RunEvent stays v6. The original HostInteractionRequest v1 digest remains independent of the full public form digest.

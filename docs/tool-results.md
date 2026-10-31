@@ -115,3 +115,13 @@ backend's private area MUST be rejected. A failed retention attempt cannot
 grant a read of the current source file.
 
 Producer fixture: `fixtures/app_server_tool_results.json`.
+
+
+Retained reads accept an offset and length at the backend boundary. Backends MUST
+check size and immutable version on every page and verify SHA256 once per cached
+reference/version, or attest an already verified immutable version. A process
+restart or bounded cache eviction may require one fresh digest pass. Local files
+use nofollow opens and device/inode/size/mtime/ctime checks before and after the
+range; memory holds immutable bytes; S3 uses ETag/VersionId and conditional ranged
+GETs. Changed versions return stale_reference, and missing bytes return
+resource_missing. Authorization still precedes any resource metadata or byte I/O.

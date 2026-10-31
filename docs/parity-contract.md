@@ -255,3 +255,5 @@ Publishing is pending adoption until those gates pass; see
 [change workflow](change-workflow.md) and [version policy](versioning-policy.md).
 
 Completed-boundary App Server forks follow [session kernel](session-kernel.md#app-server-completed-boundary-forks-301). Python maps the typed request to AppServerClient.fork_thread. Artifact references reuse or populate the existing immutable backend through host bindings.
+
+Typed user interactions, free-text labeling, strict target/answer validation, and the public heartbeat-stop signal follow [interactions](interactions.md). Child messages are steering rather than implicit human answers.

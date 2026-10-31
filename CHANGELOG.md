@@ -13,8 +13,17 @@ name existing versions without copying; copying backends own private snapshots.
 The raw tool-result diagnostic body is replaced by the bounded descriptor.
 Every resource page requires host authorization.
 
-Python adoption is in progress. Structured-interaction work remains pending in
-this same release. No central verification is claimed.
+Typed retained user forms now appear in status, snapshot state and event replay.
+respond takes a target and typed answer. Free text remains legal for all forms
+and produces a labeled free_text result; selections are checked strictly. Direct
+inbox replies receive the same validation. Child routing follows admitted graphs,
+and parent cancellation drains descendant controls. Ordinary child messages queue
+steering rather than guessing a human-wait target. Resource backends support range
+reads with per-page immutable version checks and cached digest verification.
+Python exports a public heartbeat-stopped signal.
+
+Python adoption remains in progress until the immutable release and central
+verification gates record the required revisions. No central verification is claimed.
 
 
 ## 31.0.0

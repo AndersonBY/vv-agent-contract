@@ -75,7 +75,7 @@ validation and fold rules supply their existing typed boundaries.
 | `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle` |
 
 User content remains opaque at the generic boundary. Kernel reply producers currently use
-`{operation_id,interaction_id,text}` for ask_user and `{interaction_id,text}` for
+`{interaction_id,text}` (optionally operation_id) for ask_user and `{interaction_id,text}` for
 turn-level waits; the target turn/generation is supplied in the envelope.
 
 `provider_result.usage` MUST be a required JSON object, just like
@@ -361,7 +361,7 @@ Changed bytes return -32024 `submission_conflict`; a stale expected turn returns
 
 `turn/action` retains its strict threadId, turnId, actionId, action shape and
 controller command digest algorithm; the inbox ID is `controller/` followed by
-that digest, outside the client-ID grammar. Actions are respond (strict user Message),
+that digest, outside the client-ID grammar. Actions are respond (typed target and answer),
 suspend, resume, cancel and abort. Any authorized connection can submit them.
 `turn/interrupt` requires exactly threadId, expectedTurnId and actionId;
 it submits durable cancel even without a local handle. Its result is
@@ -448,8 +448,10 @@ turn (the latest turn when terminal), using its unconfirmed_operations rule.
 thread/unsubscribe returns only threadId and subscribed; there is no thread/closed
 notification. TurnActionResponse has no waitReason.
 Interaction contains exactly
-sessionId, turnId, optional prompt, interactionId and approval requestId. Approval has precedence
-over user, then child, then provider; suspended and terminal take precedence.
+a closed union: approval `{kind:"approval",sessionId,turnId,requestId}` or the
+user form specified in [typed interactions](interactions.md). Approval has precedence;
+remaining waits sort by session and operation identity. Snapshot `state` in thread/read
+and thread/resume contains this same status object at the captured log cut.
 Retry backoff is retained future retry scheduling; provider/child waits are
 machine work, never user interruption. Pending interactions may come from a
 child. No job handles, credentials, arguments or request digests are exposed.
@@ -472,7 +474,7 @@ Record schema 1, inbox schema 3 and SQL schemas are unchanged.
 
 Schema export is self-contained and strict. jsonSchema values are JSON strings;
 current JSON/TypeScript bundle names are listed in app_server_observable.json.
-InitializeResponse requires v4. Accounting and host interaction wires retain
+InitializeResponse requires v5. Accounting and host interaction wires retain
 their current shapes. app_server_protocol.json contains real producer transcripts
 and exports; app_server_observable.json inventories their expectations.
 
@@ -664,3 +666,10 @@ only reusable immutable artifact bytes; it never leaves a partial session. It ne
 files, snapshots a directory, or creates a worktree. Source artifact retention is
 host-owned and must include surviving forks. Source and fork then admit independent
 turns. Record schema 1, inbox schema 3, SQL schemas and App Server v4 stay unchanged.
+
+
+Typed user answers and free-text host replies follow [interactions](interactions.md).
+They reuse the current JSON content extension, record 1, inbox 3 and RunEvent v6;
+no SQL or session store boundary is introduced. Hosts may catch the public
+heartbeat-stopped signal before lease-loss errors when intentionally stopping a
+renewal worker; it never certifies ownership for further execution.

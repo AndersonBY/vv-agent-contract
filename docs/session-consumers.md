@@ -115,3 +115,5 @@ Model selection is session-local durable execution state. Consumers MUST attribu
 model-call usage/backend/model from the original planned request, including late
 receipts and replay; current selection is never a billing source. Child sessions
 retain their own selection state and do not inherit later parent inputs.
+
+User questions project the same retained form in status, snapshot state and event metadata.interaction. See [interactions](interactions.md). Ordinary child messages enqueue steering and cannot infer a human-wait target. Parent terminal driving must process its descendants' queued cancellation controls; a WAIT_USER child never supplies a terminal parent result.
