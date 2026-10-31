@@ -141,8 +141,8 @@ class ContractRepositoryTests(unittest.TestCase):
 
         self.assertEqual(report["version"], "32.0.0")
         self.assertEqual(report["domains"], 18)
-        self.assertEqual(report["fixture_files"], 57)
-        self.assertEqual(report["manifest_entries"], 56)
+        self.assertEqual(report["fixture_files"], 58)
+        self.assertEqual(report["manifest_entries"], 57)
         self.assertEqual(report["adoption_status"], matrix["status"])
 
     def test_json_duplicate_object_keys_are_rejected(self) -> None:
@@ -1710,7 +1710,7 @@ class ContractRepositoryTests(unittest.TestCase):
             synced = contract_snapshot.sync_snapshot(args)
             checked = contract_snapshot.check_lock(implementation, "contract.lock.json")
 
-            self.assertEqual(synced["fixture_files"], 57)
+            self.assertEqual(synced["fixture_files"], 58)
             self.assertEqual(checked["contract_revision"], revision)
             contract_snapshot.compare_trees(ROOT / "fixtures", implementation / "tests/fixtures/parity")
 

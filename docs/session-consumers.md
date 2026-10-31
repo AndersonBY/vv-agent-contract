@@ -8,6 +8,12 @@ execution lease. Wake is a hint; scanning recovers due work, queued inputs,
 dependency changes and consumer lag, including unprojected terminals. No-deadline
 waits and unresolved dependencies MUST NOT spin.
 
+Tool completions use the bounded [tool result projection](tool-results.md).
+Raw result bodies and private resource locators MUST NOT travel in the
+`tool_result` diagnostic. Reprojection changes event bytes under stable IDs;
+hosts with immutable materialized events must account for their own projection
+version boundary, independently of kernel record schema versions.
+
 External delivery before ACK is at least once. A crash may duplicate delivery;
 stable record/event/item IDs provide deduplication. An ACK proves consumption,
 not successful notification or business acceptance. Event stores are projection

@@ -7,8 +7,14 @@ results before completion. Missing bindings retain waits. Cancellation retains
 unconfirmed external work. Record schema 1, inbox schema 3, SQLite user_version 3
 and RunEvent v6 stay unchanged; this is not a store boundary.
 
-Provider adoption is in progress. Result/resource and structured-interaction
-work remain pending in this same release. No central verification is claimed.
+Bounded, replayable tool results and paged body/resource reads share the exact
+completion record identity. Workspace retention is optional: immutable backends
+name existing versions without copying; copying backends own private snapshots.
+The raw tool-result diagnostic body is replaced by the bounded descriptor.
+Every resource page requires host authorization.
+
+Python adoption is in progress. Structured-interaction work remains pending in
+this same release. No central verification is claimed.
 
 
 ## 31.0.0

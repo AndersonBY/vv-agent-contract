@@ -252,6 +252,7 @@ def validate_contract(root: Path) -> dict[str, Any]:
         root / "docs" / "run-budgets.md",
         root / "docs" / "session-kernel.md",
         root / "docs" / "session-consumers.md",
+        root / "docs" / "tool-results.md",
         root / "docs" / "model-call-accounting.md",
         root / "docs" / "prompt-bundles-and-tool-results.md",
         root / "docs" / "after-cycle-lifecycle.md",

@@ -428,6 +428,12 @@ persist the last cursor. Live deltas are volatile and have no durable cursor;
 final durable events/items replace their accumulated display via callId or
 toolCallId. App item identity remains `item_{event_id}`.
 
+Completed tool results and `thread/toolResult/read` follow
+[the tool result contract](tool-results.md). Resource retention belongs to
+the workspace backend; immutable backends can name existing versions without
+copying output objects. The raw diagnostic body is replaced by the same bounded
+descriptor used by items and event replay.
+
 ### Status
 
 AppThread.status, thread/status and thread/status/changed use one projection:
