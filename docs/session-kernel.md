@@ -75,7 +75,7 @@ validation and fold rules supply their existing typed boundaries.
 | `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle` |
 
 User content remains opaque at the generic boundary. Kernel reply producers currently use
-`{operation_id,interaction_id,text}` for ask_user and `{interaction_id,text}` for
+`{interaction_id,text}` (optionally operation_id) for ask_user and `{interaction_id,text}` for
 turn-level waits; the target turn/generation is supplied in the envelope.
 
 `provider_result.usage` MUST be a required JSON object, just like
@@ -269,7 +269,7 @@ JSON-RPC behavior is defined below.
 
 ## App Server
 
-JSON-RPC 2.0 uses initialized `protocolVersion=v4`. Objects are closed.
+JSON-RPC 2.0 uses initialized `protocolVersion=v5`. Objects are closed.
 Thread identity equals session identity; turnId equals runId. The session log
 and inbox own execution; connections are subscribers, never execution owners.
 The host authenticates connections. Before every thread read or action, including
@@ -277,6 +277,61 @@ creation and listing, the processor calls `authorize(connection_id, method, para
 A refusal returns -32027 `permission_denied` without reading or changing the thread.
 The local single-user DefaultAppServerHost allows everything; distributed hosts
 MUST implement the hook and apply their account and thread permissions.
+
+### Host tool providers
+
+The host registers trusted adapters by exact tool name. Registration does not
+create a tool schema. It rejects empty or normalized names, incomplete adapters,
+and conflicts with model, interaction or child-delegation bindings. Effective
+configuration merges defaults with explicit bindings; explicit names win.
+Each runtime copies the map. Children inherit it on creation and reconstruction;
+their tool policy can only restrict the parent's permissions.
+
+App Server start and recovery rebuild these bindings through the host's existing
+run-configuration builder. Building bindings, reading resources and replaying
+history do not submit work. Python maps this to `RunConfig.tool_providers`,
+`AppServerHost.build_run_config` and `SessionDriver.runtime`. `Provider`,
+`Accepted`, `Definitive` and `Unknown` are public SDK exports.
+
+Name, arguments, policy, approval and budget checks precede submission. Once an
+acceptance handle is committed, every wake, resume and reconnect queries that
+same handle. Only the explicit `function` binding selects the synchronous
+function provider. A missing named binding raises `MissingHostBinding`, reports
+`missing_host_binding` and keeps the wait; it cannot invoke a synchronous tool.
+
+Before a provider submit, query, cancel or authenticated callback becomes an
+`op_completed`, the kernel validates the result. Tool results must parse as the
+current `ToolExecutionResult`, have a definitive SUCCESS or ERROR status, and
+match the prepared request's tool call ID. Ambiguous transport, timeout and stop
+errors need `metadata.definitive_outcome=true`. Evidence must be nonempty for
+dispatched work and contain the original acceptance evidence when a handle was
+retained. Provider handles and callbacks must bind the original provider,
+operation, attempt and prepared request digest. Callbacks also bind the turn and
+generation; authentication covers result and usage together.
+
+Invalid results report `provider_result_invalid`. Query and cancel keep the
+original handle and wait. Invalid submit results without a retainable handle
+become Unknown with dispatch evidence and MUST NOT trigger automatic retry,
+even when the tool normally supports idempotency. Callback rejection is retained
+in the applied-input receipt. Invalid submit/cancel and rejected callback facts
+project a `DiagnosticEvent(code="provider_result_invalid")` and App Server
+`error/warning` from existing records; invalid query warnings leave no new
+completion record. No invalid result becomes a business failure or
+proof of a stop.
+
+Cancellation has three meanings. An accepted control receipt means requested.
+A valid Definitive result confirms the original operation's terminal outcome;
+it does not claim every successful result was stopped by that request. Accepted,
+Unknown, timeout and invalid cancellation replies cannot confirm the stop. The
+turn may end cancelled while its original operation remains unconfirmed. Late
+trusted results are audit-only and cannot revive that turn.
+
+There is an accept-before-record crash window: the external service may accept
+work before the kernel records its handle. Only a provider that actually dedupes
+and recovers by the stable `context.idempotency_key` may declare
+`ToolMetadata.idempotency="supported"`. Retries reuse that key across attempts.
+Otherwise the outcome stays Unknown until trusted evidence reconciles it.
+There is no unconditional exactly-once guarantee.
 
 ### Submission and control
 
@@ -306,7 +361,7 @@ Changed bytes return -32024 `submission_conflict`; a stale expected turn returns
 
 `turn/action` retains its strict threadId, turnId, actionId, action shape and
 controller command digest algorithm; the inbox ID is `controller/` followed by
-that digest, outside the client-ID grammar. Actions are respond (strict user Message),
+that digest, outside the client-ID grammar. Actions are respond (typed target and answer),
 suspend, resume, cancel and abort. Any authorized connection can submit them.
 `turn/interrupt` requires exactly threadId, expectedTurnId and actionId;
 it submits durable cancel even without a local handle. Its result is
@@ -373,6 +428,12 @@ persist the last cursor. Live deltas are volatile and have no durable cursor;
 final durable events/items replace their accumulated display via callId or
 toolCallId. App item identity remains `item_{event_id}`.
 
+Completed tool results and `thread/toolResult/read` follow
+[the tool result contract](tool-results.md). Resource retention belongs to
+the workspace backend; immutable backends can name existing versions without
+copying output objects. The raw diagnostic body is replaced by the same bounded
+descriptor used by items and event replay.
+
 ### Status
 
 AppThread.status, thread/status and thread/status/changed use one projection:
@@ -387,8 +448,10 @@ turn (the latest turn when terminal), using its unconfirmed_operations rule.
 thread/unsubscribe returns only threadId and subscribed; there is no thread/closed
 notification. TurnActionResponse has no waitReason.
 Interaction contains exactly
-sessionId, turnId, optional prompt, interactionId and approval requestId. Approval has precedence
-over user, then child, then provider; suspended and terminal take precedence.
+a closed union: approval `{kind:"approval",sessionId,turnId,requestId}` or the
+user form specified in [typed interactions](interactions.md). Approval has precedence;
+remaining waits sort by session and operation identity. Snapshot `state` in thread/read
+and thread/resume contains this same status object at the captured log cut.
 Retry backoff is retained future retry scheduling; provider/child waits are
 machine work, never user interruption. Pending interactions may come from a
 child. No job handles, credentials, arguments or request digests are exposed.
@@ -411,7 +474,7 @@ Record schema 1, inbox schema 3 and SQL schemas are unchanged.
 
 Schema export is self-contained and strict. jsonSchema values are JSON strings;
 current JSON/TypeScript bundle names are listed in app_server_observable.json.
-InitializeResponse requires v4. Accounting and host interaction wires retain
+InitializeResponse requires v5. Accounting and host interaction wires retain
 their current shapes. app_server_protocol.json contains real producer transcripts
 and exports; app_server_observable.json inventories their expectations.
 
@@ -603,3 +666,10 @@ only reusable immutable artifact bytes; it never leaves a partial session. It ne
 files, snapshots a directory, or creates a worktree. Source artifact retention is
 host-owned and must include surviving forks. Source and fork then admit independent
 turns. Record schema 1, inbox schema 3, SQL schemas and App Server v4 stay unchanged.
+
+
+Typed user answers and free-text host replies follow [interactions](interactions.md).
+They reuse the current JSON content extension, record 1, inbox 3 and RunEvent v6;
+no SQL or session store boundary is introduced. Hosts may catch the public
+heartbeat-stopped signal before lease-loss errors when intentionally stopping a
+renewal worker; it never certifies ownership for further execution.

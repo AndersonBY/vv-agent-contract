@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class AppServerA2Tests(unittest.TestCase):
     def test_context_and_compaction_receipts(self):
         c = json.loads((ROOT / 'fixtures/app_server_a2.json').read_text())
-        self.assertEqual(c['protocol_version'], 'v4')
+        self.assertEqual(c['protocol_version'], 'v5')
         self.assertNotEqual(c['before']['contextVersion'], c['after']['contextVersion'])
         for view in (c['before'], c['after']):
             self.assertTrue(view['estimates']['estimated'])

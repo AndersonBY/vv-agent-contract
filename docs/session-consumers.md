@@ -8,6 +8,12 @@ execution lease. Wake is a hint; scanning recovers due work, queued inputs,
 dependency changes and consumer lag, including unprojected terminals. No-deadline
 waits and unresolved dependencies MUST NOT spin.
 
+Tool completions use the bounded [tool result projection](tool-results.md).
+Raw result bodies and private resource locators MUST NOT travel in the
+`tool_result` diagnostic. Reprojection changes event bytes under stable IDs;
+hosts with immutable materialized events must account for their own projection
+version boundary, independently of kernel record schema versions.
+
 External delivery before ACK is at least once. A crash may duplicate delivery;
 stable record/event/item IDs provide deduplication. An ACK proves consumption,
 not successful notification or business acceptance. Event stores are projection
@@ -109,3 +115,5 @@ Model selection is session-local durable execution state. Consumers MUST attribu
 model-call usage/backend/model from the original planned request, including late
 receipts and replay; current selection is never a billing source. Child sessions
 retain their own selection state and do not inherit later parent inputs.
+
+User questions project the same retained form in status, snapshot state and event metadata.interaction. See [interactions](interactions.md). Ordinary child messages enqueue steering and cannot infer a human-wait target. Parent terminal driving must process its descendants' queued cancellation controls; a WAIT_USER child never supplies a terminal parent result.
