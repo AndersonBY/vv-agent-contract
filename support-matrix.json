@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "contract_version": "32.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "required_implementations": [
     "python"
   ],
@@ -10,7 +10,8 @@
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
       "contract_version": "32.0.0",
-      "status": "in-progress"
+      "status": "verified",
+      "verified_revision": "1dc0920c8604c6f3835e6c20bc9509bed8ef17f8"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -21,5 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v32.0.0 provider registration, bounded result/resource reads, typed retained interactions and targeted answers await immutable revisions and central Python adoption. Rust remains frozen."
+  "adoption_note": "v32.0.0 passed the required implementation snapshots and cross-repository producer gates.",
+  "last_verified_at": "2026-10-31T04:51:16Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/41168925558"
 }
