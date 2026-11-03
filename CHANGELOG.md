@@ -1,6 +1,22 @@
 # Changelog
 
-## 32.0.0 (unreleased)
+## 32.1.0 (unreleased)
+
+Apply the existing 12,000-character projection at the kernel completion boundary
+for every previously untruncated tool result. Stream full received text into
+exclusive immutable storage before committing its verified reference. Reserved
+`metadata.vv_artifact` binds the reference to the admitted operation and records
+capture completeness; unknown producer capture completeness remains explicit.
+Archive failure marks recovery unavailable without retrying a completed effect.
+Search retained artifacts through a task-scoped, read-only search_files route with
+real artifact line numbers and bounded streaming results. New completion previews
+name the recovery path and describe both read_file ranges and search_files regexes.
+New writes check the exclusive writer's byte count and available file metadata;
+existing objects still require full UTF-8, digest and size validation.
+Record schema 1 and inbox schema 3 are unchanged. This draft does not publish a
+version or claim implementation adoption.
+
+## 32.0.0
 
 App Server v5 and public API v15 register host tool providers and validate their
 results before completion. Missing bindings retain waits. Cancellation retains
@@ -22,8 +38,8 @@ steering rather than guessing a human-wait target. Resource backends support ran
 reads with per-page immutable version checks and cached digest verification.
 Python exports a public heartbeat-stopped signal.
 
-Python adoption remains in progress until the immutable release and central
-verification gates record the required revisions. No central verification is claimed.
+32.0.0 adoption evidence is retained in release history. The current support matrix
+tracks the separate 32.1.0 draft.
 
 
 ## 31.0.0

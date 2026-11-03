@@ -55,6 +55,12 @@ inbox schema 3, SQLite user_version 3 and RunEvent v6. No store boundary is
 introduced. Results/resources and structured interactions belong to this same release.
 Local implementation does not replace the required immutable release and central adoption gates.
 
+32.1.0 combines the task-scoped artifact search capability with unified completion
+projection, retained-result provenance and recovery notices. This is a minor
+capability release using the existing result extension maps, App Server v5,
+record schema 1, inbox schema 3 and SQL schema 3; it introduces no store boundary.
+The artifact work is a single release rather than a mutation of published 32.0.0.
+
 ## Adoption states
 
 Support-matrix schema 2 is mandatory. Top-level contract_version/status applies to
@@ -69,8 +75,8 @@ captured-prefix reads. It is a major behavior release without a record, inbox,
 SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
-`support-matrix.json` owns the current adoption status. Contract 32.0.0 is in
-progress and is not yet released or verified. Rust is frozen at verified 23.0.0 / 0.21.x.
+`support-matrix.json` owns the current adoption status. Contract 32.1.0 is an
+unreleased draft in progress; its immutable snapshot and central adoption are pending. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see

@@ -19,7 +19,11 @@ class ToolResultsTests(unittest.TestCase):
         self.assertEqual([self.cases[k]["summary"]["kind"] for k in ("text", "json", "image", "file", "error")],
                          ["text", "json", "image", "file", "error"])
         self.assertEqual(self.fixture["effects"], {"toolExecutions": 9, "copies": 0})
-        self.assertEqual(self.fixture["storageCallsAtCompletion"], ["put_version"])
+        self.assertEqual(self.fixture["storageCallsAtCompletion"].count("put_version"), 2)
+        self.assertEqual(self.fixture["storageCallsAtCompletion"].count("get_current_stream"), 1)
+        self.assertEqual(self.fixture["storageCallsAtCompletion"], [
+            "put_version", "stat_current", "get_current_stream", "put_version", "stat_current",
+        ])
         self.assertEqual(base64.b64decode(self.cases["text"]["firstPage"]["data"]), b"plain text")
         self.assertEqual(self.cases["json"]["summary"]["value"], {"answer": 42, "汉字": "🙂"})
         expected = bytes(range(256)) * 4097
@@ -31,8 +35,29 @@ class ToolResultsTests(unittest.TestCase):
         self.assertEqual(int.from_bytes(image[16:20], "big"), 1)
         self.assertEqual(int.from_bytes(image[20:24], "big"), 1)
         unicode = ("开头🙂漢字\n" * 20_000).encode()
-        self.assertEqual(self.cases["unicode"]["firstPage"]["totalBytes"], len(unicode))
-        self.assertEqual(self.cases["unicode"]["contentSha256"], hashlib.sha256(unicode).hexdigest())
+        text = unicode.decode()
+        ref = self.cases["unicode"]["summary"]["ref"]
+        owner = hashlib.sha256(json.dumps(
+            [ref["sessionId"], ref["turnId"], ref["operationId"], ref["attempt"]],
+            ensure_ascii=False, separators=(",", ":"),
+        ).encode()).hexdigest()
+        suffix = hashlib.sha256(owner.encode()).hexdigest()
+        task = ref["turnId"].replace("/", "-")
+        path = f".vv-agent/artifacts/{task}/result-{suffix}.txt"
+        shown = 12000
+        while True:
+            marker = (
+                f"\n... {shown} of {len(text)} source characters shown; full text in {path}; "
+                "read a range with read_file(start_line, end_line) or search with search_files(pattern) ...\n"
+            )
+            count = 12000 - len(marker)
+            if count == shown:
+                break
+            shown = count
+        preview = (text[:6000] + marker + text[-(shown - 6000):]).encode()
+        self.assertEqual(self.cases["unicode"]["firstPage"]["totalBytes"], len(preview))
+        self.assertEqual(self.cases["unicode"]["contentSha256"], hashlib.sha256(preview).hexdigest())
+        self.assertEqual(self.cases["unicode"]["resources"][0]["sha256"], hashlib.sha256(unicode).hexdigest())
         self.assertEqual(self.cases["artifact"]["resources"][0]["sha256"], hashlib.sha256(unicode).hexdigest())
         self.assertTrue(self.cases["artifact"]["summary"]["resources"][0]["fullText"])
         self.assertEqual(self.cases["url"]["summary"]["resources"][0]["status"], "not_retained")
