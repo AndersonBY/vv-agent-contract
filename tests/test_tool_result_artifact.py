@@ -14,6 +14,30 @@ class ToolResultArtifactTests(unittest.TestCase):
     def setUp(self):
         self.fixture = json.loads((ROOT / "fixtures/tool_result_artifact.json").read_text())
 
+    def test_bounded_existing_captures_have_operation_bound_provenance(self):
+        bounded = json.loads((ROOT / "fixtures/bounded_tool_result.json").read_text())
+        reference_fields = {"path", "media_type", "encoding", "size_bytes", "sha256"}
+        for name, call_id in (("truncated_bash", "call-bash"), ("truncated_error", "call-error")):
+            with self.subTest(name=name):
+                result = bounded["canonical_results"][name]
+                artifact = result["artifact"]
+                self.assertEqual(set(artifact), reference_fields)
+                entry = result["metadata"]["vv_artifact"]
+                self.assertEqual(set(entry), reference_fields | {
+                    "source", "source_complete", "capture_incomplete_reason",
+                })
+                self.assertEqual({key: entry[key] for key in reference_fields}, artifact)
+                self.assertIs(entry["source_complete"], False)
+                self.assertEqual(entry["capture_incomplete_reason"], "capture_completeness_unverified")
+                self.assertEqual(result["tool_call_id"], call_id)
+                self.assertEqual(entry["source"], {
+                    "operation_id": f"c1c/bounded_{name}/turn/initial/model/primary/1/attempt/1/tool/0",
+                    "attempt": 1,
+                    "tool_call_id": call_id,
+                    "arguments_sha256": hashlib.sha256(b"{}").hexdigest(),
+                })
+                self.assertIs(type(entry["source"]["attempt"]), int)
+
     def test_short_result_and_three_projection_cases(self):
         cases = self.fixture["cases"]
         self.assertEqual(cases["short"]["result"], {

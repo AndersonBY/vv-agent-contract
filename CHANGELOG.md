@@ -1,6 +1,20 @@
 # Changelog
 
-## 32.1.0 (unreleased)
+## 32.1.1 (unreleased)
+
+Correct `bounded_tool_result.json`: the released 32.1.0 fixture omitted
+`metadata.vv_artifact` from `canonical_results.truncated_bash` and
+`canonical_results.truncated_error`. Both existing producer captures must record
+`source_complete=false` and `capture_completeness_unverified`, with the artifact
+reference and source bound to the admitted operation. A second generator had
+refreshed only `unified_projection`, preserving stale canonical results. The
+session-kernel generator now owns the whole fixture.
+
+This patch corrects evidence only. Runtime behavior, normative tool-result rules
+and all schema versions are unchanged; there is no store boundary.
+Implementations must re-sync their pinned snapshot to 32.1.1.
+
+## 32.1.0
 
 Apply the existing 12,000-character projection at the kernel completion boundary
 for every previously untruncated tool result. Stream full received text into
@@ -13,8 +27,7 @@ real artifact line numbers and bounded streaming results. New completion preview
 name the recovery path and describe both read_file ranges and search_files regexes.
 New writes check the exclusive writer's byte count and available file metadata;
 existing objects still require full UTF-8, digest and size validation.
-Record schema 1 and inbox schema 3 are unchanged. This draft does not publish a
-version or claim implementation adoption.
+Record schema 1 and inbox schema 3 are unchanged.
 
 ## 32.0.0
 
@@ -38,8 +51,8 @@ steering rather than guessing a human-wait target. Resource backends support ran
 reads with per-page immutable version checks and cached digest verification.
 Python exports a public heartbeat-stopped signal.
 
-32.0.0 adoption evidence is retained in release history. The current support matrix
-tracks the separate 32.1.0 draft.
+32.0.0 adoption evidence is retained in release history. The support matrix owns
+current implementation adoption status.
 
 
 ## 31.0.0

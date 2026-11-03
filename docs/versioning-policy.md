@@ -61,6 +61,11 @@ capability release using the existing result extension maps, App Server v5,
 record schema 1, inbox schema 3 and SQL schema 3; it introduces no store boundary.
 The artifact work is a single release rather than a mutation of published 32.0.0.
 
+32.1.1 corrects the released bounded-result fixture's missing provenance entries
+and gives the whole file one generator. This is an evidence-only patch:
+32.1.0 behavior, normative rules and schema versions remain unchanged.
+Implementations must re-sync their pinned snapshot.
+
 ## Adoption states
 
 Support-matrix schema 2 is mandatory. Top-level contract_version/status applies to
@@ -75,8 +80,9 @@ captured-prefix reads. It is a major behavior release without a record, inbox,
 SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
-`support-matrix.json` owns the current adoption status. Contract 32.1.0 is an
-unreleased draft in progress; its immutable snapshot and central adoption are pending. Rust is frozen at verified 23.0.0 / 0.21.x.
+`support-matrix.json` owns the current adoption status. Contract 32.1.1 is an
+unreleased evidence correction; its immutable snapshot and central adoption are
+pending. Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see
