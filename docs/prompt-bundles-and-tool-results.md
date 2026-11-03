@@ -5,9 +5,8 @@ bounded-result extension, and the current artifact-backed Message and
 microcompaction behavior. These are task-neutral runtime capabilities. They do
 not classify a task, choose an answer, decide completion, or change a model's
 context/output limits. `.vv-agent/artifacts/` remains a logical,
-workspace-relative recovery namespace, and the only model-facing recovery path
-is the policy-checked `read_file` tool through the effective
-`WorkspaceBackend`.
+workspace-relative recovery namespace, and model-facing recovery uses policy-checked `read_file` ranges or
+`search_files` patterns through the effective `WorkspaceBackend`.
 
 ## Prompt Bundle
 
@@ -91,6 +90,62 @@ projection appends a compact canonical recovery record containing only the
 present truncation fields. This makes an artifact or cursor visible to the
 model without expanding ordinary results.
 
+Before recording any non-model completion, the kernel bounds previously
+untruncated content to 12,000 Unicode scalar values. This includes product,
+dynamic, MCP and built-in tools. A newly bounded preview keeps its first 6,000
+characters, a recovery notice, and as many final characters as fit in the remaining
+12,000-character budget. The notice has this exact form, including newlines:
+
+```text
+\n... {shown} of {total} source characters shown; full text in {path}; read a range with read_file(start_line, end_line) or search with search_files(pattern) ...\n
+```
+
+`total` counts the original Unicode scalar values; `shown` counts retained source
+characters, excluding the notice. Determine the immutable expected path before
+projection, then solve `shown = 12000 - len(notice)` and set
+`tail = shown - 6000`. Use decimal counts without separators. For valid artifact
+paths the digit count stabilizes deterministically; identical receipt identities
+and content produce identical UTF-8 preview bytes. The notice counts toward the
+budget. Existing producer-truncated results, including terminal capture previews,
+keep their original marker exactly; their appended `vv_agent_recovery` still
+provides the typed path. Do not infer truncation from text or insert another marker.
+UTF-8 byte counts describe the original and visible text; decode invalid input bytes with
+replacement before projection. Already-truncated results keep their preview and
+recovery fields. Short results keep exactly their original result bytes with no
+new fields.
+
+Every newly bounded result first streams its full text into exclusive immutable
+workspace storage. Repeating the same completion uses the same path and verifies
+existing size and digest; a different body for the same completion identity is
+a conflict and never replaces the object. General content-digest reuse likewise
+verifies the existing bytes. Only after persistence and verification may the
+kernel put a successful reference into `op_completed` and compute its result
+digest. For a fresh exclusive write, the source already determines expected size
+and digest: require the writer's returned byte count to match and, where file
+metadata is available, require a file of the same size. Do not reread the newly
+written body. A pre-existing object or producer-truncated artifact still requires
+a full streaming UTF-8, size and digest check. Storage failure preserves status,
+directive and error code: it cannot retry an already completed external effect. The required recovery pointer names
+the expected object, while `app_server_resources` marks it `unavailable`; there
+is no successful `vv_artifact` entry for a missing or corrupt object.
+
+`metadata.vv_artifact` is reserved for the kernel. Discard or reject producer
+values before using them. A successful entry contains exactly the five
+`ToolArtifactRef` fields plus `source`, `source_complete` and
+`capture_incomplete_reason`. The closed source object contains `operation_id`,
+positive integer `attempt`, `tool_call_id` and lowercase `arguments_sha256`
+(SHA-256 of canonical JSON arguments). The reference must match the result's
+typed artifact, the source must match the admitted operation, and the kernel
+must establish the storage evidence described above; existing objects require
+actual UTF-8 byte validation against size and digest.
+`source_complete=true` requires a null reason; false requires a nonempty reason.
+Newly archived receipt text is complete relative to the text received by the
+kernel. For an existing producer capture without trusted capture-completeness
+evidence, report false with `capture_completeness_unverified`. This includes
+terminal captures whose upstream logging may have been capped. A preview limit
+alone says nothing about missing source bytes; `output_truncated` must never
+stand in for a provider capture-loss signal.
+
 An `artifact` is a closed object with a logical workspace-relative `path`,
 `media_type`, `encoding`, `size_bytes`, and lowercase SHA-256 `sha256`. It is
 written through the effective `WorkspaceBackend` below the reserved logical
@@ -99,8 +154,8 @@ policy/approval boundary. For a local adapter, that logical namespace maps to
 private storage outside the agent shell's working directory; shell commands
 cannot read, replace, delete, or mutate those bytes through a host path. The
 model never selects the artifact path. Recovery uses the existing
-policy-checked `read_file` tool, which resolves the logical path through the
-backend; there is no artifact bypass API.
+policy-checked `read_file` and `search_files` tools, which resolve the logical
+path through the backend; there is no artifact bypass API.
 
 The canonical host `Message` may carry the same object as optional
 `artifact_ref: ToolArtifactRef`. The field is omitted when absent and survives
@@ -128,6 +183,59 @@ text, not a first-only slice. `read_file` returns a bounded slice plus cursor
 instead of `content: null`; a single oversized line is therefore recoverable.
 All sparse result fields survive tool messages, cycle records, AgentResult,
 operation receipts, terminal projections and strict readers.
+
+## Searching a retained artifact
+
+At the built-in `search_files` entry point, recognize the reserved artifact
+namespace before validating directory options or choosing a workspace discovery
+backend. An explicit artifact target searches that one object; `glob`, `type`,
+hidden-file and ignored-directory discovery settings cannot exclude it. Do not
+list the artifact directory or run a subprocess against a host/container path.
+
+Accept only a canonical relative single-file reference produced in that namespace:
+one task segment and one text object filename. Reject directories, wildcards,
+parent traversal, aliases such as `./`, backslashes, extra path segments and other
+suffixes with `artifact_search_denied`. The task segment must equal the current
+task's canonical artifact segment, not a prefix. Use the same trusted task identity
+as completion storage: a host-scoped backend task_id when supplied, otherwise
+the execution context task_id (the SDK turn identity). The model cannot select
+that identity.
+Reject another task before storage access. Missing objects, unreadable objects
+and invalid UTF-8 fail with `artifact_unavailable`. Host authorization still runs
+through the effective backend; a matching task segment does not grant account or
+organization permission.
+
+Decode byte chunks incrementally so UTF-8 characters split across reads remain
+whole. Match complete logical lines, carrying unfinished lines across chunks;
+strip a terminal CR before LF. Regexes match individual lines, including the last
+line without LF. Preserve smart-case, explicit case and literal options, and the
+content/files_with_matches/count output modes. `multiline=true` and malformed
+regexes return `invalid_arguments`. Content results always identify real artifact
+line numbers, regardless of a preview marker or the display flag. End every
+successful response with exactly:
+
+```text
+Artifact line numbers can be used directly with read_file start_line/end_line.
+```
+
+Use the existing search budgets of 500 rendered lines and 30,000 characters,
+including notices. Keep only a bounded unfinished line and result page. A line
+longer than the character budget is not matched: discard its remainder, continue
+at the next real line, and explicitly mark the search incomplete with its first
+oversized line number. Never match a clipped line as though it ended there, or
+claim a complete no-match result. This is necessary because arbitrary regexes
+cannot be matched faithfully with fixed overlap on unbounded lines. Use read_file
+ranges and its cursor to recover such a line. Output/line limits likewise say
+search was truncated and suggest narrowing the pattern or paginating matches
+with offset/head_limit. A zero head_limit removes that optional limit, not the
+hard budgets. Context-line expansion is not part of artifact search.
+
+Searching does not mutate the source, write storage objects or issue recovery
+references. Its ordinary textual result still goes through the same completion
+projection as every tool: a result longer than 12,000 characters is retained and
+bounded there. There is no search-specific projection exemption. Backends must
+supply chunk reads to establish a storage-level memory bound; a legacy whole-byte
+read fallback is not proof of streaming behavior for that backend.
 
 ## Archive-Backed Microcompaction
 
@@ -187,8 +295,7 @@ excerpt:
 
 The marker must not expose byte counts, character counts, hashes, storage
 metadata, or other bookkeeping. Integrity metadata remains on the typed
-artifact reference outside the model projection. `read_file` is the only
-model-facing recovery path.
+artifact reference outside the model projection. `read_file` and `search_files` are the model-facing recovery tools.
 
 ## Summary And Recovery Projection
 

@@ -41,6 +41,14 @@ that. Side-effect values have no hierarchy and are never inferred.
 Generic `metadata` remains independent host data. Keys inside that map never
 become typed declarations.
 
+Tool result `metadata.vv_artifact` is a reserved kernel-written entry in the
+existing extension map, not a new record kind. Producers cannot supply its
+source identity or capture-completeness claim. Its verified reference and
+completeness rules are defined in
+[Bounded Tool Results](prompt-bundles-and-tool-results.md#bounded-tool-results).
+The result metadata ban on `content`, `output`, `stdout`, `stderr` and
+`instructions` still applies. Record schema 1 and inbox schema 3 are unchanged.
+
 ## Normalization And Limits
 
 A present object fills omitted fields with neutral defaults and rejects fields
