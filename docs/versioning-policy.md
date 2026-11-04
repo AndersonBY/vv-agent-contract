@@ -91,3 +91,18 @@ Reactivation requires a new Maker decision and full current adoption; see
 A handoff includes exact revisions/PRs, gates, manifest digest, adaptations, open
 differences and matrix status. v23 verification evidence remains in Git history
 and CHANGELOG; publication alone never establishes implementation support.
+
+## Unreleased artifact reread changes
+
+The artifact task-scope encoding and search behavior replace existing behavior;
+the pending release is 33.0.0 under the major-change rule. Do not
+republish 32.1.1 with changed bytes. The new read_file parameters use its existing
+closed tool argument object; recovery uses existing typed artifacts/cursors and
+metadata maps. There is no record, inbox, SQL or App Server schema bump. Historical
+records remain decodable; old ambiguous lossy artifact scopes require a host
+transition decision and are not silently authorized.
+
+An active turn with the previous frozen read_file tool schema does not match the
+new runtime. Its existing definition guard rejects continuation before dispatch.
+Hosts finish those turns with the old runtime or create new sessions from their
+own history/state; this does not require rewriting old record bytes.

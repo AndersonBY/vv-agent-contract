@@ -1,5 +1,34 @@
 # Changelog
 
+## 33.0.0 (unreleased) — artifact reread gaps
+
+Major: replace lossy compaction authorization scopes with type-separated task
+and session identities, and change existing read_file, search and terminal
+failure behavior. Ordinary UUID-like task paths stay byte-identical.
+read_file adds start_char with a fixed 12,000-character page and returns
+continuation coordinates on every truncated page. Page notices participate in
+body byte counts. Search scans oversized lines with overlap and character columns.
+All model-controlled content, glob and child exclusion matching has an
+interruptible cumulative request budget; timeouts are explicit and reverse mode
+is rejected. Word matching includes combining marks: \w/\b/\W change for
+`a\u0301b`; case-insensitive `i` no longer matches dotless `ı` in the portable
+matcher. Terminal output failures preserve command results and return retention
+unavailable without recovery pointers.
+
+No record, inbox, SQL or App Server version changes. Frozen executable turns
+with the old read_file schema fail the existing definition guard. Old compaction
+objects remain stored but are no longer model-readable through tools.
+Nonliteral task IDs also change artifact directories: lowercase `s-` prefixes,
+separators, IDs over 64 characters and non-ASCII IDs lose model read authorization
+for their old paths. Only 1–64 ASCII characters matching
+`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, without the lowercase `s-` prefix, preserve
+their literal directory. Guard closure preserves unconfirmed provider waits
+when the turn is not marked cancelled and cancellation cannot prove a definitive
+outcome; late results are audit-only. User cancel/abort retains its existing
+`op_unknown` behavior, including `provider_result_invalid` for invalid Definitive replies.
+Publication and Python adoption are pending. The current 32.1.1 metadata and
+immutable SDK lock stay pinned until a new release exists; do not republish it.
+
 ## 32.1.1 (unreleased)
 
 Correct `bounded_tool_result.json`: the released 32.1.0 fixture omitted
