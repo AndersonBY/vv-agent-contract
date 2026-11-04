@@ -309,11 +309,13 @@ retained. Provider handles and callbacks must bind the original provider,
 operation, attempt and prepared request digest. Callbacks also bind the turn and
 generation; authentication covers result and usage together.
 
-Invalid results report `provider_result_invalid`. Query and cancel keep the
+Invalid submit, query and callback results report `provider_result_invalid`.
+Query and cancel keep the
 original handle and wait. Invalid submit results without a retainable handle
 become Unknown with dispatch evidence and MUST NOT trigger automatic retry,
 even when the tool normally supports idempotency. Callback rejection is retained
-in the applied-input receipt. Invalid submit/cancel and rejected callback facts
+in the applied-input receipt. Invalid submit, invalid cancellation on a turn
+marked cancelled, and rejected callback facts
 project a `DiagnosticEvent(code="provider_result_invalid")` and App Server
 `error/warning` from existing records; invalid query warnings leave no new
 completion record. No invalid result becomes a business failure or
@@ -322,9 +324,17 @@ proof of a stop.
 Cancellation has three meanings. An accepted control receipt means requested.
 A valid Definitive result confirms the original operation's terminal outcome;
 it does not claim every successful result was stopped by that request. Accepted,
-Unknown, timeout and invalid cancellation replies cannot confirm the stop. The
-turn may end cancelled while its original operation remains unconfirmed. Late
-trusted results are audit-only and cannot revive that turn.
+Unknown, exceptions, timeout and invalid cancellation replies cannot confirm the
+stop. A guard closure (schema/handler version mismatch, budget or hook failure)
+preserves the original provider wait when the turn has not been marked cancelled;
+it does not create an `op_unknown`. The failed terminal lists that operation in
+`unconfirmed_operations`. The unknown transition is allowed only for a started
+attempt, or a parked attempt that was dispatched and whose turn is marked
+cancelled. For user cancel/abort, a non-Definitive cancellation reply records
+`op_unknown` with the closure reason; an invalid Definitive reply records
+`op_unknown(provider_result_invalid)`. The original acceptance evidence and
+terminal unconfirmed identity remain retained. Late trusted results are
+audit-only and cannot revive that turn or cause a new submission.
 
 There is an accept-before-record crash window: the external service may accept
 work before the kernel records its handle. Only a provider that actually dedupes
@@ -654,7 +664,10 @@ Authorization precedes all reads and creation and covers the source, derived
 identity and requested workspace through thread/fork params.
 
 Artifacts keep their existing relative paths and digests; artifact_scope only
-names future writes. The host prepares the business workspace, then calls fork.
+names future writes. Copying evidence does not by itself grant model-facing
+artifact read access in another session/task. Built-in reads enforce the current
+scope rule in prompt-bundles-and-tool-results.md; inherited cross-task read grants
+require a separate host integration and are not inferred from byte availability. The host prepares the business workspace, then calls fork.
 The producer resolves source and destination artifact backends through host
 bindings. Shared references are reused. Missing destination artifacts are copied
 with the existing exclusive immutable write API at the same relative path. Both

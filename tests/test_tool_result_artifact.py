@@ -64,7 +64,9 @@ class ToolResultArtifactTests(unittest.TestCase):
             with self.subTest(name=name):
                 text = case["input"]["unit"] * case["input"]["repeat"]
                 result = case["result"]
-                if name == "already_truncated":
+                if name == "terminal_retention_unavailable":
+                    marker = "\n... complete text could not be saved; retention unavailable; do not rerun the command ...\n"
+                elif name == "already_truncated":
                     marker = MARKER
                 else:
                     start = result["content"].index("\n... ", 6000)
@@ -78,6 +80,10 @@ class ToolResultArtifactTests(unittest.TestCase):
                 tail = 12000 - 6000 - len(marker)
                 self.assertEqual(result["content"], text[:6000] + marker + text[-tail:])
                 self.assertEqual(len(result["content"]), 12000)
+                if name == "terminal_retention_unavailable":
+                    self.assertNotIn("artifact", result)
+                    self.assertNotIn("truncated", result)
+                    continue
                 self.assertEqual(result["original_bytes"], len(text.encode()))
                 self.assertEqual(result["visible_bytes"], len(result["content"].encode()))
                 artifact = result["artifact"]
@@ -111,3 +117,16 @@ class ToolResultArtifactTests(unittest.TestCase):
         self.assertTrue({"producer_forged_namespace", "digest_mismatch", "size_mismatch",
                          "invalid_path", "false_without_reason", "true_with_reason"}.issubset(names))
         self.assertTrue(all("forbidden_" + key in names for key in ("content", "output", "stdout", "stderr", "instructions")))
+
+    def test_terminal_retention_failure_is_independent_of_command_outcome(self):
+        result = self.fixture["cases"]["terminal_retention_unavailable"]["result"]
+        self.assertEqual(result["status_code"], "SUCCESS")
+        self.assertEqual(result["directive"], "continue")
+        self.assertNotIn("error_code", result)
+        self.assertEqual(result["metadata"]["exit_code"], 0)
+        self.assertEqual(result["metadata"]["retention"], {"status": "unavailable", "reason": "artifact_persist_failed"})
+        self.assertNotIn("app_server_resources", result["metadata"])
+        self.assertNotIn("vv_artifact", result["metadata"])
+        for key in ("artifact", "cursor", "truncated", "original_bytes", "visible_bytes"):
+            self.assertNotIn(key, result)
+        self.assertIn("complete text could not be saved", result["content"])

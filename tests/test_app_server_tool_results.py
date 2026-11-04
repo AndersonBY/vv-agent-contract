@@ -42,7 +42,8 @@ class ToolResultsTests(unittest.TestCase):
             ensure_ascii=False, separators=(",", ":"),
         ).encode()).hexdigest()
         suffix = hashlib.sha256(owner.encode()).hexdigest()
-        task = ref["turnId"].replace("/", "-")
+        task_identity = json.dumps(["task", ref["turnId"]], ensure_ascii=False, separators=(",", ":")).encode()
+        task = "s-" + hashlib.sha256(task_identity).hexdigest()[:62]
         path = f".vv-agent/artifacts/{task}/result-{suffix}.txt"
         shown = 12000
         while True:

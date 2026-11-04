@@ -195,8 +195,13 @@ list the artifact directory or run a subprocess against a host/container path.
 Accept only a canonical relative single-file reference produced in that namespace:
 one task segment and one text object filename. Reject directories, wildcards,
 parent traversal, aliases such as `./`, backslashes, extra path segments and other
-suffixes with `artifact_search_denied`. The task segment must equal the current
-task's canonical artifact segment, not a prefix. Use the same trusted task identity
+suffixes with `artifact_search_denied`. The task segment must equal either the current task's canonical artifact segment
+or the canonical segment of `session/<current session id>/<current SDK task id>`,
+not a prefix. The latter is the logical scope used by compaction. Other sessions
+and tasks remain denied. The trusted runtime supplies both session and SDK task
+identity; a host task id does not replace the SDK task inside a compaction scope.
+Apply this same rule to model-facing read_file and file_info before storage access.
+It does not authorize inherited artifacts from another turn or session. Use the same trusted task identity
 as completion storage: a host-scoped backend task_id when supplied, otherwise
 the execution context task_id (the SDK turn identity). The model cannot select
 that identity.
@@ -204,6 +209,22 @@ Reject another task before storage access. Missing objects, unreadable objects
 and invalid UTF-8 fail with `artifact_unavailable`. Host authorization still runs
 through the effective backend; a matching task segment does not grant account or
 organization permission.
+
+### Task-scope identity encoding
+
+ASCII task ids matching `[A-Za-z0-9][A-Za-z0-9._-]{0,63}` stay literal unless
+they start with reserved `s-`. Every other task id is encoded as `s-` plus the
+first 62 lowercase SHA-256 hex characters of canonical JSON `["task", id]`.
+Compaction uses the same prefix and digest length with canonical JSON
+`["session", session_id, SDK_task_id]`. The type tag separates identity domains;
+JSON preserves component boundaries. Tool-call filename sanitization is unchanged.
+Producers and authorization use the same rule. Old lossy compaction paths are
+not authorized; stored references and objects are not rewritten.
+
+The host-facing scope predicate accepts a path and trusted task_id, with optional
+session_id and session_task_id when the SDK task differs from the host task.
+It checks scope and canonical filename; host ACLs, availability and integrity
+checks remain required.
 
 Decode byte chunks incrementally so UTF-8 characters split across reads remain
 whole. Match complete logical lines, carrying unfinished lines across chunks;
@@ -219,16 +240,47 @@ Artifact line numbers can be used directly with read_file start_line/end_line.
 ```
 
 Use the existing search budgets of 500 rendered lines and 30,000 characters,
-including notices. Keep only a bounded unfinished line and result page. A line
-longer than the character budget is not matched: discard its remainder, continue
-at the next real line, and explicitly mark the search incomplete with its first
-oversized line number. Never match a clipped line as though it ended there, or
-claim a complete no-match result. This is necessary because arbitrary regexes
-cannot be matched faithfully with fixed overlap on unbounded lines. Use read_file
-ranges and its cursor to recover such a line. Output/line limits likewise say
-search was truncated and suggest narrowing the pattern or paginating matches
-with offset/head_limit. A zero head_limit removes that optional limit, not the
-hard budgets. Context-line expansion is not part of artifact search.
+including notices. Scan long logical lines in windows of 30,000 characters with
+4,096 characters of overlap. Never discard a whole line without matching it.
+Report one-based line numbers and zero-based Unicode character columns. Keep
+only bounded match-centered excerpts (at most 200 source characters each), window
+state and a bounded result page. A column is directly usable as read_file
+start_char at the same start_line. Do not count overlap matches twice.
+
+Report windowed scanning explicitly: identify the first oversized line and the
+4,096-character overlap limit; wider matches and boundary-sensitive lookaround
+can be incomplete. Never interpret an internal window edge as a real line start
+or end for ordinary ^/$ patterns. The result is incomplete even when it contains
+hits, and must not claim an exhaustive no-match result. Output limits likewise
+suggest narrowing the pattern or paginating with offset/head_limit; offset counts matches, including multiple hits on one line. A zero
+head_limit removes that optional limit, not the hard budgets. Context-line
+expansion is not part of artifact search.
+
+All model-controlled matching must be forcibly interruptible: content regexes,
+file globs and child workspace exclude_files_pattern. Share a cumulative 250 ms
+CPU budget across file enumeration and matching within a request. Exhaustion is
+an explicit error or incomplete result, never an ordinary empty list or no-match
+result. A content search retains earlier hits and the stopping line/character
+position and reports "Regular expression too slow; aborted". Reject reverse
+matching modes explicitly. Literal, smart-case and inline (?i) remain available.
+Word matching includes combining marks: \w+ matches all of `a\u0301b`, \b has
+boundaries only at its ends, and \W does not match the combining mark. Under
+case-insensitive matching, `i` does not match dotless `ı`. These rules apply to
+artifact search and the portable workspace content matcher. Native search
+backends keep their documented engine semantics.
+
+read_file accepts start_char (default 0) within start_line alongside a line
+range. Each page reads at most 12,000 characters, including displayed line
+numbers. start_char and line ranges cannot accompany a cursor. Scan and validate
+the source as a stream even when skipping a very long prefix; memory must not
+grow with line length. Whenever another selected character remains, return
+metadata.read_page with next_line and next_start_char, including cursor-based
+calls. Put the next-page notice in the result body before computing visible_bytes
+and original_bytes. Projecting a tool message must preserve that body verbatim.
+Continue with the returned digest-bound cursor; manual positioning uses both
+next_line and next_start_char. Columns and offsets count Unicode characters,
+not UTF-8 bytes; exclude a leading BOM in both search and read coordinates.
+A partial read cannot establish a full edit baseline.
 
 Searching does not mutate the source, write storage objects or issue recovery
 references. Its ordinary textual result still goes through the same completion
@@ -346,3 +398,14 @@ Required implementations must prove real producer paths for:
    per cycle;
 6. no model-visible `compress_memory`, no `memory_notes`, and no `deferred`
    exposure value while internal compaction remains covered.
+
+## Terminal retention failure
+
+When output reading or storage fails after a command has run, preserve its
+confirmed process status, exit code, tool status, directive and bounded preview.
+Return metadata.retention = {"status":"unavailable",
+"reason":"artifact_persist_failed"} and a bounded notice that complete text
+could not be saved. Include no artifact or cursor recovery pointer and no
+successful vv_artifact provenance for missing output. Never turn output
+unavailability into a command error or repeat the command. A later check may
+retry retaining the existing capture. Existing partial objects remain immutable.
