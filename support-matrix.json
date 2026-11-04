@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "contract_version": "32.1.1",
+  "contract_version": "33.0.0",
   "status": "in-progress",
   "required_implementations": [
     "python"
@@ -9,7 +9,7 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "32.1.1",
+      "contract_version": "33.0.0",
       "status": "in-progress"
     },
     "rust": {
@@ -21,5 +21,5 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Unreleased artifact reread changes validated against local Python producers; a new immutable contract release, Python lock synchronization, and central adoption are still required."
+  "adoption_note": "Contract 33.0.0 is published; Python lock/snapshot synchronization and central adoption are pending."
 }

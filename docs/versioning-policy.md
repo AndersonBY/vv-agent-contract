@@ -80,9 +80,10 @@ captured-prefix reads. It is a major behavior release without a record, inbox,
 SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
-`support-matrix.json` owns the current adoption status. Contract 32.1.1 is an
-unreleased evidence correction; its immutable snapshot and central adoption are
-pending. Rust is frozen at verified 23.0.0 / 0.21.x.
+`support-matrix.json` owns the current adoption status. The current contract is
+33.0.0; Python lock/snapshot synchronization and central adoption are pending.
+Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
+Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
 record must remain untouched.
 Reactivation requires a new Maker decision and full current adoption; see
@@ -92,11 +93,10 @@ A handoff includes exact revisions/PRs, gates, manifest digest, adaptations, ope
 differences and matrix status. v23 verification evidence remains in Git history
 and CHANGELOG; publication alone never establishes implementation support.
 
-## Unreleased artifact reread changes
+## 33.0.0 artifact reread changes
 
-The artifact task-scope encoding and search behavior replace existing behavior;
-the pending release is 33.0.0 under the major-change rule. Do not
-republish 32.1.1 with changed bytes. The new read_file parameters use its existing
+33.0.0 is a major release because artifact task-scope encoding, search and terminal
+failure behavior replace existing behavior. The new read_file parameters use its existing
 closed tool argument object; recovery uses existing typed artifacts/cursors and
 metadata maps. There is no record, inbox, SQL or App Server schema bump. Historical
 records remain decodable; old ambiguous lossy artifact scopes require a host

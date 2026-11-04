@@ -1,6 +1,6 @@
 # Changelog
 
-## 33.0.0 (unreleased) — artifact reread gaps
+## 33.0.0 — 2026-11-04 — artifact reread gaps
 
 Major: replace lossy compaction authorization scopes with type-separated task
 and session identities, and change existing read_file, search and terminal
@@ -26,10 +26,8 @@ their literal directory. Guard closure preserves unconfirmed provider waits
 when the turn is not marked cancelled and cancellation cannot prove a definitive
 outcome; late results are audit-only. User cancel/abort retains its existing
 `op_unknown` behavior, including `provider_result_invalid` for invalid Definitive replies.
-Publication and Python adoption are pending. The current 32.1.1 metadata and
-immutable SDK lock stay pinned until a new release exists; do not republish it.
 
-## 32.1.1 (unreleased)
+## 32.1.1 — 2026-11-03
 
 Correct `bounded_tool_result.json`: the released 32.1.0 fixture omitted
 `metadata.vv_artifact` from `canonical_results.truncated_bash` and
