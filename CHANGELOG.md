@@ -1,5 +1,27 @@
 # Changelog
 
+## 34.0.0 — 2026-11-05 — search CPU budget correction
+
+33.0.0 incorrectly made 250 ms the cumulative CPU budget for an entire search,
+including enumeration and Python's per-line work. In vectorvein.ai's 40,000-line,
+1.92 MB acceptance artifact, ordinary regex and literal searches stopped around
+lines 24,009 and 25,809, before the target at line 33,333; 0.32.0 completed it.
+This was a budget design error, not a catastrophic regex.
+
+Each regex engine invocation now gets its own 250 ms interruptible timeout to
+stop catastrophic backtracking. The shared request budget becomes 10 s of thread
+CPU across enumeration and all matching. Partial content results keep earlier
+hits and interruption coordinates, with different messages for a slow invocation
+and the total limit. Local, Memory, S3, artifacts, globs/find_files and child
+exclusion filters use these rules. Window, page, head and file size limits stay
+unchanged.
+
+This changes existing observable behavior, so the versioning policy requires a
+major contract release. Tool schemas, frozen definitions, records, inbox, SQL,
+events and App Server wire versions do not change. No old decoder or frozen-turn
+compatibility branch is needed for this handler correction. Python adoption is
+pending; Rust retains its verified contract 23.0.0 / package series 0.21.x.
+
 ## 33.0.0 — 2026-11-04 — artifact reread gaps
 
 Major: replace lossy compaction authorization scopes with type-separated task

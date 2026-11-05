@@ -81,7 +81,7 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-33.0.0; Python lock/snapshot synchronization and central adoption are pending.
+34.0.0; Python lock/snapshot synchronization and central adoption are pending.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -106,3 +106,13 @@ An active turn with the previous frozen read_file tool schema does not match the
 new runtime. Its existing definition guard rejects continuation before dispatch.
 Hosts finish those turns with the old runtime or create new sessions from their
 own history/state; this does not require rewriting old record bytes.
+
+## 34.0.0 search budget correction
+
+The 250 ms cumulative budget in 33.0.0 was a design error: ordinary large scans
+could stop before a late match. Replacing it with a 10 s request thread CPU limit
+and a separate 250 ms limit per engine invocation changes existing observable
+behavior. Under this policy it is major, rather than a minor capability addition
+or an evidence-only patch. No tool schema, frozen definition, record, inbox, SQL,
+event or App Server shape changes; existing 33.0.0 turns need no new guard or
+historical decoder branch for this handler correction.

@@ -257,11 +257,22 @@ head_limit removes that optional limit, not the hard budgets. Context-line
 expansion is not part of artifact search.
 
 All model-controlled matching must be forcibly interruptible: content regexes,
-file globs and child workspace exclude_files_pattern. Share a cumulative 250 ms
-CPU budget across file enumeration and matching within a request. Exhaustion is
-an explicit error or incomplete result, never an ordinary empty list or no-match
-result. A content search retains earlier hits and the stopping line/character
-position and reports "Regular expression too slow; aborted". Reject reverse
+file globs and child workspace exclude_files_pattern. Each regex engine call
+(finditer, match or search over one line, window or whole text) has its own
+250 ms interruptible engine timeout. A finditer invocation shares that timeout
+across its iteration; yielding another match does not reset it. Independently,
+share a cumulative 10 s thread CPU budget across file enumeration and all matching
+within a request, including nested globs and exclusion filters. Storage I/O wait
+is not charged as thread CPU. Check the shared deadline inside enumeration loops,
+including empty pages/directories, before advancing traversal. Each engine call
+receives the smaller of 250 ms and the remaining request budget.
+Exhaustion is an explicit error or incomplete result, never an ordinary empty list
+or no-match result. A content search retains earlier hits and the stopping
+line/character position. A single slow engine invocation reports
+"Regular expression too slow; aborted"; total CPU exhaustion reports
+"Search total CPU limit exceeded (10 s); aborted". Discovery errors identify file
+enumeration. The same rules apply to Local, Memory and S3 workspaces, artifact
+search, find_files/globs and child exclusion filters. Reject reverse
 matching modes explicitly. Literal, smart-case and inline (?i) remain available.
 Word matching includes combining marks: \w+ matches all of `a\u0301b`, \b has
 boundaries only at its ends, and \W does not match the combining mark. Under
