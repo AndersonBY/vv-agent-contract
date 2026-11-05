@@ -16,7 +16,11 @@ in TokenUsage.provider_usage.
 Call ID is `{operation_id}/{attempt}`. Retry preserves operation ID, increments
 attempt and creates a distinct call ID. Changed effective requests have their own
 logical identity. Frozen endpoint order selects each actual backend/model;
-transport retries are one per logged attempt. Ordinary model operation capacity
+the kernel dispatches one logical adapter invocation per logged attempt. Vendor
+SDK retries may send several physical HTTP requests inside it; they are not
+separate ledger attempts. Complete owned-client HTTP observation, as defined in
+[model rejection](model-rejection.md), gates definitive rejection. A logical
+attempt cap does not cap physical sends or prove zero duplicate-cost risk. Ordinary model operation capacity
 is max(2, endpoint count), including two attempts for fewer than two endpoints.
 Required unavailable metrics can stop fallback. Unknown output repair never retries.
 

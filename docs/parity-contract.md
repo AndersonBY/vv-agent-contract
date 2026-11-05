@@ -6,6 +6,9 @@ adaptation mappings. Python is the only required implementation. Rust remains
 frozen at its verified contract 23.0.0 / 0.21.x baseline and does not adopt newer contracts.
 Matching schemas or fixture bytes alone do not establish real-producer parity.
 
+Provider HTTP rejection, safe diagnostics and definitive retry receipts follow
+[model rejection](model-rejection.md); transport ambiguity stays Unknown.
+
 ## Domains
 
 The current domain IDs in contract.json are system-prompt,
