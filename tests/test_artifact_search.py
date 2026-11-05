@@ -12,6 +12,12 @@ class ArtifactSearchTests(unittest.TestCase):
     def setUp(self):
         self.fixture = json.loads((ROOT / "fixtures/artifact_search.json").read_text())
 
+    def test_separate_engine_and_request_budgets(self):
+        self.assertEqual(
+            self.fixture["rules"]["regex_budget"],
+            "250ms_per_engine_call_10s_cumulative_thread_cpu_engine_interrupt",
+        )
+
     def test_matching_and_original_line_numbers(self):
         cases = self.fixture["cases"]
         for name, line, expected in [
