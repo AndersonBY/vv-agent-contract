@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "contract_version": "34.0.0",
-  "status": "pending-adoption",
+  "status": "verified",
   "required_implementations": [
     "python"
   ],
@@ -10,7 +10,8 @@
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
       "contract_version": "34.0.0",
-      "status": "pending-adoption"
+      "status": "verified",
+      "verified_revision": "026d0289b76a62f082fb9c5da2700d0602f717f8"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -21,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Search budget correction awaits the Python full gate, immutable lock synchronization and central cross-repository verification.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v34.0.0 passed the required implementation snapshots and cross-repository producer gates.",
+  "last_verified_at": "2026-11-05T07:08:12Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/41982946575"
 }
