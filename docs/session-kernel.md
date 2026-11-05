@@ -232,7 +232,8 @@ JSON state. Other explicitly opaque J/V locations keep their content boundaries.
 | Completed | Authentic retained model/tool/summary results MUST be reused; missing dependent tool plans MUST be reconstructed from the receipt, with no new model request. Model receipt, reservation and complete tool plans commit together. |
 | Parked | Preserve the exact provider/approval/user/child handle and evidence. Recovery MUST query/reuse it, not repeat submission. Missing evidence references are not proof of provider acceptance. |
 | Started, no authentic receipt/acceptance | Recheck inbox watermark before declaring unknown. Unknown MUST preserve dispatch evidence, unavailable measurements and duplicate-cost risk; it MUST NOT be fabricated success or confirmed failure/stop. |
-| Model retry/fallback | Freeze endpoint order; one provider/transport attempt per logged attempt (`max_attempts=1`). The operation limit is `max(2, frozen endpoint count)`; fewer than two endpoints permit two attempts. Distinct attempt/call IDs and every attempt's accounting MUST remain visible. Required unavailable metrics can stop fallback. |
+| Model retry/fallback | Freeze endpoint order; one logical adapter invocation per logged attempt (`max_attempts=1`); vendor SDK retries may issue multiple physical HTTP requests, all subject to the observation rules in [model rejection](model-rejection.md). The operation limit is `max(2, frozen endpoint count)`; fewer than two endpoints permit two attempts. Distinct attempt/call IDs and every attempt's accounting MUST remain visible. Required unavailable metrics can stop fallback. |
+| Model request rejected | An explicit adapter assertion or a complete owned-client observation where every physical request received 4xx other than 408, before stream output and without uncertainty anywhere in the exception graph, is a definitive failed receipt. Content rejections MUST NOT retry; 401/403/404 retry only with multiple frozen endpoints, without delay. 429 retains backoff and a single-endpoint retry. Explicit adapter retryability overrides defaults; all retries use the same frozen limit. See [model rejection](model-rejection.md). Each rejection remains completed without `op_unknown` or duplicate-cost risk. Primary exhaustion ends as `failed / model_request_rejected` with the last safe rejection and no unconfirmed operation from those rejected attempts. |
 | Tool retry | Unknown tools MUST NOT auto-retry unless frozen metadata declares `idempotency=supported` and the actual provider supports that key. Ordinary tools permit one retry (two attempts total). Unsupported/unknown idempotency stops. The key is stable across attempts, currently `{session_id}/{operation_id}`. |
 | Output repair | One logged tools-free `output_repair` operation. An unknown repair MUST never be automatically retried. Coercion/repair errors MUST become durable failed results with partial-output evidence. |
 | Late result, unknown not consumed | A trusted result MAY be adopted normally. An earlier model receipt can supersede a planned, undispatched retry without inventing a result for that retry. |
@@ -493,8 +494,8 @@ and exports; app_server_observable.json inventories their expectations.
 `ModelSelection = {model:T, model_settings?:ModelSettings, route:J}` is closed.
 ModelSettings uses its existing canonical fields (fixture `model_settings.json`);
 reasoning effort belongs in `reasoning:{effort:...}`, not route. Omitted settings
-mean empty settings for the new model, with one transport attempt per logged
-attempt. The explicitly opaque route carries host routing such as backend_type.
+mean empty settings for the new model, with one logical adapter invocation per logged
+attempt; vendor SDK physical retries remain subject to complete HTTP observation. The explicitly opaque route carries host routing such as backend_type.
 Both target_turn_id and generation MUST be null. Selection targets this session
 only; it MUST NOT propagate to child sessions.
 

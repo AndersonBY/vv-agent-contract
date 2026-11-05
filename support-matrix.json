@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "contract_version": "34.0.0",
-  "status": "verified",
+  "contract_version": "35.0.0",
+  "status": "pending-adoption",
   "required_implementations": [
     "python"
   ],
@@ -9,9 +9,8 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "34.0.0",
-      "status": "verified",
-      "verified_revision": "026d0289b76a62f082fb9c5da2700d0602f717f8"
+      "contract_version": "35.0.0",
+      "status": "pending-adoption"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -22,7 +21,5 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v34.0.0 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-11-05T07:08:12Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/41982946575"
+  "adoption_note": "Definitive model rejection has local Python producer evidence; immutable release synchronization, full Python gates and central adoption remain pending."
 }

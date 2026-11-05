@@ -1,5 +1,54 @@
 # Changelog
 
+
+## 35.0.0 — 2026-11-06
+
+A provider invocation whose every observed physical send returns 4xx other than
+408 has rejected the request. Vendor SDK hidden retries are included. A final 400
+after a timeout or 5xx stays Unknown. Unobservable adapters require an explicit
+assertion, and uncertainty anywhere in the exception graph vetoes even that. Retrying it as though
+execution might have succeeded wastes requests and leaves hosts waiting for an
+outcome that is already known. Model 4xx responses other than 408 now produce a
+confirmed failure with a safe status, provider code/type and message. Permanent
+rejections stop immediately; 429 and adapter-confirmed temporary rejections can
+retry with retained backoff and end as confirmed failure when exhausted.
+
+A 4xx counts only after its entire raw response body reaches EOF and decodes
+successfully; unread/closed bodies and decoder failures remain Unknown, including
+413. Every non-408 4xx is pre-read within min(request read timeout, 10 seconds)
+and 1 MiB of raw/decoded bytes; exceeded bounds stay Unknown. Buffered bytes and
+the remaining stream, or the original read error, reach the vendor on consumption.
+Status, headers, vendor retry decisions/counts and backoff remain unchanged,
+including Retry-After, x-should-retry and default 409 retries. Each optional
+vendor's import/export failure is isolated and is retried on the next lookup.
+Pre-reading runs synchronously without observation threads. Before raw iteration,
+the request timeout extension is copied and read capped at the observation
+deadline. Extra network wait is at most the deadline plus one recv timeout
+(at most 20 seconds); replay keeps that shortened per-recv timeout.
+
+Timeouts, 408, 5xx, dropped connections, interrupted streams and cancellation
+keep their existing Unknown behavior. Rejected ordinary summaries keep history
+and let the primary call continue. Arbitrary error prose is replaced by a generic explanation; status and validated
+code/type reach hosts in failed events. Output repair uses the same safe constructor.
+Oversized input is recognized first: real HTTP 400 context errors, HTTP 413 and
+content-specific string-length errors keep compaction and its exhaustion boundary.
+Content-related rejections stop without endpoint failover. With multiple frozen
+endpoints, 401/403/404 try the next endpoint immediately within the existing
+attempt limit; a single endpoint is called only once. 429 keeps its backoff and
+may retry once even with a single endpoint. Explicit adapter retryability wins
+over these defaults. Exhaustion reports the last safe rejection.
+
+This is a major observable behavior change, without a store, protocol or frozen
+turn boundary. Old Unknown records are not reinterpreted. Python adoption is
+pending; Rust stays frozen at contract 23.0.0 / package 0.21.x.
+
+Provider-native connection/timeout failures also veto rejection and oversized-input
+recovery when the low-level cause is absent. Concurrent sends keep their own
+failure evidence; an unindexed failure cannot be cleared by later 4xx responses.
+Observation preserves provider network defaults and host proxy/timeout priority,
+and callback exit closes streams explicitly. Real producers regenerate the safe
+repair diagnostic in the existing session projection and add native-error cases.
+
 ## 34.0.0 — 2026-11-05 — search CPU budget correction
 
 33.0.0 incorrectly made 250 ms the cumulative CPU budget for an entire search,
@@ -229,7 +278,7 @@ the language-neutral contract. Python F3 adoption is pending; Rust is frozen at
 | F2d-2 tracing | Immediate processor delivery | ACK-first at most once; possible telemetry loss | stream-events.md / runner_trace_spans.json |
 | F2d-2 events | Immediate event/outbox paths | At-least-once projection; stable external deduplication IDs | stream-events.md / event_store_replay.jsonl |
 | F2d-2 child event ownership | Configured lifecycle belongs to child run | Parent record/run owns admission/completion and carries child identity | session-consumers.md / configured_sub_agent_events.jsonl |
-| F2d-2 endpoints | Internal client fallback/retry merged in ledger | Independent logged attempts; transport retry=1; max(2,endpoints) | model-call-accounting.md / token_usage.json, runner_events.jsonl |
+| F2d-2 endpoints | Internal client fallback/retry merged in ledger | Independent logged logical attempts; vendor HTTP retries observed; max(2,endpoints) | model-call-accounting.md / token_usage.json, runner_events.jsonl |
 | F2d-2 coercion/repair | Coercion may throw; no repair public enum | Durable failed output; budgeted logged repair, unknown never retried | output-validation.md / output_validation.json, public_api.json |
 | F2d-2 rejected summary | Identical summary callback can repeat | Same source/mode/tail reuses receipt even if rejected | session-kernel.md / session_compaction.json, memory_lifecycle.json |
 | F2d-3 delegation | Separate configured/SDK/background/handoff execution adapters | One atomic child mechanism | session-kernel.md / configured_sub_agent.json, public_configured_sub_agent.json |
