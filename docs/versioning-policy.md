@@ -81,7 +81,7 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-35.0.0; Python lock/snapshot synchronization and central adoption are pending.
+36.0.0; Python lock/snapshot synchronization and central adoption are pending.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -126,3 +126,13 @@ result and event metadata maps; terminal reasons are already text. Record 1,
 inbox 3, SQL 3, RunEvent v6, App Server v5 and frozen definitions do not change.
 There is no store boundary or old-record decoder. Existing Unknown receipts keep
 their original uncertainty; this release does not settle historical calls.
+
+## 36.0.0 context and quota classification correction
+
+Time-window/quota errors previously matched generic context-size wording and
+started compaction. They now reject with the existing retry/backoff policy;
+explicit window-size phrases also gain recovery outside 429. This changes
+published observable classifications. Under this policy it is major, even
+though it corrects a specification defect: a patch may change only evidence/docs
+without observable change. Record 1, inbox 3, SQL 3, RunEvent v6, App Server v5
+and frozen definitions stay unchanged. There is no store boundary.

@@ -1,5 +1,24 @@
 # Changelog
 
+## 36.0.0 — 2026-11-06 — context and quota classification
+
+Quota and time-window signals now veto only generic `too many tokens` and
+`request too large` matches in the same text source. `per request` remains
+input-size evidence outside 429. HTTP 429 accepts only the explicit context
+allowlist and content-specific string-limit rule; other 429s retain rejection
+backoff without compaction. Non-429 explicit context markers keep priority over
+quota. `context window exceeded` and `model context window is` now recover;
+`too large for model with N maximum context length` remains covered by the
+explicit maximum-context marker. Adapter flags use the same classification.
+
+This corrects a normative defect but changes observable results, so versioning
+policy requires a major release. 413, uncertainty vetoes, observation coverage
+and exception graph traversal retain their behavior. No schema, protocol, store
+or frozen-definition boundary is added; historical receipts are unchanged.
+Real kernel producers add quota/request/window cases without replacing existing
+vectors. Python release snapshot/adoption remains pending; Rust stays frozen
+at contract 23.0.0 / package series 0.21.x. See [release notes](docs/release-36.0.0.md).
+
 
 ## 35.0.0 — 2026-11-06
 
