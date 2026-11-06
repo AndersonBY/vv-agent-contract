@@ -60,10 +60,31 @@ retained response streams before their client is released.
 
 Before rejection classification, prompt-too-long recognition MUST retain its
 existing compaction semantics, including real HTTP 4xx responses other than 408.
-Match existing message patterns (`prompt is too long`, `prompt_too_long`,
-`context_length_exceeded`, `maximum context length`, `request too large`,
-`too many tokens`) in exception text or selected provider message/code/type fields.
-A matching structured code/type does not require matching message wording.
+Match explicit input-size patterns (`prompt is too long`, `prompt_too_long`,
+`context_length_exceeded`, `maximum context length`, `context window exceeded`,
+`model context window is`, and `too large for model with N maximum context length`,
+where N is a numeric token limit) in exception text or selected provider
+message/code/type fields, case-insensitively. A matching structured code/type does
+not require matching message wording. On non-429 4xx these explicit patterns
+qualify even when the same text also mentions quota.
+
+The generic patterns `request too large` and `too many tokens` qualify only if
+the same text source has no time-window or quota signal. Evaluate exception text
+and selected provider message/code/type text separately; an unrelated graph node
+MUST NOT veto a match. Signals are case-insensitive, word-bounded `per
+(day|hour|minute|min|second|sec|month)`, `tokens per min`, `TPM`, `TPD`, `RPM`,
+`quota`, `rate limit`, `rate_limit`, and `insufficient_quota` (whitespace between
+words MAY vary). Substrings such as `per minimum`, `quotable`, or `TPMs` MUST NOT
+match these signals. `too many tokens per request` therefore still qualifies
+outside HTTP 429.
+
+HTTP 429 MUST qualify only through `context_length_exceeded`, `prompt is too
+long`, `prompt_too_long`, `maximum context length`, or the content-specific
+`string_above_max_length` rule below. Generic patterns and the additional window
+phrases alone MUST NOT qualify on 429, including text-only wrappers around a 429.
+Other 429 errors use the existing rejection retry/backoff policy, without
+compaction. Explicit adapter rejection flags MUST use these same rules against
+their original message/code/type before safe diagnostic replacement.
 HTTP 413 at the model boundary means the input payload must shrink, even without
 matching text. `string_above_max_length` qualifies only when `param` identifies
 `prompt`, `input`, or `messages[N].content` / `input[N].content` (including
