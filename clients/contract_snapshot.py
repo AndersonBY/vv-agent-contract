@@ -19,7 +19,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$")
+SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$"
+)
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 
@@ -49,20 +51,28 @@ def load_json_location(location: str) -> Any:
             with urllib.request.urlopen(location) as response:
                 return json.loads(response.read().decode("utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise SnapshotError(f"cannot read valid JSON from {location}: {exc}") from exc
+            raise SnapshotError(
+                f"cannot read valid JSON from {location}: {exc}"
+            ) from exc
     return load_json(Path(location).expanduser().resolve())
 
 
 def write_json_atomic(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     os.replace(temporary, path)
 
 
 def snapshot_files(fixtures: Path) -> list[Path]:
     return sorted(
-        (path for path in fixtures.rglob("*") if path.is_file() and path.name != "SHA256SUMS"),
+        (
+            path
+            for path in fixtures.rglob("*")
+            if path.is_file() and path.name != "SHA256SUMS"
+        ),
         key=lambda path: path.relative_to(fixtures).as_posix(),
     )
 
@@ -83,22 +93,31 @@ def validate_snapshot(fixtures: Path) -> dict[str, Any]:
             raise SnapshotError(f"invalid SHA256SUMS line {line_number}: {line!r}")
         digest, relative = match.groups()
         relative_path = Path(relative)
-        if relative_path.is_absolute() or ".." in relative_path.parts or "\\" in relative:
+        if (
+            relative_path.is_absolute()
+            or ".." in relative_path.parts
+            or "\\" in relative
+        ):
             raise SnapshotError(f"unsafe fixture path in SHA256SUMS: {relative}")
         if relative == "SHA256SUMS" or relative in entries:
-            raise SnapshotError(f"duplicate or self-referential fixture path: {relative}")
+            raise SnapshotError(
+                f"duplicate or self-referential fixture path: {relative}"
+            )
         entries[relative] = digest
 
-    actual = {path.relative_to(fixtures).as_posix() for path in snapshot_files(fixtures)}
+    actual = {
+        path.relative_to(fixtures).as_posix() for path in snapshot_files(fixtures)
+    }
     if actual != set(entries):
         raise SnapshotError(
-            f"fixture coverage mismatch: missing={sorted(actual - set(entries))}, "
-            f"stale={sorted(set(entries) - actual)}"
+            f"fixture coverage mismatch: missing={sorted(actual - set(entries))}, stale={sorted(set(entries) - actual)}"
         )
     for relative, expected in entries.items():
         actual_digest = sha256_file(fixtures / relative)
         if actual_digest != expected:
-            raise SnapshotError(f"fixture digest mismatch for {relative}: expected {expected}, got {actual_digest}")
+            raise SnapshotError(
+                f"fixture digest mismatch for {relative}: expected {expected}, got {actual_digest}"
+            )
     return {
         "fixture_files": len(entries) + 1,
         "manifest_entries": len(entries),
@@ -115,7 +134,9 @@ def git_revision(source: Path) -> str:
     )
     revision = result.stdout.strip()
     if result.returncode != 0 or REVISION_RE.fullmatch(revision) is None:
-        raise SnapshotError(f"cannot resolve a full Git revision from contract source {source}")
+        raise SnapshotError(
+            f"cannot resolve a full Git revision from contract source {source}"
+        )
     return revision
 
 
@@ -123,25 +144,36 @@ def contract_source(source: Path, revision: str | None = None) -> dict[str, Any]
     source = source.resolve()
     contract = load_json(source / "contract.json")
     if not isinstance(contract, dict) or contract.get("schema_version") != 1:
-        raise SnapshotError("contract source contract.json must be a schema_version=1 object")
+        raise SnapshotError(
+            "contract source contract.json must be a schema_version=1 object"
+        )
     version = contract.get("version")
     if contract.get("name") != "vv-agent-contract" or not isinstance(version, str):
         raise SnapshotError("contract source has unexpected name or version")
     if SEMVER_RE.fullmatch(version) is None:
         raise SnapshotError(f"invalid contract version: {version!r}")
     repository = contract.get("repository")
-    if not isinstance(repository, str) or not repository.startswith("https://github.com/"):
+    if not isinstance(repository, str) or not repository.startswith(
+        "https://github.com/"
+    ):
         raise SnapshotError("contract source repository must be an HTTPS GitHub URL")
     fixtures_config = contract.get("fixtures")
-    if not isinstance(fixtures_config, dict) or fixtures_config.get("path") != "fixtures":
+    if (
+        not isinstance(fixtures_config, dict)
+        or fixtures_config.get("path") != "fixtures"
+    ):
         raise SnapshotError("contract source fixtures.path must be fixtures")
     fixtures = source / "fixtures"
     report = validate_snapshot(fixtures)
     if fixtures_config.get("manifest_sha256") != report["manifest_sha256"]:
-        raise SnapshotError("contract source manifest digest does not match contract.json")
+        raise SnapshotError(
+            "contract source manifest digest does not match contract.json"
+        )
     resolved_revision = revision or git_revision(source)
     if REVISION_RE.fullmatch(resolved_revision) is None:
-        raise SnapshotError("contract revision must be a full 40-character hexadecimal Git commit")
+        raise SnapshotError(
+            "contract revision must be a full 40-character hexadecimal Git commit"
+        )
     return {
         "root": source,
         "fixtures": fixtures,
@@ -155,9 +187,15 @@ def contract_source(source: Path, revision: str | None = None) -> dict[str, Any]
 
 def compare_trees(expected: Path, actual: Path) -> None:
     expected_files = {
-        path.relative_to(expected).as_posix(): path for path in expected.rglob("*") if path.is_file()
+        path.relative_to(expected).as_posix(): path
+        for path in expected.rglob("*")
+        if path.is_file()
     }
-    actual_files = {path.relative_to(actual).as_posix(): path for path in actual.rglob("*") if path.is_file()}
+    actual_files = {
+        path.relative_to(actual).as_posix(): path
+        for path in actual.rglob("*")
+        if path.is_file()
+    }
     if set(expected_files) != set(actual_files):
         raise SnapshotError(
             f"snapshot file-set drift: missing={sorted(set(expected_files) - set(actual_files))}, "
@@ -165,7 +203,9 @@ def compare_trees(expected: Path, actual: Path) -> None:
         )
     for relative, expected_path in expected_files.items():
         if expected_path.read_bytes() != actual_files[relative].read_bytes():
-            raise SnapshotError(f"vendored fixture differs from canonical source: {relative}")
+            raise SnapshotError(
+                f"vendored fixture differs from canonical source: {relative}"
+            )
 
 
 def replace_snapshot(source: Path, target: Path) -> None:
@@ -203,12 +243,16 @@ def replace_snapshot(source: Path, target: Path) -> None:
 @contextmanager
 def local_artifact(location: str) -> Iterator[Path]:
     if location.startswith(("https://", "http://")):
-        with tempfile.TemporaryDirectory(prefix="vv-agent-contract-download-") as temporary:
+        with tempfile.TemporaryDirectory(
+            prefix="vv-agent-contract-download-"
+        ) as temporary:
             destination = Path(temporary) / "contract.zip"
             try:
                 urllib.request.urlretrieve(location, destination)
             except OSError as exc:
-                raise SnapshotError(f"cannot download contract artifact {location}: {exc}") from exc
+                raise SnapshotError(
+                    f"cannot download contract artifact {location}: {exc}"
+                ) from exc
             yield destination
     else:
         path = Path(location).expanduser().resolve()
@@ -226,10 +270,14 @@ def extracted_artifact(artifact: Path) -> Iterator[Path]:
                 for member in archive.infolist():
                     relative = Path(member.filename)
                     if relative.is_absolute() or ".." in relative.parts:
-                        raise SnapshotError(f"unsafe path in contract artifact: {member.filename}")
+                        raise SnapshotError(
+                            f"unsafe path in contract artifact: {member.filename}"
+                        )
                 archive.extractall(root)
         except (OSError, zipfile.BadZipFile) as exc:
-            raise SnapshotError(f"cannot extract contract artifact {artifact}: {exc}") from exc
+            raise SnapshotError(
+                f"cannot extract contract artifact {artifact}: {exc}"
+            ) from exc
         yield root
 
 
@@ -251,9 +299,13 @@ def load_lock(repo_root: Path, lock_name: str) -> tuple[Path, dict[str, Any]]:
         if not isinstance(lock.get(field), str) or not lock[field]:
             raise SnapshotError(f"{lock_name} field {field} must be a non-empty string")
     if SEMVER_RE.fullmatch(lock["contract_version"]) is None:
-        raise SnapshotError(f"invalid locked contract version: {lock['contract_version']!r}")
+        raise SnapshotError(
+            f"invalid locked contract version: {lock['contract_version']!r}"
+        )
     if REVISION_RE.fullmatch(lock["contract_revision"]) is None:
-        raise SnapshotError("locked contract revision must be a full hexadecimal Git commit")
+        raise SnapshotError(
+            "locked contract revision must be a full hexadecimal Git commit"
+        )
     for digest_field in ("artifact_sha256", "fixture_manifest_sha256"):
         if re.fullmatch(r"[0-9a-f]{64}", lock[digest_field]) is None:
             raise SnapshotError(f"{digest_field} must be a lowercase SHA-256 digest")
@@ -271,15 +323,21 @@ def check_lock(
     try:
         snapshot.relative_to(repo_root.resolve())
     except ValueError as exc:
-        raise SnapshotError("snapshot_path must stay inside the implementation repository") from exc
+        raise SnapshotError(
+            "snapshot_path must stay inside the implementation repository"
+        ) from exc
     report = validate_snapshot(snapshot)
     if report["manifest_sha256"] != lock["fixture_manifest_sha256"]:
-        raise SnapshotError("vendored fixture manifest does not match contract.lock.json")
+        raise SnapshotError(
+            "vendored fixture manifest does not match contract.lock.json"
+        )
 
     if source is not None:
         canonical = contract_source(source)
         if canonical["version"] != lock["contract_version"]:
-            raise SnapshotError("locked version does not match canonical contract source")
+            raise SnapshotError(
+                "locked version does not match canonical contract source"
+            )
         if canonical["revision"] != lock["contract_revision"]:
             ancestor = subprocess.run(
                 [
@@ -296,20 +354,28 @@ def check_lock(
                 text=True,
             )
             if ancestor.returncode != 0:
-                raise SnapshotError("canonical checkout does not contain the locked contract revision")
+                raise SnapshotError(
+                    "canonical checkout does not contain the locked contract revision"
+                )
         if canonical["repository"] != lock["source_repository"]:
-            raise SnapshotError("locked repository does not match canonical contract source")
+            raise SnapshotError(
+                "locked repository does not match canonical contract source"
+            )
         compare_trees(canonical["fixtures"], snapshot)
 
     if artifact is not None:
         with local_artifact(artifact) as artifact_path:
             digest = sha256_file(artifact_path)
             if digest != lock["artifact_sha256"]:
-                raise SnapshotError(f"contract artifact digest mismatch: expected {lock['artifact_sha256']}, got {digest}")
+                raise SnapshotError(
+                    f"contract artifact digest mismatch: expected {lock['artifact_sha256']}, got {digest}"
+                )
             with extracted_artifact(artifact_path) as artifact_root:
                 artifact_contract = load_json(artifact_root / "contract.json")
                 if artifact_contract.get("version") != lock["contract_version"]:
-                    raise SnapshotError("artifact version does not match contract.lock.json")
+                    raise SnapshotError(
+                        "artifact version does not match contract.lock.json"
+                    )
                 compare_trees(artifact_root / "fixtures", snapshot)
 
     return {
@@ -329,46 +395,84 @@ def verify_adoption(
 ) -> dict[str, Any]:
     _, lock = load_lock(repo_root, lock_name)
     matrix = load_json_location(matrix_location)
-    if not isinstance(matrix, dict) or type(matrix.get("schema_version")) is not int or matrix["schema_version"] != 2:
+    if (
+        not isinstance(matrix, dict)
+        or type(matrix.get("schema_version")) is not int
+        or matrix["schema_version"] != 2
+    ):
         raise SnapshotError("support matrix must be a schema_version=2 object")
     implementations = matrix.get("implementations")
-    if not isinstance(implementations, dict) or not isinstance(implementations.get(implementation), dict):
-        raise SnapshotError(f"support matrix has no {implementation} implementation record")
+    if not isinstance(implementations, dict) or not isinstance(
+        implementations.get(implementation), dict
+    ):
+        raise SnapshotError(
+            f"support matrix has no {implementation} implementation record"
+        )
     required = matrix.get("required_implementations")
-    if (not isinstance(required, list) or not required
-            or not all(isinstance(name, str) and name in implementations for name in required)
-            or len(set(required)) != len(required)):
+    if (
+        not isinstance(required, list)
+        or not required
+        or not all(
+            isinstance(name, str) and name in implementations for name in required
+        )
+        or len(set(required)) != len(required)
+    ):
         raise SnapshotError("invalid required_implementations")
     record = implementations[implementation]
     if record.get("contract_version") != lock["contract_version"]:
-        raise SnapshotError(f"{implementation} pinned version does not match contract.lock.json")
+        raise SnapshotError(
+            f"{implementation} pinned version does not match contract.lock.json"
+        )
     frozen = record.get("status") == "frozen"
     if frozen:
         series = record.get("package_series")
-        if implementation in required or not isinstance(series, str) or re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.x", series) is None:
-            raise SnapshotError("frozen implementation must be non-required and pin its package_series")
-    elif (matrix.get("contract_version") != lock["contract_version"]
-            or matrix.get("status") != "verified"):
-        raise SnapshotError(f"contract {lock['contract_version']} is not centrally verified")
+        if (
+            implementation in required
+            or not isinstance(series, str)
+            or re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.x", series) is None
+        ):
+            raise SnapshotError(
+                "frozen implementation must be non-required and pin its package_series"
+            )
+    elif (
+        matrix.get("contract_version") != lock["contract_version"]
+        or matrix.get("status") != "verified"
+    ):
+        raise SnapshotError(
+            f"contract {lock['contract_version']} is not centrally verified"
+        )
     verified_revision = record.get("verified_revision")
-    if record.get("status") not in ("verified", "frozen") or not isinstance(verified_revision, str):
-        raise SnapshotError(f"{implementation} implementation is not centrally verified")
+    if record.get("status") not in ("verified", "frozen") or not isinstance(
+        verified_revision, str
+    ):
+        raise SnapshotError(
+            f"{implementation} implementation is not centrally verified"
+        )
     if REVISION_RE.fullmatch(verified_revision) is None:
-        raise SnapshotError(f"{implementation} verified revision is not a full Git commit")
+        raise SnapshotError(
+            f"{implementation} verified revision is not a full Git commit"
+        )
 
     if revision is not None:
         if REVISION_RE.fullmatch(revision) is None:
             raise SnapshotError("release revision must be a full Git commit")
         result = subprocess.run(
-            ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", verified_revision, revision],
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "merge-base",
+                "--is-ancestor",
+                verified_revision,
+                revision,
+            ],
             check=False,
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             raise SnapshotError(
-                f"release revision {revision} does not contain centrally verified {implementation} revision "
-                f"{verified_revision}"
+                f"release revision {revision} does not contain centrally verified {implementation} revision {verified_revision}"
             )
 
     return {
@@ -389,21 +493,29 @@ def sync_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         with extracted_artifact(artifact_path) as artifact_root:
             artifact_contract = load_json(artifact_root / "contract.json")
             if artifact_contract.get("version") != canonical["version"]:
-                raise SnapshotError("artifact version differs from the selected contract source")
+                raise SnapshotError(
+                    "artifact version differs from the selected contract source"
+                )
             compare_trees(canonical["fixtures"], artifact_root / "fixtures")
 
     existing_lock = None
     lock_path = repo_root / args.lock
     if lock_path.exists():
         _, existing_lock = load_lock(repo_root, args.lock)
-    snapshot_path = args.snapshot_path or (existing_lock and existing_lock["snapshot_path"])
+    snapshot_path = args.snapshot_path or (
+        existing_lock and existing_lock["snapshot_path"]
+    )
     if not snapshot_path:
-        raise SnapshotError("--snapshot-path is required when no contract.lock.json exists")
+        raise SnapshotError(
+            "--snapshot-path is required when no contract.lock.json exists"
+        )
     snapshot = (repo_root / snapshot_path).resolve()
     try:
         snapshot.relative_to(repo_root)
     except ValueError as exc:
-        raise SnapshotError("snapshot_path must stay inside the implementation repository") from exc
+        raise SnapshotError(
+            "snapshot_path must stay inside the implementation repository"
+        ) from exc
 
     replace_snapshot(canonical["fixtures"], snapshot)
     lock = {
@@ -428,25 +540,51 @@ def parser() -> argparse.ArgumentParser:
     command_parser.add_argument("--lock", default="contract.lock.json")
     subparsers = command_parser.add_subparsers(dest="command", required=True)
 
-    check = subparsers.add_parser("check", help="verify the lock and vendored fixture snapshot")
-    check.add_argument("--source", type=Path, help="optional canonical checkout for byte comparison")
-    check.add_argument("--artifact", help="optional local path or URL for release artifact verification")
+    check = subparsers.add_parser(
+        "check", help="verify the lock and vendored fixture snapshot"
+    )
+    check.add_argument(
+        "--source", type=Path, help="optional canonical checkout for byte comparison"
+    )
+    check.add_argument(
+        "--artifact",
+        help="optional local path or URL for release artifact verification",
+    )
 
-    adoption = subparsers.add_parser("adoption", help="require central verified adoption before release")
+    adoption = subparsers.add_parser(
+        "adoption", help="require central verified adoption before release"
+    )
     adoption.add_argument("--implementation", choices=["python", "rust"], required=True)
     adoption.add_argument(
         "--matrix",
         default="https://raw.githubusercontent.com/AndersonBY/vv-agent-contract/main/support-matrix.json",
         help="support-matrix.json path or URL",
     )
-    adoption.add_argument("--revision", help="release commit that must contain the verified implementation revision")
+    adoption.add_argument(
+        "--revision",
+        help="release commit that must contain the verified implementation revision",
+    )
 
-    sync = subparsers.add_parser("sync", help="replace the vendored snapshot from a canonical checkout")
+    sync = subparsers.add_parser(
+        "sync", help="replace the vendored snapshot from a canonical checkout"
+    )
     sync.add_argument("--source", type=Path, required=True)
-    sync.add_argument("--artifact", required=True, help="local path or URL of the deterministic release zip")
-    sync.add_argument("--artifact-url", required=True, help="immutable release URL recorded in the lock")
-    sync.add_argument("--snapshot-path", help="repository-relative vendored fixture directory")
-    sync.add_argument("--revision", help="override source Git revision; must be a full commit hash")
+    sync.add_argument(
+        "--artifact",
+        required=True,
+        help="local path or URL of the deterministic release zip",
+    )
+    sync.add_argument(
+        "--artifact-url",
+        required=True,
+        help="immutable release URL recorded in the lock",
+    )
+    sync.add_argument(
+        "--snapshot-path", help="repository-relative vendored fixture directory"
+    )
+    sync.add_argument(
+        "--revision", help="override source Git revision; must be a full commit hash"
+    )
     return command_parser
 
 
@@ -454,7 +592,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         if args.command == "check":
-            report = check_lock(args.repo_root.resolve(), args.lock, source=args.source, artifact=args.artifact)
+            report = check_lock(
+                args.repo_root.resolve(),
+                args.lock,
+                source=args.source,
+                artifact=args.artifact,
+            )
         elif args.command == "adoption":
             report = verify_adoption(
                 args.repo_root.resolve(),

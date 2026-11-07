@@ -81,7 +81,7 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-36.0.0; Python lock/snapshot synchronization and central adoption are pending.
+37.0.0; Python lock/snapshot synchronization and central adoption are pending.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -136,3 +136,14 @@ published observable classifications. Under this policy it is major, even
 though it corrects a specification defect: a patch may change only evidence/docs
 without observable change. Record 1, inbox 3, SQL 3, RunEvent v6, App Server v5
 and frozen definitions stay unchanged. There is no store boundary.
+
+## 37.0.0 input protection and completion evidence
+
+Changing summary planning and replay for declared sessions changes observable
+behavior and therefore requires a major release. The optional closed seed
+declaration gates old runtimes without changing the record/inbox/SQL versions.
+Previously stored sessions without it retain their frozen compaction policy.
+
+Completion evidence and the independent response_rejection creation declaration
+ship in the same unreleased 37.0.0 major; they do not require another version
+bump or record/inbox/SQL change. Only Python adoption is required.

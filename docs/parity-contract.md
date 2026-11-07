@@ -85,6 +85,9 @@ execution rejection are defined in [App Server](session-kernel.md#app-server).
 
 ## History-Preserving Compaction
 
+Declared sessions additionally follow [input protection](unseen-input-protection.md).
+Its protected boundary limits the tail cuts below, and its capacity error applies
+when no safe prefix remains. Undeclared sessions retain the existing rules.
 
 
 Contract `24.0.0` permits one archive-backed microcompaction pass and then an
@@ -260,3 +263,8 @@ Publishing is pending adoption until those gates pass; see
 Completed-boundary App Server forks follow [session kernel](session-kernel.md#app-server-completed-boundary-forks-301). Python maps the typed request to AppServerClient.fork_thread. Artifact references reuse or populate the existing immutable backend through host bindings.
 
 Typed user interactions, free-text labeling, strict target/answer validation, and the public heartbeat-stop signal follow [interactions](interactions.md). Child messages are steering rather than implicit human answers.
+
+## Unseen input protection
+
+Contract 37.0.0 freezes the creation policy and preserves the protected input
+suffix across compaction, hooks and replay. See [the normative rule](unseen-input-protection.md).
