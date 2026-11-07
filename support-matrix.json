@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "contract_version": "37.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "required_implementations": [
     "python"
   ],
@@ -10,7 +10,8 @@
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
       "contract_version": "37.0.0",
-      "status": "in-progress"
+      "status": "verified",
+      "verified_revision": "a3aa1415e6818ac4e7e52df8a38f6a6edeeaf670"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -21,5 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Python 0.34.0 input protection and completion evidence implementation is in progress. Publication, lock/snapshot selection and central adoption are pending; frozen Rust does not support this feature."
+  "adoption_note": "v37.0.0 passed the required implementation snapshots and cross-repository producer gates.",
+  "last_verified_at": "2026-11-07T09:55:35Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/42360178159"
 }
