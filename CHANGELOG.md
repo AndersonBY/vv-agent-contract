@@ -1,5 +1,25 @@
 # Changelog
 
+## 37.0.0 — 2026-11-07 — unseen input protection
+
+New sessions freeze input protection in the closed creation seed. Summary,
+emergency, microcompaction, hooks and replay preserve inputs until an adopted
+primary response commits. Rejections, endpoint retries, Unknown and non-primary
+receipts do not advance coverage. Existing undeclared sessions retain prior
+behavior. Python 0.33.3 rejects the new declaration. See
+[release notes](docs/release-37.0.0.md). Python adoption is in progress; frozen Rust
+does not support this capability. No global schema changes.
+
+Model completion now uses final vv-llm >=0.10.1 evidence. New sessions freeze
+`response_rejection=true`: content filtering and refusal without answer text
+fail with HTTP 200 model_request_rejected and a safe descriptor. Hosts must close
+or replace temporary streamed text; rejected partial output is not history.
+Refusal text with no content becomes the assistant answer. Missing termination
+EOF is Unknown with existing retries; degraded observation preserves behavior.
+Old sessions remain readable and continuable by 0.33.3; declared sessions and
+derived dependents stay on the new runtime. No store schema bump.
+
+
 ## 36.0.0 — 2026-11-06 — context and quota classification
 
 Quota and time-window signals now veto only generic `too many tokens` and

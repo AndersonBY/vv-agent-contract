@@ -42,17 +42,27 @@ class ProviderContractTests(unittest.TestCase):
             self.assertEqual(case["unconfirmed_count"], 0 if confirmed else 1)
             self.assertEqual(case["completion_context"], "audit" if confirmed else None)
             self.assertEqual(
-                case["business_state"], "stopped" if case["provider_return"] in {"confirmed", "invalid"} else "running"
+                case["business_state"],
+                "stopped"
+                if case["provider_return"] in {"confirmed", "invalid"}
+                else "running",
             )
 
     def test_api_inventory_includes_provider_registration_and_exports(self):
         api = json.loads((ROOT / "fixtures/public_api.json").read_text())
         exports = next(domain for domain in api["domains"] if domain["id"] == "exports")
         self.assertTrue(
-            {"vv_agent.Provider", "vv_agent.Accepted", "vv_agent.Definitive", "vv_agent.Unknown"}
+            {
+                "vv_agent.Provider",
+                "vv_agent.Accepted",
+                "vv_agent.Definitive",
+                "vv_agent.Unknown",
+            }
             <= {item["python"] for item in exports["capabilities"]}
         )
-        config = next(surface for surface in api["surfaces"] if surface["id"] == "run_config")
+        config = next(
+            surface for surface in api["surfaces"] if surface["id"] == "run_config"
+        )
         self.assertIn("tool_providers", {member["id"] for member in config["members"]})
 
 

@@ -21,8 +21,10 @@ class ArtifactSearchTests(unittest.TestCase):
     def test_matching_and_original_line_numbers(self):
         cases = self.fixture["cases"]
         for name, line, expected in [
-            ("hit", 2, "needle here"), ("cjk", 2, "找到汉字"),
-            ("emoji", 2, "🙂🚀"), ("crlf", 2, "needle"),
+            ("hit", 2, "needle here"),
+            ("cjk", 2, "找到汉字"),
+            ("emoji", 2, "🙂🚀"),
+            ("crlf", 2, "needle"),
             ("line_numbers", 3001, "needle"),
         ]:
             with self.subTest(name=name):
@@ -39,8 +41,11 @@ class ArtifactSearchTests(unittest.TestCase):
 
     def test_denials_and_unavailability(self):
         for name, code in [
-            ("denied", "artifact_search_denied"), ("other_session", "artifact_search_denied"), ("missing", "artifact_unavailable"),
-            ("invalid_path", "artifact_search_denied"), ("invalid_regex", "invalid_arguments"),
+            ("denied", "artifact_search_denied"),
+            ("other_session", "artifact_search_denied"),
+            ("missing", "artifact_unavailable"),
+            ("invalid_path", "artifact_search_denied"),
+            ("invalid_regex", "invalid_arguments"),
         ]:
             result = self.fixture["cases"][name]["result"]
             self.assertEqual(result["status_code"], "ERROR")
@@ -59,18 +64,34 @@ class ArtifactSearchTests(unittest.TestCase):
         self.assertEqual(oversized["metadata"]["artifact_search"]["oversized_line"], 1)
         self.assertEqual(oversized["metadata"]["artifact_search"]["matched_lines"], 1)
         self.assertIn("4096-character overlap", oversized["content"])
-        self.assertGreater(len(self.fixture["cases"]["budget_chars"]["result"]["content"]), 12000)
+        self.assertGreater(
+            len(self.fixture["cases"]["budget_chars"]["result"]["content"]), 12000
+        )
 
     def test_late_keyword_readback_and_current_compaction_scope(self):
-        hit = self.fixture["cases"]["late_keyword"]["result"]["metadata"]["artifact_search"]["matches"][0]
+        hit = self.fixture["cases"]["late_keyword"]["result"]["metadata"][
+            "artifact_search"
+        ]["matches"][0]
         self.assertEqual((hit["line"], hit["column"]), (1, 40000))
         page = self.fixture["readback"]
         self.assertEqual(page["arguments"]["start_char"], hit["column"])
         self.assertTrue(page["result"]["content"].startswith("needle end"))
-        self.assertEqual(page["result"]["visible_bytes"], len(page["result"]["content"].encode("utf-8")))
-        self.assertGreaterEqual(page["result"]["original_bytes"], page["result"]["visible_bytes"])
-        self.assertEqual(page["model_message"].rpartition("\n")[0], page["result"]["content"])
+        self.assertEqual(
+            page["result"]["visible_bytes"],
+            len(page["result"]["content"].encode("utf-8")),
+        )
+        self.assertGreaterEqual(
+            page["result"]["original_bytes"], page["result"]["visible_bytes"]
+        )
+        self.assertEqual(
+            page["model_message"].rpartition("\n")[0], page["result"]["content"]
+        )
         self.assertEqual(page["result"]["cursor"]["offset_chars"], 52000)
-        self.assertEqual(page["result"]["metadata"]["read_page"], {"next_line": 1, "next_start_char": 52000})
+        self.assertEqual(
+            page["result"]["metadata"]["read_page"],
+            {"next_line": 1, "next_start_char": 52000},
+        )
         self.assertIn("start_char=52000", page["model_message"])
-        self.assertEqual(self.fixture["cases"]["compaction"]["result"]["status_code"], "SUCCESS")
+        self.assertEqual(
+            self.fixture["cases"]["compaction"]["result"]["status_code"], "SUCCESS"
+        )

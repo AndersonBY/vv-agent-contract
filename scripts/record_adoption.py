@@ -12,7 +12,6 @@ from typing import Any
 
 from contractctl import load_json, validate_support_matrix
 
-
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -34,24 +33,29 @@ def record_adoption(
     if matrix["required_implementations"] != ["python"]:
         raise ValueError("record_adoption requires exactly the Python implementation")
 
-    timestamp = verified_at or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    timestamp = verified_at or datetime.now(UTC).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z")
     matrix["status"] = "verified"
     matrix["adoption_note"] = (
-        f"v{contract['version']} passed the required implementation snapshots "
-        "and cross-repository producer gates."
+        f"v{contract['version']} passed the required implementation snapshots and cross-repository producer gates."
     )
     matrix["last_verified_at"] = timestamp
     matrix["cross_repository_run"] = run_url
     matrix["implementations"]["python"]["status"] = "verified"
     matrix["implementations"]["python"]["verified_revision"] = python_revision
     validate_support_matrix(matrix, contract["version"])
-    matrix_path.write_text(json.dumps(matrix, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    matrix_path.write_text(
+        json.dumps(matrix, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return matrix
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument(
+        "--root", type=Path, default=Path(__file__).resolve().parents[1]
+    )
     parser.add_argument("--python-revision", required=True)
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--verified-at")

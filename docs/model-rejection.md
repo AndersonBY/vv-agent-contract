@@ -1,6 +1,8 @@
 # Model requests rejected by the provider
 
-These rules are normative. They apply at the model boundary, before stream output.
+These rules are normative. Request-level rejection applies at the model boundary,
+before stream output. Response-level rejection below is a separate confirmed
+conclusion after complete response consumption.
 An adapter MAY raise an explicit rejection type asserting the provider received
 and rejected the request without executing it. Its status MUST be integer
 400..499 other than 408. Automatic recognition otherwise MUST require a real HTTP
@@ -35,7 +37,9 @@ the complete exception graph (cause, context, exception-valued arguments and
 exception groups, in both wrapping directions) for uncertainty. Timeout,
 transport/connection loss, stream interruption, non-4xx/408 responses or unsafe
 HTTP observations veto rejection and prompt-too-long recovery throughout that
-graph. Cancellation and observed stream output retain priority. Unrecognized
+graph. Cancellation and observed stream output retain priority for exception-based request
+rejection. Fully consumed response-level rejection is the observed-output exception:
+it is a definite upstream conclusion, not transport uncertainty. Unrecognized
 errors stay Unknown; a later rejection cannot erase an earlier uncertain send.
 
 Native provider connection and timeout exceptions MUST participate in this veto
@@ -92,7 +96,9 @@ matching text. `string_above_max_length` qualifies only when `param` identifies
 Preserve recognition through exception cause/context/exception arguments, but
 timeout, transport/connection loss, stream interruption and actual HTTP statuses
 outside 4xx or equal to 408 veto text/structured matches throughout that graph.
-Cancellation and observed stream output MUST be checked before either classifier.
+Cancellation and observed stream output MUST be checked before either exception
+classifier. Response-level rejection is checked after normal consumption, before
+after-LLM hooks and adoption into history.
 
 Recognized oversized input MUST produce the existing `prompt_too_long` result,
 not `model_request_rejected`. The primary then uses the existing bounded emergency
@@ -107,7 +113,7 @@ The existing `op_completed.result` JSON object contains `error_code` equal to
 
 | Field | Value |
 | --- | --- |
-| status_code | Integer 400..499 excluding 408 |
+| status_code | Integer 400..499 excluding 408 for request rejection; 200 for declared response rejection |
 | provider_code, provider_type | Safe provider identifier or null |
 | message | Generic safe explanation, at most 500 Unicode code points |
 | retryable | Boolean resolved against the frozen endpoint count: true for 429, or 401/403/404 with multiple endpoints; an explicit adapter boolean overrides these defaults |
@@ -223,3 +229,44 @@ recovery readers. A rejection receipt without turn_ended can be misdriven by
 history precheck is supplementary and cannot prove that an unmarked session was
 never driven by the newer runtime. Never delete receipts or replay uncertain
 calls to make rollback possible.
+
+## Response-level rejection
+
+Only sessions whose closed creation seed declares `response_rejection=true` use
+this category. New creations default to true. Absence/false retains 0.33.3
+content-filter/refusal-reason behavior. Creation replay preserves original bytes;
+children/forks inherit the source choice, with absence becoming explicit false.
+0.33.3 rejects either Boolean declaration at seed decoding, even false.
+
+After normal complete consumption, `finish_reason_normalized=content_filter`,
+or `refusal` without nonempty refusal text, is a definitive response rejection.
+The HTTP response is 200 and may have yielded temporary output. It uses the same
+`model_request_rejected` result, terminal reason, ModelCallFailed event and
+`metadata.model_rejection` projection as request rejection, with descriptor:
+
+| Field | Value |
+| --- | --- |
+| status_code | 200 |
+| provider_code | `content_filter` or `refusal` |
+| provider_type | Original finish_reason, subject to the same safe identifier rules; null when unsafe/missing |
+| message | Generic `Model provider response was rejected.`, at most 500 Unicode code points |
+| retryable | false |
+
+Output-repair callbacks retain `repair_provider_error` / `output_validation_failed`
+and discard the rejected repair text, with no automatic repair retry.
+No automatic retry or endpoint switch occurs. Already streamed partial content,
+reasoning, tool deltas, refusal prose and raw provider payload MUST NOT enter the
+rejection receipt, evidence, terminal or normal model history. Only the safe
+descriptor and independently available usage are retained. It does not advance
+input protection coverage. Hosts retire or replace their temporary displayed
+answer when the failed event/terminal arrives. The transport's earlier output
+veto applies to exception classification; it MUST NOT override this definite
+upstream response conclusion. Missing-termination EOF has priority over a finish
+verdict; cancellation and interrupted consumption retain existing error paths.
+
+[Completion mapping](model-completion.md) specifies refusal-text answers, EOF,
+unknown observation and the evidence fields. The existing retry rules still
+apply to request rejection and Unknown. This addition changes no record, inbox,
+SQL, event or App Server version; old sessions use only representations readable
+and continuable by 0.33.3. Declared sessions and their derived dependents must
+remain routed to the newer runtime.

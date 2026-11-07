@@ -103,7 +103,7 @@ Replay MUST NOT create another completion or bill the attempt again.
 | DeliveryTarget | `session_id:T`, `turn_id:T`, `generation:N`, `operation_id:T`, `attempt:P` |
 | ChildIdentity | `session_id:T`, `turn_id:T`, `generation:N` |
 | Delegation | `mode:configured/agent_as_tool/background_task/handoff`, `agent_name:T`, `handoff_count:N`, `max_handoffs:N`, `metadata:J` |
-| `attributes.seed` | `messages:[Message JSON]`, `shared_state:J`; both required, empty allowed |
+| `attributes.seed` | Optional `unseen_input_protection:B`, `response_rejection:B`; optional paired `messages:[Message JSON]`, `shared_state:J`; at least one declaration or the pair is required |
 | `attributes.app_server` | `agent_key:S`, `cwd:S\|null`, `metadata:J` |
 | `attributes.child_admission` | `mode:configured/agent_as_tool/background_task/handoff`, `selector:T`, `definition:J`, `definition_digest:H`, `budget:J`, `handler_version:T`, `sub_config:SubConfig\|null`, `exclude_files_pattern:T\|null`, `handoff_count:N`, `max_handoffs:N`, `handoff_metadata:J` |
 | SubConfig | `model:T`, `description:S`, `backend:S\|null`, `system_prompt:S\|null`, `max_cycles:N`, `session_memory_enabled:B`, `exclude_tools:[S]`, `metadata:J`, `denied_side_effects:[T]`, `denied_capability_tags:[T]`, `deny_terminal_tools:B`, `denied_cost_dimensions:[T]` |
@@ -192,8 +192,10 @@ generation and terminal revival MUST fail at fold/admission, atomically.
 
 ## Creation seed and reserved metadata
 
-A creation-time `session_created.attributes.seed` is a closed object with required
-`messages` and `shared_state`. Messages use the strict current Message wire.
+A creation-time `session_created.attributes.seed` is a closed object with an optional
+`unseen_input_protection` and `response_rejection` Boolean declaration and an optional paired `messages` /
+`shared_state` bootstrap. At least one declaration or the pair is required. Both declarations independently default to true on first creation, inherit from the source (absence becomes explicit false), and preserve original bytes on transaction creation replay.
+See [input protection](unseen-input-protection.md) and [completion evidence](model-completion.md). Messages use the strict current Message wire.
 The seed projects before the first turn's context and initial shared state.
 Session history, shared state and queues have no public mutation API after creation;
 read-only projections and inbox admission are the current access paths.
@@ -234,8 +236,9 @@ JSON state. Other explicitly opaque J/V locations keep their content boundaries.
 | Started, no authentic receipt/acceptance | Recheck inbox watermark before declaring unknown. Unknown MUST preserve dispatch evidence, unavailable measurements and duplicate-cost risk; it MUST NOT be fabricated success or confirmed failure/stop. |
 | Model retry/fallback | Freeze endpoint order; one logical adapter invocation per logged attempt (`max_attempts=1`); vendor SDK retries may issue multiple physical HTTP requests, all subject to the observation rules in [model rejection](model-rejection.md). The operation limit is `max(2, frozen endpoint count)`; fewer than two endpoints permit two attempts. Distinct attempt/call IDs and every attempt's accounting MUST remain visible. Required unavailable metrics can stop fallback. |
 | Model request rejected | An explicit adapter assertion or a complete owned-client observation where every physical request received 4xx other than 408, before stream output and without uncertainty anywhere in the exception graph, is a definitive failed receipt. Content rejections MUST NOT retry; 401/403/404 retry only with multiple frozen endpoints, without delay. 429 retains backoff and a single-endpoint retry. Explicit adapter retryability overrides defaults; all retries use the same frozen limit. See [model rejection](model-rejection.md). Each rejection remains completed without `op_unknown` or duplicate-cost risk. Primary exhaustion ends as `failed / model_request_rejected` with the last safe rejection and no unconfirmed operation from those rejected attempts. |
+| Model response rejected | After complete normal consumption, declared `response_rejection=true` sessions classify content_filter or refusal reason without refusal text as HTTP 200 definitive rejection, even after temporary output. No retry, endpoint change, partial-output history/evidence or input-coverage advance. Absence/false keeps 0.33.3 behavior. Refusal text with empty content becomes ordinary assistant body unless content_filter. Missing-termination EOF is Unknown with existing retries; degraded observation retains null termination and the diagnostic. See [completion evidence](model-completion.md). |
 | Tool retry | Unknown tools MUST NOT auto-retry unless frozen metadata declares `idempotency=supported` and the actual provider supports that key. Ordinary tools permit one retry (two attempts total). Unsupported/unknown idempotency stops. The key is stable across attempts, currently `{session_id}/{operation_id}`. |
-| Output repair | One logged tools-free `output_repair` operation. An unknown repair MUST never be automatically retried. Coercion/repair errors MUST become durable failed results with partial-output evidence. |
+| Output repair | One logged tools-free `output_repair` operation. An unknown repair MUST never be automatically retried. Coercion/repair errors MUST become durable failed results with partial-output evidence; rejected response text is excluded under the response-rejection rule. |
 | Late result, unknown not consumed | A trusted result MAY be adopted normally. An earlier model receipt can supersede a planned, undispatched retry without inventing a result for that retry. |
 | Late result, unknown consumed | Preserve the already delivered unknown message and append a correction, rather than rewrite history. `consumed_unknowns` MUST identify exactly the unknowns frozen into the successor request. |
 | Late result, retry dispatched / turn ended / generation stale | Earlier model result is audit-only after retry dispatch. Ended/cancelled turns MUST NOT revive. Host adapters MUST reject stale business generations; authentic late evidence can remain audit-only. |
@@ -586,6 +589,13 @@ same memory-settings resolver as execution, including its explicit fallback.
 Host callbacks that have not run cannot be predicted; the projection names that
 boundary rather than invoking callbacks during a read.
 
+On creation races, the winning transaction freezes this baseline. A conflicting
+node retries transaction creation with the original app_server_context (or keeps
+it absent when originally absent) and the current client creation fields. The
+transaction's ordinary creation-byte, omitted seed-policy and consumer-set
+checks decide replay; App Server MUST NOT maintain a separate attribute
+comparison that bypasses those checks. Both seed declarations follow this rule.
+
 `thread/compact/start` takes threadId, stable actionId and optional
 expectedContextVersion. Admission locks the session, checks retained identity
 before the version, and commits one authenticated intent. Equal params replay
@@ -687,3 +697,8 @@ They reuse the current JSON content extension, record 1, inbox 3 and RunEvent v6
 no SQL or session store boundary is introduced. Hosts may catch the public
 heartbeat-stopped signal before lease-loss errors when intentionally stopping a
 renewal worker; it never certifies ownership for further execution.
+
+## Unseen input protection
+
+Contract 37.0.0 freezes the creation policy and preserves the protected input
+suffix across compaction, hooks and replay. See [the normative rule](unseen-input-protection.md).
