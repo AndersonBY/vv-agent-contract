@@ -11,7 +11,7 @@
       "branch": "main",
       "contract_version": "37.0.0",
       "status": "verified",
-      "verified_revision": "a3aa1415e6818ac4e7e52df8a38f6a6edeeaf670"
+      "verified_revision": "6cbc06b61d869e836ccf946984a29f70bcdc547b"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -23,6 +23,6 @@
     }
   },
   "adoption_note": "v37.0.0 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-11-07T09:55:35Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/42360178159"
+  "last_verified_at": "2026-11-07T12:01:40Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/42369095037"
 }
