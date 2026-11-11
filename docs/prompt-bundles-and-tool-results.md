@@ -116,8 +116,14 @@ new fields.
 
 Every newly bounded result first streams its full text into exclusive immutable
 workspace storage. Repeating the same completion uses the same path and verifies
-existing size and digest; a different body for the same completion identity is
-a conflict and never replaces the object. General content-digest reuse likewise
+existing size and digest; a different body candidate for the same operation uses a different immutable
+path. Kernel receipt archives bind session/turn/operation/attempt AND the source
+content SHA-256. For kernel receipt archives the existing owner digest is
+SHA-256 of canonical JSON `[session_id, turn_id, operation_id, attempt]`; the
+filename suffix is SHA-256 of the UTF-8 string `owner_hex/content_sha256_hex`.
+Commit retries and crashes may leave unselected objects; only
+the final committed receipt selects a recovery reference. A collision with
+invalid bytes is an integrity failure and never replaces the object. General content-digest reuse likewise
 verifies the existing bytes. Only after persistence and verification may the
 kernel put a successful reference into `op_completed` and compute its result
 digest. For a fresh exclusive write, the source already determines expected size

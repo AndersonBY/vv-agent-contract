@@ -5908,7 +5908,7 @@
 "python_target": "vv_agent.SessionSpec"
 },
 {
-"behavior": "single atomic log and inbox authority; lease-fenced defer_drive(lease, retry_after_ms) gates even ready inbox and lease acquisition; defer_projection(session_id, consumer, retry_after_ms) gates only that consumer; retries preserve execution facts and newer schedules",
+"behavior": "single atomic log and inbox authority; lease-fenced defer_drive(lease, retry_after_ms) gates even ready inbox and lease acquisition; defer_projection(session_id, consumer, retry_after_ms) gates only that consumer; retries preserve execution facts and newer schedules; execution_store checks out an exclusive execution or projection connection; heartbeat_store is independent; targets freeze at idle initialization or outermost schema installation",
 "id": "session_SessionStore",
 "members": [
 {
@@ -5971,22 +5971,61 @@
 ]
 }
 }
+},
+{
+"id": "execution_store",
+"kind": "operation",
+"python": {
+"kind": "method",
+"name": "execution_store",
+"signature": {
+"async": false,
+"parameters": [
+{
+"kind": "positional_or_keyword",
+"name": "self",
+"required": true
+}
+]
+}
+}
 }
 ],
 "python_target": "vv_agent.SessionStore"
 },
 {
-"behavior": "atomic admission, fences and consumer transactions",
+"behavior": "atomic admission, fences and consumer transactions; connection borrows the actual transaction handle on its owner thread and lexical scope; unsupported handles reject only at access",
 "id": "session_SessionTx",
+"members": [
+{
+"id": "connection",
+"kind": "operation",
+"python": {
+"declaration": "property",
+"kind": "property",
+"name": "connection",
+"signature": {
+"async": false,
+"parameters": [
+{
+"kind": "positional_or_keyword",
+"name": "self",
+"required": true
+}
+]
+}
+}
+}
+],
 "python_target": "vv_agent.SessionTx"
 },
 {
-"behavior": "SQLite mapping of session transaction semantics",
+"behavior": "SQLite main-file identity and private cache; independent file execution/projection; memory borrows one serialized connection and rejects same-thread committed views inside atomic",
 "id": "session_SQLiteStore",
 "python_target": "vv_agent.SQLiteStore"
 },
 {
-"behavior": "PostgreSQL mapping; optional driver is not required to import SDK",
+"behavior": "PostgreSQL frozen database and five relation namespace identities; exclusive idle autocommit execution/projection and validated independent heartbeat; optional driver is not required to import SDK",
 "id": "session_PostgresStore",
 "python_target": "vv_agent.PostgresStore"
 },
@@ -6124,7 +6163,7 @@
 "python_target": "vv_agent.session.children.InvalidChildBatch"
 },
 {
-"behavior": "resolve retained model/settings/route; reject selection before apply; verify planned binding on recovery",
+"behavior": "resolve retained model/settings/route; reject selection before apply; verify planned binding on recovery; children require synchronous admit(plan, *, tx); hooks require hook(point, record, *, tx), with a live tx only at before_commit",
 "id": "session_Runtime",
 "members": [
 {
@@ -6186,7 +6225,7 @@
 "python_target": "vv_agent.session.runtime.RuntimeNotReady"
 },
 {
-"behavior": "pure requires_summary predicate; logged full-history summary before atomic admit(plan, summary) callback",
+"behavior": "pure requires_summary predicate; logged full-history summary; validate synchronous admit(plan, summary, *, tx) before summary preparation; admission and before_commit borrow the same actual transaction",
 "id": "session_SummaryChildTool",
 "python_target": "vv_agent.SummaryChildTool"
 },

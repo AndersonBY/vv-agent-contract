@@ -8,6 +8,87 @@ execution lease. Wake is a hint; scanning recovers due work, queued inputs,
 dependency changes and consumer lag, including unprojected terminals. No-deadline
 waits and unresolved dependencies MUST NOT spin.
 
+Host wake MUST take the turn lock and either mark an active handle or start normal
+recovery/pumping. Only active execution is coalesced. An idle pump is allowed and
+MUST NOT repeat model, tool or receipt effects. Predicting work from positions,
+runnable flags or an enumerated descendant set MUST NOT gate correctness.
+Input push MUST NOT create a new root execution: its interactive session,
+App Server pump/recovery or host SQL scheduler owns run creation.
+
+An active local handle retains a rerun-requested marker protected by scheduling
+lock B. Before an exit pass it clears the marker under B, releases B and performs
+one full idempotent tree drive, including retained independent children and
+terminal delivery. It may mark done under B only if this whole pass made no
+progress and the marker stayed clear. Driver steps and committed input/delivery
+changes are progress; a deferred unchanged input is not. A live child worker owns
+its subtree and retains the same handshake. Store-scheduled polls MUST run when
+due and park at the next deadline after Accepted. No path holding B may acquire
+a store connection or transaction lock S, resolve bindings or scan delivery.
+Child registration validates worker identity under B after all store reads and
+binding resolution outside B.
+An exit pass bound to an ended turn MUST leave a queued successor immediately
+schedulable. It MUST NOT admit that turn or apply an idle poll deferral to it.
+Independent new-turn inputs belong to that successor; the ended turn may still
+consume its late receipts and controls.
+Each handle owns its root SID and records descendant SIDs under B immediately
+before actually reading/driving them. A local child wake may mark that unfinished
+observer when there is no direct child worker. This routing set never decides
+whether recovery or an exit pass runs: an input before registration is seen by
+the actual read, and an input after registration marks an active observer.
+
+App Server admission and provider receipt wakes MUST occur after the outermost
+transaction commits. When a handle has ended but its pump still owns completion,
+that pump retains a wake marker under the turn lock and performs recovery before
+releasing ownership. A later host wake starts ordinary recovery. Wake failures,
+including corrupt data, MUST be reported as controlled errors with the target
+session identity; they MUST NOT be swallowed or treated as absence of work.
+An accepted wake during active execution also survives until completion can hand
+remaining input to a new owner. Completion without such a wake automatically
+continues follow-ups; independent user submissions retain their own host owner.
+
+Admission within a nested or externally owned transaction MUST NOT synchronously
+wait for the local turn owner. A host MAY coalesce a recovery hint until its
+outer transaction has ended, then recover against committed state. Savepoint
+release is not outer commit. Outer rollback, savepoint rollback and commit
+failure MAY leave an empty recovery hint, but MUST NOT dispatch rolled-back
+inputs or publish a successful terminal for them. A concurrent new host
+transaction after the scheduling check MUST NOT expose its uncommitted state to
+execution or notification projection. Deferred hints retain their root and target
+session identities, work without subscribers, and remain independent of lease
+expiry scheduling. Closing a node discards its local hints, not durable inputs;
+another node or the host scheduler can recover committed work.
+The commit fence MUST cover the actual admission transaction, including one on
+a scoped callback connection; switching execution connections MUST NOT bypass
+that transaction's visibility boundary.
+
+Startup failure before a worker actually starts MUST retain the original error,
+mark the unstarted handle done and notify its waiters under B/condition without
+store reads or host callbacks. Cleanup MUST compare the published owner identity
+and MUST NOT remove another handle. The completion consumer MUST exist before
+worker execution can start; a started worker retains ordinary completion
+ownership through failures and MUST NOT be marked done by startup cleanup.
+Startup callback defects MUST escape once without recursive warning delivery or
+a guessed failed business terminal.
+If the request has already attempted its admission ACK, a later startup callback
+defect MUST preserve the original exception without sending a second RPC response.
+
+An asynchronous completion failure MUST release its local owner and report a
+controlled error with the session identity. Once an execution/read error has
+been reported, completion MUST NOT reread untrusted state to infer a failed
+terminal or repeat the warning. Missing bindings and invalid provider results
+retain their existing wait/error semantics. Only verified retained records may
+supply terminal lifecycle notifications; independent observers can publish them
+after storage recovers. Completion read/projection error boundaries MUST NOT
+swallow notification callback defects.
+
+Interactive idle steer starts through its session's own run lifecycle. Accepted
+cancellation intent MUST identify the target turn; before initial admission it
+binds only the reserved run. Publication MUST discard an intent for an ended
+turn, never cancel a different turn or its token, and use the ordinary targeted
+cancel path outside session/B locks. Pending cancellation remains owner work
+while its target turn is active. Parent recovery scans terminal delivery even
+when no child worker is needed, retaining atomic push and ACK deduplication.
+
 Tool completions use the bounded [tool result projection](tool-results.md).
 Raw result bodies and private resource locators MUST NOT travel in the
 `tool_result` diagnostic. Reprojection changes event bytes under stable IDs;
@@ -31,10 +112,10 @@ be rejected. Detached span data never grants execution authority.
 | --- | --- |
 | One delegation mechanism | create_sub_task, configured children, Agent.as_tool, BackgroundAgentTask and handoff MUST share atomic admission, independently scheduled child session and terminal delivery. No recursive Runner or child execution under the parent lease. |
 | Admission | Child creation, frozen definition/input, parent started/parked records and background admission result MUST commit together with applicable host writes. Child principal inherits parent; policy/budget/workspace/model/prompt/JSON state freeze before admission. |
-| Completion | Child terminal input and child_delivery ACK MUST be atomic. Authenticate original child session/turn/generation, parent delivery target, terminal position/digest/status/result. Same-ID same-byte delivery replays; altered bytes conflict. A blocking batch needs every authenticated sibling terminal. |
-| WAIT_USER | Keep intermediate wait on the child. Host reply targets child session/turn/interaction; parent remains parked until authenticated terminal. A child's later continuation MUST NOT replace the original terminal named in the handle. |
+| Completion | Child terminal input and child_delivery ACK MUST be atomic. Authenticate original child session/turn/generation, parent delivery target, terminal position/digest/status/result. Same-ID same-byte delivery replays; altered bytes conflict. A blocking batch needs every authenticated sibling terminal for its real completion result; a [declared observation](yieldable-waits.md) MAY instead yield to steer without ending the children. |
+| WAIT_USER | Keep intermediate wait on the child. Host reply targets child session/turn/interaction; parent remains parked until authenticated terminal or the declared observation yields. Yielding does not answer the child. A child's later continuation MUST NOT replace the original terminal named in the handle. |
 | Background | Initial admission receipt is deterministically running. Poll/wait reads records; cancel writes inbox. Reconstructed handles read the same identity. Notification reaches the next safe model boundary; delivery after owning turn ends is audit-only and cannot start a new turn. |
-| Cancellation | Parent closure MUST atomically enqueue stable targeted cancellation for live descendants, including background children; each child propagates it. No-start child cancels before dispatch. Unknown dispatched child effects stay unconfirmed until terminal evidence, then audit. |
+| Cancellation | Parent cancellation, abort or failure MUST atomically enqueue stable targeted cancellation for live descendants, including background children; each child propagates it. No-start child cancels before dispatch. Unknown dispatched child effects stay unconfirmed until terminal evidence, then audit. |
 | Handoff | Terminal child continuation; source does not resume model work. Use admission-derived count/maximum even after higher live configuration. Over-limit is durable failed result. Validate target execution/output, not the source's temporary transfer marker. |
 | Host bindings | Durable shared_state/result state is JSON-only. Hosts re-supply required object references through Runtime.host_bindings. Missing names raise MissingHostBinding before execution; no shadowing durable keys, replacement/deletion, pickle or transaction rollback promise for object mutation. |
 | Events/results | Pure projection of a consistent retained prefix; old results stop at their original terminal prefix. Events are at least once with stable IDs; child admission/completion belong to parent run and carry child identity. No second event or thread ledger. |

@@ -81,7 +81,7 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-37.0.0; Python lock/snapshot synchronization and central adoption are pending.
+38.0.0; Python lock/snapshot synchronization and central adoption are pending.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -147,3 +147,20 @@ Previously stored sessions without it retain their frozen compaction policy.
 Completion evidence and the independent response_rejection creation declaration
 ship in the same unreleased 37.0.0 major; they do not require another version
 bump or record/inbox/SQL change. Only Python adoption is required.
+
+## 38.0.0 yieldable waits
+
+The new optional closed record fields change an existing shape, and declared
+waits change scheduling and completion semantics. This requires a major release,
+even though opt-out sessions keep the same bytes. Strict old readers reject the
+new fields without a global record/inbox discriminator bump. SQL layouts are
+unchanged; hosts route sessions containing declarations to Python 0.35.0 or newer.
+See [yieldable waits](yieldable-waits.md). Rust remains unsupported and frozen.
+
+The 38.0.0 closed-shape extension also covers the optional literal-true
+`provider_evidence.payload.yield_on_steer`. Hosts preserve and authenticate the
+original acceptance declaration, including during recovery before park commit.
+Older readers reject declared acceptance inbox values and records embedding
+them, even before any park is saved. No discriminator or SQL layout change is
+needed. Kernel long-body archive identities now include content SHA-256;
+existing stored references remain authoritative and are never rewritten.
