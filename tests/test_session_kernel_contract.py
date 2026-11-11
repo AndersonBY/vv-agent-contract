@@ -39,8 +39,8 @@ class SessionKernelContractTests(unittest.TestCase):
         report = session.validate_session_fixtures(ROOT)
         self.assertGreater(report["records"], 100)
         self.assertGreater(report["inbox_items"], 50)
-        self.assertEqual(report["codec_vectors"], 83)
-        self.assertEqual(report["invalid_vectors"], 70)
+        self.assertEqual(report["codec_vectors"], 85)
+        self.assertEqual(report["invalid_vectors"], 84)
 
     def test_endpoint_routing_uses_host_order_and_closes_missing_attempt(self) -> None:
         cases = contractctl.load_json(ROOT / "fixtures/session_semantics.json")["cases"]
