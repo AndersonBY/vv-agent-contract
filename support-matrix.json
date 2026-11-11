@@ -8,7 +8,7 @@
   "implementations": {
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
-      "branch": "feat/yield-035",
+      "branch": "main",
       "contract_version": "38.0.0",
       "status": "verified",
       "verified_revision": "d2d02c238cc8600d30aa9af87366ccba8fedba93"
