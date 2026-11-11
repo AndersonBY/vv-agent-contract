@@ -8,6 +8,51 @@ execution lease. Wake is a hint; scanning recovers due work, queued inputs,
 dependency changes and consumer lag, including unprojected terminals. No-deadline
 waits and unresolved dependencies MUST NOT spin.
 
+## Yield scheduling and host responsibilities
+
+These requirements apply to SQL hosts that implement yield scheduling. Python
+0.35.0 local App Server, Interactive and Runner entry points accept declarations
+but do not yield; they retain their existing completion lifecycle.
+
+A host wake either marks the active owner or starts ordinary recovery under the
+host's scheduling lock. Only active execution is coalesced. An empty recovery
+pass MUST NOT repeat model calls, tool effects or receipts. Input push MUST NOT
+create a root run independently of the host scheduler. A marker records a wake
+received by an active owner. Before releasing ownership, that owner clears the
+marker, drives a full idempotent pass outside the scheduling lock, and checks the
+marker again under that lock. It may finish only after a pass makes no progress
+and no wake remains. Predictive work filters MUST NOT determine correctness.
+A scheduler holding its lock MUST NOT acquire store connection/transaction
+locks, resolve bindings or scan delivery; read durable state outside that lock.
+
+Admission within a nested or host-owned transaction MUST NOT wait synchronously
+for an execution owner. Wake/recovery observes inputs only after the actual
+outermost commit; savepoint release is not commit. Rollback or failed commit may
+leave an empty hint but MUST NOT dispatch rolled-back inputs or publish a
+successful terminal for them. Each atomic admission unit MUST include applicable
+host writes, child creation/start and parent admission in the same real database
+transaction. The host MUST exclusively own the shared raw connection for that
+unit. Concurrent native host/runtime transactions on that connection are
+unsupported, and the SDK does not promise to detect them. A host MUST NOT wrap a
+whole drive/poll in an outer write transaction: savepoints retain its locks.
+These requirements do not add a connection checkout or transaction callback API.
+
+The host that creates a run owns its wake, cancellation and completion handoff.
+A wake retains root and target session identity until a new owner can recover
+committed work. Cancellation targets its admitted turn and MUST NOT transfer to
+a successor. Closing a local owner discards hints, never durable inputs; another
+worker or the host scheduler can recover them. Late child delivery remains an
+atomic input push and delivery ACK, including after yielding.
+
+Startup or asynchronous completion errors MUST retain their original identity
+and reach the host error path with the target session ID. An owner must release
+its own scheduling registration without removing another owner. An unstarted
+worker cannot publish completion. A reported execution/read failure MUST NOT be
+turned into a guessed business terminal or trigger repeated reads of corrupt
+state. Only verified retained records authorize terminal notifications. Callback
+defects must escape through the host's existing error boundary; an admission
+ACK already attempted MUST NOT cause a second RPC response on later failure.
+
 Tool completions use the bounded [tool result projection](tool-results.md).
 Raw result bodies and private resource locators MUST NOT travel in the
 `tool_result` diagnostic. Reprojection changes event bytes under stable IDs;
@@ -31,10 +76,10 @@ be rejected. Detached span data never grants execution authority.
 | --- | --- |
 | One delegation mechanism | create_sub_task, configured children, Agent.as_tool, BackgroundAgentTask and handoff MUST share atomic admission, independently scheduled child session and terminal delivery. No recursive Runner or child execution under the parent lease. |
 | Admission | Child creation, frozen definition/input, parent started/parked records and background admission result MUST commit together with applicable host writes. Child principal inherits parent; policy/budget/workspace/model/prompt/JSON state freeze before admission. |
-| Completion | Child terminal input and child_delivery ACK MUST be atomic. Authenticate original child session/turn/generation, parent delivery target, terminal position/digest/status/result. Same-ID same-byte delivery replays; altered bytes conflict. A blocking batch needs every authenticated sibling terminal. |
-| WAIT_USER | Keep intermediate wait on the child. Host reply targets child session/turn/interaction; parent remains parked until authenticated terminal. A child's later continuation MUST NOT replace the original terminal named in the handle. |
+| Completion | Child terminal input and child_delivery ACK MUST be atomic. Authenticate original child session/turn/generation, parent delivery target, terminal position/digest/status/result. Same-ID same-byte delivery replays; altered bytes conflict. A blocking batch needs every authenticated sibling terminal for its real completion result; a [declared observation](yieldable-waits.md) MAY instead yield to steer without ending the children. |
+| WAIT_USER | Keep intermediate wait on the child. Host reply targets child session/turn/interaction; parent remains parked until authenticated terminal or the declared observation yields. Yielding does not answer the child. A child's later continuation MUST NOT replace the original terminal named in the handle. |
 | Background | Initial admission receipt is deterministically running. Poll/wait reads records; cancel writes inbox. Reconstructed handles read the same identity. Notification reaches the next safe model boundary; delivery after owning turn ends is audit-only and cannot start a new turn. |
-| Cancellation | Parent closure MUST atomically enqueue stable targeted cancellation for live descendants, including background children; each child propagates it. No-start child cancels before dispatch. Unknown dispatched child effects stay unconfirmed until terminal evidence, then audit. |
+| Cancellation | Parent cancellation, abort or failure MUST atomically enqueue stable targeted cancellation for live descendants, including background children; each child propagates it. No-start child cancels before dispatch. Unknown dispatched child effects stay unconfirmed until terminal evidence, then audit. |
 | Handoff | Terminal child continuation; source does not resume model work. Use admission-derived count/maximum even after higher live configuration. Over-limit is durable failed result. Validate target execution/output, not the source's temporary transfer marker. |
 | Host bindings | Durable shared_state/result state is JSON-only. Hosts re-supply required object references through Runtime.host_bindings. Missing names raise MissingHostBinding before execution; no shadowing durable keys, replacement/deletion, pickle or transaction rollback promise for object mutation. |
 | Events/results | Pure projection of a consistent retained prefix; old results stop at their original terminal prefix. Events are at least once with stable IDs; child admission/completion belong to parent run and carry child identity. No second event or thread ledger. |

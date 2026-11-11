@@ -268,3 +268,11 @@ Typed user interactions, free-text labeling, strict target/answer validation, an
 
 Contract 37.0.0 freezes the creation policy and preserves the protected input
 suffix across compaction, hooks and replay. See [the normative rule](unseen-input-protection.md).
+
+Yieldable observations follow [yieldable waits](yieldable-waits.md), including
+the optional closed record fields, default results, atomic steering, ordering
+and audit-only late provider receipts. This release implements SQL kernel yielding
+and L1; local App Server, Interactive and Runner accept declarations but do not
+yield. Hosts exclusively own shared raw connections; concurrent native
+transactions are unsupported and detection is not promised. L2–L5 remain unfixed.
+Frozen Rust does not support yielding.

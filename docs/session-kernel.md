@@ -47,8 +47,8 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 | `op_prepared` | `request:J`, `request_digest:H`, `op_kind:tool/interaction`, `tool:J`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:V`, `shared_state:J` |
 | `turn_parked` | `interaction_id:T`, `question:S`, `source_operation_id:T`, `source_attempt:P` |
 | `op_started` | `dispatch_id:T`, `authorization_version:T`, `epoch:P`, `mode:sync/provider/managed`, `endpoint_id?:T` |
-| `op_parked` | `phase:before_dispatch/after_dispatch`, `handle:Handle`, `poll_at_ms:N\|null`, `deadline_ms:N\|null`, `interaction_result?:J`, `delegation?:Delegation` |
-| `op_completed` | `result:V`, `result_digest:H`, `usage:J`, `shared_state:J\|null`, `evidence:[T]`, `execution_started:B`, `context:normal/correction/audit`, `request_digest:H`, `provider_binding:T\|null` |
+| `op_parked` | `phase:before_dispatch/after_dispatch`, `handle:Handle`, `poll_at_ms:N\|null`, `deadline_ms:N\|null`, `interaction_result?:J`, `delegation?:Delegation`, `yield_on_steer?:true`, `yieldable_children?:[T]` |
+| `op_completed` | `result:V`, `result_digest:H`, `usage:J`, `shared_state:J\|null`, `evidence:[T]`, `execution_started:B`, `context:normal/correction/audit`, `request_digest:H`, `provider_binding:T\|null`, `yielded_by?:T` |
 | `op_unknown` | `reason:T`, `dispatch_evidence:[T]`, `observation:J`, `retry:retry/stop/manual`, `retry_at_ms:N\|null`, `duplicate_cost_risk:B`, `measurement_missing:B` |
 | `context_compacted` | `source_digest:H`, `prefix_ids:[T]`, `tail_ids:[T]`, `mode:micro/summary/emergency`, `summary_operation_id:T\|null`, `replacement:[V]`, `evidence_manifest:J`, `micro_usage?:{archived_count:N,reclaimed_tokens:N,artifact_failure_count:N}` |
 | `boundary_recorded` | `boundary_id:T`, `stage:boundary enum`, `source_operation_id:T\|null`, `source_digest:H\|null`, `data:J` selected by stage |
@@ -72,7 +72,7 @@ validation and fold rules supply their existing typed boundaries.
 | `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:[T]`, `reason?:S`, `metadata?:J` |
 | `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:V`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
 | `control` | `action:close/archive/suspend/resume/cancel/abort` |
-| `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle` |
+| `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle`, optional `yield_on_steer:true` |
 
 User content remains opaque at the generic boundary. Kernel reply producers currently use
 `{interaction_id,text}` (optionally operation_id) for ask_user and `{interaction_id,text}` for
@@ -91,6 +91,11 @@ usage from opaque `result` content. Re-delivery for an already completed attempt
 with a new input ID is a noop only when both result and usage have identical
 RFC8785 bytes; differing result or usage MUST be rejected as a result conflict.
 Replay MUST NOT create another completion or bill the attempt again.
+
+For an original long body, duplicate comparison MUST validate its UTF-8 SHA-256
+and byte length against the selected persisted artifact, then project using that
+saved reference. It MUST NOT derive a replacement filename or rewrite history.
+All other result fields and usage remain part of the canonical comparison.
 
 ## Nested values and attributes
 
@@ -243,7 +248,7 @@ JSON state. Other explicitly opaque J/V locations keep their content boundaries.
 | Late result, unknown consumed | Preserve the already delivered unknown message and append a correction, rather than rewrite history. `consumed_unknowns` MUST identify exactly the unknowns frozen into the successor request. |
 | Late result, retry dispatched / turn ended / generation stale | Earlier model result is audit-only after retry dispatch. Ended/cancelled turns MUST NOT revive. Host adapters MUST reject stale business generations; authentic late evidence can remain audit-only. |
 | Provider evidence | Host/provider authentication MUST precede application. Bind operation, attempt, request digest, provider binding and retained handle/evidence. A digest/evidence string alone is not proof of authenticity. |
-| Steer / follow-up | Steer waits until the active frozen batch/retry closes and enters the next new request. Follow-up queues a new turn after the active turn ends. End admission MUST recheck inbox watermark so racing input is not lost. |
+| Steer / follow-up | Steer waits until the active frozen batch/retry closes and enters the next new request. Declared observations MAY close early through [yieldable waits](yieldable-waits.md); other pending work still blocks steering. Follow-up queues a new turn after the active turn ends. End admission MUST recheck inbox watermark so racing input is not lost. |
 | User wait / approval | Reply to the exact interaction/turn/generation. Equal answer replays are noop; conflicting bytes reject even after completion. Approval binds prepared arguments and scope, uses an absolute deadline including provider-decision time, and derives allow_session only from applied answers. |
 | Suspend / cancel / abort | Suspend preserves waits and permits durable incoming results without dispatch. Resume restores the same turn. Cancel/abort close undispatched work explicitly and dispatched work with confirmed-stop or unknown evidence; keep unconfirmed operation identities in the terminal. |
 | Background Bash | Reattach only through the retained original owner and live process manager. OS/manager restart or missing handle is unknown; PID guessing MUST NOT authorize adoption or a confirmed stop. |
@@ -702,3 +707,19 @@ renewal worker; it never certifies ownership for further execution.
 
 Contract 37.0.0 freezes the creation policy and preserves the protected input
 suffix across compaction, hooks and replay. See [the normative rule](unseen-input-protection.md).
+
+## Yieldable waits
+
+Contract 38.0.0 adds optional `yield_on_steer`, `yieldable_children` park fields
+and `yielded_by` completion evidence. The complete normative rule, including
+atomicity, ordering, callbacks and late work, is [yieldable waits](yieldable-waits.md).
+
+## L1 lease lock ordering
+
+Lease renewal serializes the snapshot, renewal and lease publication under one
+renewal lock. It MUST release the lease-value lock during database I/O and MUST
+NOT acquire the commit lock while renewing. A synchronous poll while the same
+thread owns this latch's commit or renewal lock MUST fail before connection I/O;
+the ownership marker covers acquisition through release, including reentry
+windows and exception cleanup. Other latches and threads remain independent.
+This rule does not add connection ownership or native transaction concurrency.

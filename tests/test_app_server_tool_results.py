@@ -68,7 +68,8 @@ class ToolResultsTests(unittest.TestCase):
                 separators=(",", ":"),
             ).encode()
         ).hexdigest()
-        suffix = hashlib.sha256(owner.encode()).hexdigest()
+        content_sha = hashlib.sha256(unicode).hexdigest()
+        suffix = hashlib.sha256(f"{owner}/{content_sha}".encode()).hexdigest()
         task_identity = json.dumps(
             ["task", ref["turnId"]], ensure_ascii=False, separators=(",", ":")
         ).encode()

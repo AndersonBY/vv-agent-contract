@@ -1,5 +1,24 @@
 # Changelog
 
+## 38.0.0 — unreleased — SQL yieldable waits and L1
+
+- Yield callbacks observe read-only host state; verified child terminal results
+  and references are supplied, files stay on the host delivery path.
+- Provider acceptance recovery preserves and authenticates the original yield
+  declaration; later conflicting attachments/queries are rejected.
+- L1 serializes lease renewal/publication and rejects synchronous poll reentry.
+  Long receipt candidates include content SHA-256; structured yield bodies validate.
+- Local App Server, Interactive and Runner retain declarations but do not yield.
+  Shared raw connections require exclusive host use; concurrent native
+  transactions are unsupported. L2–L5 remain unfixed.
+
+Hosts can declare foreground child and Accepted provider observations yieldable
+on steer. Results and steering commit together; children continue and notify by
+background rules, provider handles close without cancellation. Optional closed
+record fields reject old readers. No SQL migration or global schema bump. Python
+0.35.0 local implementation; immutable publication/adoption pending. Frozen Rust
+does not support this capability. See [release notes](docs/release-38.0.0.md).
+
 ## 37.0.0 — 2026-11-07 — unseen input protection
 
 New sessions freeze input protection in the closed creation seed. Summary,
