@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "contract_version": "38.0.0",
-  "status": "in-progress",
+  "status": "verified",
   "required_implementations": [
     "python"
   ],
@@ -10,8 +10,8 @@
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "feat/yield-035",
       "contract_version": "38.0.0",
-      "status": "in-progress",
-      "verified_revision": null
+      "status": "verified",
+      "verified_revision": "d2d02c238cc8600d30aa9af87366ccba8fedba93"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Python 0.35.0 SQL yieldable waits and L1: candidate revision pending release; local App Server/Interactive/Runner do not yield. Immutable publication and central adoption pending. Frozen Rust does not support yielding.",
-  "last_verified_at": null,
-  "cross_repository_run": null
+  "adoption_note": "v38.0.0 passed the required implementation snapshots and cross-repository producer gates.",
+  "last_verified_at": "2026-11-11T21:24:05Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/43099601384"
 }
