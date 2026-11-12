@@ -262,6 +262,16 @@ exceptions versus typed errors, sync/async facade spelling and idiomatic provide
 construction. They cannot add defaults, fallback, readers or capabilities. SQL,
 connections, caches, threads and store signatures remain implementation-local.
 
+The Python P1 export-module rename may expose the same existing value objects
+through `vv_agent.core_types`. Keep the existing `vv_agent.types` bindings until
+the next Python package major release as the explicit W9.6 exception to alias
+removal. This is import routing, not a second implementation or historical wire
+reader: object identity, defaults, errors and serialization remain unchanged.
+When that file is imported as top-level `types` because its directory is the
+working directory, it must load the interpreter's standard-library module
+without loading the agent package. Producer checks retain the existing public
+inventory and verify the two package paths and the working-directory case.
+
 Required adoption proves strict readers, real producers, snapshot locks, focused
 and full quality gates, applicable SQLite and PostgreSQL failure cuts and central
 cross-repository CI. Frozen Rust evidence remains scoped to its pinned release.
