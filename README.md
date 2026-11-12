@@ -2,8 +2,8 @@
 
 Language-neutral observable behavior, canonical fixtures and strict wire schemas
 for vv-agent. Contract 39.0.0 defines concise session-schema diagnostics and is
-at a normative authoring checkpoint; real-producer evidence, publication and
-Python adoption are pending. Rust stays frozen at verified 23.0.0 / 0.21.x.
+unpublished with local real-producer diagnostic evidence. Immutable publication
+and Python adoption are pending. Rust stays frozen at verified 23.0.0 / 0.21.x.
 See [39.0.0 release notes](docs/release-39.0.0.md).
 
 Implementations pin exact version, revision, artifact and manifest digests in

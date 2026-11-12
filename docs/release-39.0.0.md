@@ -1,8 +1,8 @@
 # Contract 39.0.0
 
-Status: unpublished normative authoring checkpoint; pending adoption. Python is
-the only required implementation. No 39.0.0 implementation revision, producer
-capture or central verification is claimed. Python P1 may remain in package
+Status: unpublished with local real-producer evidence; pending adoption. Python
+is the only required implementation. No verified 39.0.0 implementation revision
+or central adoption is claimed. Python P1 may remain in package
 series 0.36.x. Rust remains frozen at contract 23.0.0 / package series 0.21.x,
 verified revision `00f4240786f1adea1dc0c4730da8ddd06a5ab8ac`.
 
@@ -25,31 +25,40 @@ schema 3, SQL layouts, RunEvent v6, App Server v5, public API inventory and froz
 definitions stay unchanged. Existing stored sessions need no migration, store
 drain, decoder selection or byte rewriting.
 
-## Outstanding producer evidence and gates
+## Producer evidence and outstanding gates
 
-This checkpoint changes normative docs and version/adoption metadata only.
-Existing fixture bytes and SHA256SUMS remain unchanged. No fixture may be
-handwritten to stand in for a real producer, and this checkpoint is not ready
-for publication or adoption verification.
+`fixtures/session_record_diagnostics.json` is copied unchanged from the real
+Python producer `vv-agent/scripts/record_codec_fixtures.py`. It exercises closed
+record/inbox envelopes, payloads and reserved metadata; retained identity,
+embedded-digest, duplicate-member, non-object, parser and ModelSettings errors;
+real App Server error propagation; provider acceptance and model-selection codes;
+and unchanged canonical Record/Inbox bytes and SHA-256 identities.
 
-After SDK implementation, capture the actual Record/Inbox codec failures and
-real App Server propagation using deterministic local producers. Evidence must
-cover representative closed-envelope/payload/nested-schema failures, the exact
-concise diagnostic and absence of input/schema dumps, preserved acceptance and
-JCS identity, explicit semantic/parser/duplicate messages, ModelSettings
-semantic validation, and unchanged provider/model-selection codes. Do not
-freeze concrete third-party causes or reproduce a schema-validator formatter.
+The captured `RecordError` label denotes the error category and Python adaptation
+(`RecordError(ValueError)`), not a required third-party exception cause. The
+malformed-JSON message is current required Python implementation evidence; it
+does not prescribe a universal parser formatter or jsonschema cause identity.
+No customer input or schema dump is included in the capture. The Python producer
+tests also check the actual App Server rejection's exception chain for those
+excluded values.
 
-Add or extend the appropriate canonical fixture only from that producer and
-review the semantic diff. Then regenerate SHA256SUMS with contractctl manifest;
-run contract validation, independent Node JCS, repository unittests and two
-byte-identical bundle builds. Python must pass focused real-producer and full
-pytest/ruff/ty gates, applicable SQLite memory/file and real PostgreSQL gates,
-and required central cross-repository checks. Keep adoption pending until the
-required immutable pins and successful default-branch revisions/run are
-recorded through the normal adoption workflow.
+`tests/test_session_record_diagnostics.py` checks the captured structure and
+validates its logical Record/Inbox objects with the independent canonical codec.
+`scripts/verify_jcs.mjs` independently checks their canonical bytes, hashes and
+record identity. Python's
+`tests/test_kernel_record_codec.py::test_real_diagnostic_producer_matches_canonical_fixture`
+compares a fresh real producer capture byte for byte through the existing
+`VV_AGENT_CONTRACT_SOURCE` local-source resolver. The fixture manifest is rebuilt
+with `contractctl.py manifest`.
+
+Required local canonical gates are contract validation, independent Node JCS,
+repository unittests and two byte-identical bundle builds. Python must pass
+focused real-producer and full pytest/ruff/ty gates, applicable SQLite memory/file
+and real PostgreSQL gates, and required central cross-repository checks. Keep
+adoption pending until the required immutable pins and successful default-branch
+revisions/run are recorded through the normal adoption workflow.
 
 Immutable publication is a separate approval step. Implementation locks and
-vendored snapshots remain untouched at this authoring checkpoint; synchronize
-them only through the approved publication/adoption workflow. The frozen Rust
-entry and its pinned contract are preserved throughout.
+vendored snapshots remain untouched; synchronize them only through the approved
+publication/adoption workflow. The entire frozen Rust entry and its pinned
+contract are preserved throughout.

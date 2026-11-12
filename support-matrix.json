@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v39.0.0 normative authoring checkpoint only. Real-producer diagnostic fixtures, Python implementation, immutable publication/lock/snapshot and central adoption remain pending. Record/inbox/SQL boundaries and the frozen Rust baseline are unchanged.",
+  "adoption_note": "v39.0.0 has local real-producer session diagnostic evidence from the Python codec, App Server, provider acceptance and model-selection paths. Immutable publication/lock/snapshot, required Python full gates and central adoption remain pending. Record/inbox/SQL boundaries and the frozen Rust baseline are unchanged.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

@@ -1,7 +1,7 @@
 # vv-agent-contract
 
 语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。当前 39.0.0
-规定简洁的 session schema 错误信息，处于规范编写阶段；真实 producer 证据、发布与
+规定简洁的 session schema 错误信息，已有本地真实 producer 证据；不可变发布与
 Python adoption 尚待完成，状态为 pending-adoption。Rust 仍冻结于已验证的
 23.0.0 / 0.21.x。参见 [39.0.0 发布说明](docs/release-39.0.0.md)。
 
