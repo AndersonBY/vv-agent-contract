@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "contract_version": "38.0.0",
-  "status": "verified",
+  "contract_version": "39.0.0",
+  "status": "pending-adoption",
   "required_implementations": [
     "python"
   ],
@@ -9,9 +9,9 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "38.0.0",
-      "status": "verified",
-      "verified_revision": "d2d02c238cc8600d30aa9af87366ccba8fedba93"
+      "contract_version": "39.0.0",
+      "status": "pending-adoption",
+      "verified_revision": null
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v38.0.0 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-11-11T21:24:05Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/43099601384"
+  "adoption_note": "v39.0.0 normative authoring checkpoint only. Real-producer diagnostic fixtures, Python implementation, immutable publication/lock/snapshot and central adoption remain pending. Record/inbox/SQL boundaries and the frozen Rust baseline are unchanged.",
+  "last_verified_at": null,
+  "cross_repository_run": null
 }

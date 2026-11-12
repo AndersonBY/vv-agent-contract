@@ -9,6 +9,14 @@ Matching schemas or fixture bytes alone do not establish real-producer parity.
 Provider HTTP rejection, safe diagnostics and definitive retry receipts follow
 [model rejection](model-rejection.md); transport ambiguity stays Unknown.
 
+Closed session-schema rejection uses the fixed diagnostic defined by the
+[session kernel](session-kernel.md#closed-schema-rejection-diagnostic).
+The Python adaptation preserves `vv_agent.session.records.RecordError` as a
+`ValueError` subclass. The concrete `jsonschema.ValidationError` cause and its
+pretty-printed text/schema/path attributes are not retained as a compatibility
+requirement. Explicit semantic/parser errors and fixed provider/model-selection
+codes retain their existing behavior.
+
 ## Domains
 
 The current domain IDs in contract.json are system-prompt,

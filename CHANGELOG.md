@@ -1,5 +1,23 @@
 # Changelog
 
+## 39.0.0 — unreleased — concise session-schema diagnostics
+
+Closed session-schema failures report exactly `invalid session schema`, without
+customer input or schema dumps. Concrete jsonschema causes and pretty-print
+identity are not compatibility requirements. Specific semantic, parser and
+duplicate-member messages, fixed provider/model-selection codes, rejection
+boundaries, canonical bytes and IDs retain their behavior.
+
+This major changes a public diagnostic that can reach App Server clients.
+Record 1, inbox 3, SQL layouts, RunEvent v6, App Server v5 and frozen definitions
+remain unchanged; no data migration, store drain or historical decoder is
+required. Python P1 may remain 0.36.x. Rust stays frozen at 23.0.0 / 0.21.x.
+
+Normative authoring only: real-producer diagnostic fixtures, SDK implementation,
+immutable publication/lock/snapshot and central adoption are pending. Existing
+fixtures and their manifest have not been regenerated for this checkpoint.
+See [release notes](docs/release-39.0.0.md).
+
 ## 38.0.0 — unreleased — SQL yieldable waits and L1
 
 - Yield callbacks observe read-only host state; verified child terminal results
