@@ -101,11 +101,16 @@ jobs:
         working-directory: vv-agent
         env:
           VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
+          TMPDIR: /tmp
         run: |
           uv sync --dev --extra s3
-          uv run pytest
+          uv run pytest -k "not simulation_smoke"
           uv run ruff check .
           uv run ty check
+
+      - name: Run Python seeded simulation smoke
+        working-directory: vv-agent
+        run: TMPDIR=/dev/shm timeout 60s uv run pytest tests/sim -k smoke -q -s
 
       - name: Record evidence
         shell: bash
