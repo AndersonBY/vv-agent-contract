@@ -195,6 +195,39 @@ nullability, wrong identities and embedded digests MUST fail before append.
 Cross-record order, dependencies, request/binding drift, authorization, stale
 generation and terminal revival MUST fail at fold/admission, atomically.
 
+## Closed-schema rejection diagnostic
+
+Contract 39.0.0 replaces the diagnostic for a failed closed session-schema check
+with exactly `invalid session schema`. This includes record/inbox envelopes,
+kind-specific payloads, reserved metadata, typed handles, model bindings and child
+admission shapes. The same accepted and rejected values, validation order and
+canonical bytes MUST be preserved. This rule does not change the handling of a
+value that fails a different check first.
+
+The schema-rejection diagnostic MUST NOT contain customer input, an offending
+value excerpt, a schema dump or a validator's pretty-printed trace. When an
+existing host or App Server path exposes this rejection, it MUST expose the
+concise diagnostic within its existing error envelope. Existing contextual
+wrappers MUST NOT restore those dumps. Concrete third-party validator exception
+causes, their attributes and object identities are not a compatibility surface;
+implementations MUST NOT retain a schema-validator cause that reintroduces the
+excluded input or schema dumps. A failed Boolean schema check does not require
+an artificial underlying exception.
+
+This replaces only closed-schema diagnostics. Existing specific semantic errors,
+including identity and embedded-digest mismatches, and existing parser and
+duplicate-member errors MUST retain their messages and rejection behavior.
+Additional ModelSettings semantic validation is unchanged. Provider rejection
+mapping MUST retain `provider_result_invalid`; rejected model selections MUST
+retain `model_selection_unresolvable`. Execution, admission and retry behavior
+are unchanged. Opaque customer content is not rewritten.
+
+This is a public diagnostic replacement, not a persistence boundary. Record
+schema 1, inbox schema 3, SQL layouts, canonical IDs/digests, existing stored
+bytes, RunEvent v6, App Server v5 and the public API inventory remain unchanged.
+No data migration, store drain, historical decoder or compatibility mode is
+introduced. See [39.0.0 release notes](release-39.0.0.md).
+
 ## Creation seed and reserved metadata
 
 A creation-time `session_created.attributes.seed` is a closed object with an optional

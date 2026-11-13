@@ -9,6 +9,14 @@ Matching schemas or fixture bytes alone do not establish real-producer parity.
 Provider HTTP rejection, safe diagnostics and definitive retry receipts follow
 [model rejection](model-rejection.md); transport ambiguity stays Unknown.
 
+Closed session-schema rejection uses the fixed diagnostic defined by the
+[session kernel](session-kernel.md#closed-schema-rejection-diagnostic).
+The Python adaptation preserves `vv_agent.session.records.RecordError` as a
+`ValueError` subclass. The concrete `jsonschema.ValidationError` cause and its
+pretty-printed text/schema/path attributes are not retained as a compatibility
+requirement. Explicit semantic/parser errors and fixed provider/model-selection
+codes retain their existing behavior.
+
 ## Domains
 
 The current domain IDs in contract.json are system-prompt,
@@ -253,6 +261,16 @@ Allowed adaptations are symbol naming, Python Path versus Rust PathBuf,
 exceptions versus typed errors, sync/async facade spelling and idiomatic provider
 construction. They cannot add defaults, fallback, readers or capabilities. SQL,
 connections, caches, threads and store signatures remain implementation-local.
+
+The Python P1 export-module rename may expose the same existing value objects
+through `vv_agent.core_types`. Keep the existing `vv_agent.types` bindings until
+the next Python package major release as the explicit W9.6 exception to alias
+removal. This is import routing, not a second implementation or historical wire
+reader: object identity, defaults, errors and serialization remain unchanged.
+When that file is imported as top-level `types` because its directory is the
+working directory, it must load the interpreter's standard-library module
+without loading the agent package. Producer checks retain the existing public
+inventory and verify the two package paths and the working-directory case.
 
 Required adoption proves strict readers, real producers, snapshot locks, focused
 and full quality gates, applicable SQLite and PostgreSQL failure cuts and central
