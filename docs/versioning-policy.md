@@ -20,6 +20,20 @@ evidence/docs without observable change. These labels do not promise old-wire
 reading. Each implementation pins an exact version/revision/artifact and manifest;
 consumers needing an older behavior pin its release.
 
+### Feature levels inside one major
+
+Within one storage major, a change MAY add an optional field, enum value or record
+kind only when it is assigned a `feature_level` and the canonical fixture states
+its absent/default behavior. A current reader MUST read unchanged old data without
+conversion. A worker MUST NOT decode, claim or write a session whose required level
+is above its advertised support set. New fields remain closed to old readers, so an
+unknown field still rejects; a worker only accepts a high-level shape after
+publishing that level. The default of every optional addition reproduces behavior
+from before the addition. Changing the meaning, nullability, identity, digest input
+or validation of an existing field still requires a new major. Allocating
+`feature_level` in a canonical shape does not claim an implementation has adopted
+it.
+
 30.0.0 replaces the closed model/list response and selects App Server v4. New
 context/read and compact/start methods alone would be minor additions. There is
 no record, inbox or SQL store boundary.
@@ -199,12 +213,16 @@ This major replaces the session storage discriminators with `"S1"` and
 3 and every earlier wire reject without a decoder. SQL table layout, PostgreSQL
 RLS and Python symbol spelling remain outside the contract.
 
-The first allocation adds Principal/actor, record `chain_digest`, admission and
-input proof slots, frozen session requirements, policy and environment binding
-slots, and closed ContentRef labels. Unknown fields still reject. Null signed-proof
-slots mean explicit unsigned local mode, not silent fallback in signed deployment.
+The allocation adds Principal/actor, admission and input proof slots, frozen
+session requirements, policy/environment/usage/tokenizer binding slots, and closed
+ContentRef labels. Logical records contain reference-form C fields; record chaining
+is allocated separately as a storage envelope excluded from record identity.
+Unknown fields still reject. Null signed-proof slots mean explicit unsigned local
+mode, not silent fallback in signed deployment.
 
 No Python S1 producer, storage implementation or adoption is claimed. The frozen
 Rust entry remains 23.0.0 / 0.21.x. Worker support filtering, full policy/label
-propagation, remaining encrypted-slot migration and SQLite/PostgreSQL
-implementation remain P3/P4 work. See [release notes](release-40.0.0.md).
+propagation, execution-environment adoption, remaining producer/storage work and
+SQLite/PostgreSQL implementation remain later work. This repository contains
+synthetic allocation fixtures, not a Python S1 producer capture or adoption claim.
+See [release notes](release-40.0.0.md).

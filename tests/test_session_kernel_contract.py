@@ -24,7 +24,13 @@ class SessionKernelContractTests(unittest.TestCase):
         cls.vectors = contractctl.load_json(
             ROOT / "fixtures/session_codec_vectors.json"
         )
+        cls.content_catalog = contractctl.load_json(
+            ROOT / "fixtures/session_content_catalog.json"
+        )
         cls.codec = session.Codec(ROOT, cls.vectors)
+
+    def hydrate(self, value):
+        return session.hydrate_content_refs(value, self.content_catalog)
 
     def record(self, kind: str) -> dict:
         return copy.deepcopy(
@@ -41,24 +47,74 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertGreater(report["inbox_items"], 50)
         self.assertEqual(report["codec_vectors"], 85)
         self.assertEqual(report["invalid_vectors"], 84)
+        self.assertEqual(report["storage_envelope_cases"], 6)
+        self.assertEqual(report["storage_lifecycle_cases"], 11)
+        self.assertEqual(report["trusted_negative_cases"], 26)
 
 
     def test_trusted_storage_s1_allocation(self) -> None:
         fixture = contractctl.load_json(ROOT / "fixtures/trusted_storage_s1.json")
+        record_schema = contractctl.load_json(ROOT / "fixtures/session_record.schema.json")
+        storage_schema = contractctl.load_json(
+            ROOT / "fixtures/session_storage_envelope.schema.json"
+        )
+        lifecycle_schema = contractctl.load_json(
+            ROOT / "fixtures/session_storage_lifecycle.schema.json"
+        )
         self.assertEqual(fixture["schema_version"], "vv-agent.trusted-storage-s1.v1")
         self.assertEqual(fixture["status"], "contract-allocation-only")
         self.assertEqual(fixture["storage_major"], "S1")
         self.assertEqual(fixture["feature_level"], 1)
+        self.assertNotIn(
+            "chain_digest",
+            record_schema["$defs"]["RecordEnvelope"]["properties"],
+        )
+        self.assertEqual(
+            set(storage_schema["$defs"]["Envelope"]["properties"]),
+            {
+                "schema_version",
+                "tenant_id",
+                "session_id",
+                "seq",
+                "record_digest",
+                "chain_digest",
+                "writer_epoch",
+                "created_ms",
+            },
+        )
+        self.assertEqual(
+            record_schema["$defs"]["Principal"]["properties"]["subject_kind"]["enum"],
+            ["user", "service", "agent"],
+        )
+        self.assertIn("Tombstone", lifecycle_schema["$defs"])
+        self.assertIn("ExportLine", lifecycle_schema["$defs"])
         self.assertEqual(
             set(fixture["field_dispositions"]),
             {
                 "session_record.envelope",
                 "session_inbox.envelope",
                 "session_created.payload.principal",
+                "session_created.payload.workspace",
+                "session_created.payload.attributes",
+                "turn_started.payload.definition",
+                "turn_started.payload.budget",
                 "turn_started.payload.policy_digest",
                 "turn_started.payload.requirements",
+                "turn_started.payload.tokenizer_binding",
                 "turn_started.payload.environment",
+                "turn_started.payload.environment.operational_policy",
                 "input_applied.payload.input_proof",
+                "op_planned.payload.request_tool_budget_admission",
+                "op_prepared.payload.request_tool_hook_shared_state",
+                "op.policy_decision",
+                "op_completed.payload.result_usage_evidence",
+                "op_completed.payload.usage_counts",
+                "approval_answer.payload.scope_reason_metadata",
+                "approval_answer.policy_projection",
+                "provider_handles.payload_fields",
+                "boundary_recorded.payload.data",
+                "session_storage_envelope",
+                "session_storage_lifecycle",
                 "ContentRef",
                 "ContentLabels",
             },
@@ -72,6 +128,12 @@ class SessionKernelContractTests(unittest.TestCase):
                 "turn_started_requirements_policy_and_environment",
                 "signed_user_inbox_admission_proof",
                 "input_applied_copied_input_proof",
+                "policy_usage_and_tokenizer_projection",
+                "op_planned_policy_projection",
+                "op_prepared_policy_projection",
+                "approval_answer_policy_projection",
+                "provider_evidence_content_ref",
+                "boundary_event_content_ref",
             },
         )
         for case in accepted.values():
@@ -103,7 +165,7 @@ class SessionKernelContractTests(unittest.TestCase):
         case = next(c for c in cases if c["case"] == "endpoint_routing")
         self.assertEqual(case["calls"], ["B", "C"])
         self.assertEqual(case["preferences"], [None, "B", "B"])
-        missing = case["missing"]["payload"]
+        missing = self.hydrate(case["missing"]["payload"])
         self.assertEqual(missing["result"]["error_code"], "endpoint_unavailable")
         self.assertFalse(missing["execution_started"])
         self.assertEqual(missing["usage"], {})
@@ -114,7 +176,8 @@ class SessionKernelContractTests(unittest.TestCase):
         case = next(
             c for c in cases if c["case"] == "model_selection_mid_session_retry"
         )
-        plans = case["plans"]
+        codec = session.Codec(ROOT, [self.vectors, case])
+        plans = [self.hydrate(plan) for plan in case["plans"]]
         self.assertEqual(
             [p["payload"]["request"]["model"] for p in plans], ["m", "m", "B"]
         )
@@ -132,12 +195,14 @@ class SessionKernelContractTests(unittest.TestCase):
             [c["backend"] for c in case["calls"]], ["scripted", "scripted", "anthropic"]
         )
         zero_capability = copy.deepcopy(case["selection_record"])
-        zero_capability["payload"]["model_binding"]["max_output_tokens"] = 0
-        self.codec.validate(zero_capability)
+        model_binding = self.hydrate(zero_capability["payload"]["model_binding"])
+        self.assertIn("max_output_tokens", model_binding)
+        model_binding["max_output_tokens"] = 0
+        codec.validate(zero_capability)
         item = case["selection_record"]["payload"]["input"]
         self.assertEqual(item["schema_version"], "S1")
-        self.codec.validate(item, inbox=True)
-        self.codec.validate(item | {"payload": {"selection": None}}, inbox=True)
+        codec.validate(item, inbox=True)
+        codec.validate(item | {"payload": {"selection": None}}, inbox=True)
         negatives = [
             {},
             {"model": "B"},
@@ -152,7 +217,7 @@ class SessionKernelContractTests(unittest.TestCase):
                 self.subTest(selection=selection),
                 self.assertRaises(session.ValidationError),
             ):
-                self.codec.validate(
+                codec.validate(
                     item | {"payload": {"selection": selection}}, inbox=True
                 )
         classes = {
@@ -172,13 +237,27 @@ class SessionKernelContractTests(unittest.TestCase):
             )
         )
         self.assertEqual(inbox["schema_version"], "S1")
-        for usage in [{}, {"prompt_tokens": 12000, "completion_tokens": 300}]:
-            inbox["payload"]["usage"] = usage
-            self.codec.validate(inbox, inbox=True)
+        usage_ref = inbox["payload"]["usage"]
+        self.assertEqual(
+            set(usage_ref), {"content_id", "mac", "size", "key_id", "labels"}
+        )
+        self.assertIsInstance(self.hydrate(usage_ref), dict)
+        for usage in [
+            {},
+            {"prompt_tokens": 12000, "completion_tokens": 300},
+            None,
+            [],
+            1,
+            True,
+            "usage",
+        ]:
+            with self.subTest(plaintext_usage=usage), self.assertRaises(
+                session.ValidationError
+            ):
+                self.codec.validate(inbox | {"payload": inbox["payload"] | {"usage": usage}}, inbox=True)
         for payload in [
             {k: v for k, v in inbox["payload"].items() if k != "usage"},
             inbox["payload"] | {"extra": True},
-            *[inbox["payload"] | {"usage": v} for v in (None, [], 1, True, "usage")],
         ]:
             with (
                 self.subTest(payload=payload),
@@ -264,23 +343,25 @@ class SessionKernelContractTests(unittest.TestCase):
             ):
                 self.codec.validate(wire)
         wire = copy.deepcopy(sample)
-        wire["payload"]["request"]["metadata"]["vv_session"]["extra"] = True
+        wire["payload"]["request"] = {
+            "metadata": {"vv_session": {"extra": True}}
+        }
         with self.assertRaises(session.ValidationError):
             self.codec.validate(wire)
         wire = self.record("turn_started")
-        wire["payload"]["definition"]["task"]["metadata"]["vv_session"] = {
-            "extra": True
-        }
+        wire["payload"]["definition"] = {"task": {"metadata": {"extra": True}}}
         with self.assertRaises(session.ValidationError):
             self.codec.validate(wire)
 
     def test_creation_seed_and_compaction_identity(self) -> None:
         records = [v["wire"] for v in self.vectors["vectors"] if v["type"] == "record"]
-        seeds = [
-            r["payload"]["attributes"]["seed"]
-            for r in records
-            if r["kind"] == "session_created" and "seed" in r["payload"]["attributes"]
-        ]
+        seeds = []
+        for record in records:
+            if record["kind"] != "session_created":
+                continue
+            attributes = self.hydrate(record["payload"]["attributes"])
+            if isinstance(attributes, dict) and "seed" in attributes:
+                seeds.append(attributes["seed"])
         self.assertTrue(seeds)
         for seed in seeds:
             self.assertIn(
@@ -379,7 +460,7 @@ class SessionKernelContractTests(unittest.TestCase):
                 for r in source
             }
             retained_memory = {
-                r["wire"]["payload"]["data"]["event"]["event_id"]
+                self.hydrate(r["wire"]["payload"]["data"]["event"])["event_id"]
                 for r in source
                 if r["wire"]["kind"] == "boundary_recorded"
                 and r["wire"]["payload"]["stage"]

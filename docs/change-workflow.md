@@ -12,6 +12,10 @@ Update normative behavior, fixtures/schemas and release notes together. Fixtures
 must come from real producers with deterministic doubles and independent byte,
 identity and transition assertions. Never edit vendored snapshots or generator
 facts. If generator output is defective, stop that file and report the defect.
+Contract-first shape allocations may use synthetic fixtures only when they are
+marked `contract-allocation-only`, state that no producer capture exists, and are
+excluded from adoption evidence. Synthetic allocation bytes never stand in for a
+real producer gate.
 The current record/inbox ownership is [session kernel](session-kernel.md), with
 [consumers](session-consumers.md) and [App Server](session-kernel.md#app-server) projections.
 Storage layouts and constructor/method signature catalogs are outside contract.

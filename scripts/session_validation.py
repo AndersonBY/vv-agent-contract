@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import math
 import re
+import struct
 import subprocess
 from collections import Counter
 from pathlib import Path
@@ -61,6 +63,8 @@ HISTORICAL_SESSION_FIXTURES = {
 }
 KEYWORDS = {
     "$schema",
+    "$defs",
+    "$ref",
     "type",
     "const",
     "enum",
@@ -127,18 +131,32 @@ def check_schema_keywords(schema: dict[str, Any]) -> None:
             check_schema_keywords(schema[key])
     for child in schema.get("properties", {}).values():
         check_schema_keywords(child)
+    for child in schema.get("$defs", {}).values():
+        check_schema_keywords(child)
 
 
-def matches(value: Any, schema: dict[str, Any]) -> bool:
+def matches(value: Any, schema: dict[str, Any], root: dict[str, Any]) -> bool:
     try:
-        validate_schema(value, schema)
+        validate_schema(value, schema, root)
     except ValidationError:
         return False
     return True
 
 
-def validate_schema(value: Any, schema: dict[str, Any]) -> None:
+def validate_schema(
+    value: Any, schema: dict[str, Any], root: dict[str, Any] | None = None
+) -> None:
     """Draft 2020-12 keywords emitted here, with codec-strict integer types."""
+    if root is None:
+        root = schema
+    if "$ref" in schema:
+        reference = schema["$ref"]
+        prefix = "#/$defs/"
+        require(reference.startswith(prefix), "unsupported schema reference")
+        name = reference[len(prefix) :]
+        require(name in root.get("$defs", {}), f"missing schema definition: {name}")
+        validate_schema(value, root["$defs"][name], root)
+        return
     if "type" in schema:
         types = {
             "null": value is None,
@@ -156,12 +174,12 @@ def validate_schema(value: Any, schema: dict[str, Any]) -> None:
         require(value in schema["enum"], "enum mismatch")
     for key in ("oneOf", "anyOf"):
         if key in schema:
-            count = sum(matches(value, branch) for branch in schema[key])
+            count = sum(matches(value, branch, root) for branch in schema[key])
             require(count == 1 if key == "oneOf" else count > 0, f"{key} mismatch")
     for child in schema.get("allOf", []):
-        validate_schema(value, child)
-    if "if" in schema and matches(value, schema["if"]) and "then" in schema:
-        validate_schema(value, schema["then"])
+        validate_schema(value, child, root)
+    if "if" in schema and matches(value, schema["if"], root) and "then" in schema:
+        validate_schema(value, schema["then"], root)
     if isinstance(value, dict):
         require(
             set(schema.get("required", [])) <= set(value), "missing required fields"
@@ -171,16 +189,16 @@ def validate_schema(value: Any, schema: dict[str, Any]) -> None:
             require(set(value) <= set(properties), "unknown fields")
         if isinstance(schema.get("additionalProperties"), dict):
             for key in value.keys() - properties.keys():
-                validate_schema(value[key], schema["additionalProperties"])
+                validate_schema(value[key], schema["additionalProperties"], root)
         for key in value.keys() & properties.keys():
-            validate_schema(value[key], properties[key])
+            validate_schema(value[key], properties[key], root)
     if isinstance(value, list):
         if schema.get("uniqueItems") is True:
             encoded = [json_key(item) for item in value]
             require(len(encoded) == len(set(encoded)), "duplicate array item")
         if "items" in schema:
             for item in value:
-                validate_schema(item, schema["items"])
+                validate_schema(item, schema["items"], root)
     if isinstance(value, str):
         require(len(value) >= schema.get("minLength", 0), "short string")
         require(len(value) <= schema.get("maxLength", math.inf), "long string")
@@ -209,6 +227,18 @@ def validate_content_ref(value: dict[str, Any], label: str) -> None:
         [source_order[item] for item in source] == sorted(source_order[item] for item in source),
         f"{label}.labels.source is not in source-kind order",
     )
+
+
+def validate_content_refs(value: Any, label: str = "wire") -> None:
+    for node in walk(value):
+        if isinstance(node, dict) and set(node) == {
+            "content_id",
+            "mac",
+            "size",
+            "key_id",
+            "labels",
+        }:
+            validate_content_ref(node, label)
 
 
 def validate_proof_signature(value: str, label: str) -> None:
@@ -284,7 +314,11 @@ class Codec:
             require(schema.get("$schema") == DRAFT, "schema draft mismatch")
             check_schema_keywords(schema)
             require(
-                {s["properties"]["kind"]["const"] for s in schema["oneOf"]} == kinds,
+                {
+                    branch["allOf"][1]["properties"]["kind"]["const"]
+                    for branch in schema["oneOf"]
+                }
+                == kinds,
                 "schema kind coverage",
             )
         inputs = {json_key(v): v for v in digest_inputs(documents)}
@@ -310,7 +344,10 @@ class Codec:
 
     def validate(self, wire: Any, *, inbox: bool = False) -> None:
         json_value(wire)
-        validate_schema(wire, self.inbox_schema if inbox else self.record_schema)
+        schema = self.inbox_schema if inbox else self.record_schema
+        validate_schema(wire, schema, schema)
+        require("chain_digest" not in wire, "chain_digest belongs to storage envelope")
+        validate_content_refs(wire)
         if inbox:
             validate_content_ref(wire["actor"]["attributes"], "inbox.actor.attributes")
             proof = wire["admission_proof"]
@@ -350,6 +387,11 @@ class Codec:
             environment = p["environment"]
             if environment is not None:
                 validate_content_ref(environment["descriptor"], "turn_started.environment.descriptor")
+                if environment["operational_policy"] is not None:
+                    validate_content_ref(
+                        environment["operational_policy"],
+                        "turn_started.environment.operational_policy",
+                    )
                 require_sorted_unique(
                     environment["environment_capabilities"],
                     "turn_started.environment.environment_capabilities",
@@ -363,12 +405,6 @@ class Codec:
         }.get(kind)
         if pair:
             require(p[pair[0]] == self.digest(p[pair[1]]), "embedded digest mismatch")
-        child = p.get("attributes", {}).get("child_admission")
-        if child:
-            require(
-                child["definition_digest"] == self.digest(child["definition"]),
-                "child definition digest",
-            )
         if kind == "input_applied":
             self.validate(p["input"], inbox=True)
             proof = p["input_proof"]
@@ -397,6 +433,330 @@ def decode(vector: dict[str, Any]) -> bytes:
     return raw
 
 
+def jcs_digest(root: Path, value: Any) -> str:
+    result = subprocess.run(
+        ["node", str(root / "scripts/verify_jcs.mjs"), "--canonicalize"],
+        input=json.dumps([value], ensure_ascii=True, allow_nan=False),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    require(result.returncode == 0, f"canonical encoding failed: {result.stderr[:500]}")
+    raw = base64.b64decode(json.loads(result.stdout)[0], validate=True)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def frame_chain(previous: str, seq: int, record_digest: str) -> str:
+    return hashlib.sha256(
+        bytes.fromhex(previous) + struct.pack(">Q", seq) + bytes.fromhex(record_digest)
+    ).hexdigest()
+
+
+def initial_chain(tenant_id: str, session_id: str) -> str:
+    def length_prefixed(value: str) -> bytes:
+        raw = value.encode("utf-8")
+        return struct.pack(">I", len(raw)) + raw
+
+    return hashlib.sha256(
+        b"vv-agent/S1" + length_prefixed(tenant_id) + length_prefixed(session_id)
+    ).hexdigest()
+
+
+def validate_storage_fixtures(
+    root: Path, codec: Codec, documents: dict[str, Any]
+) -> tuple[int, int]:
+    fixtures = root / "fixtures"
+    storage = documents["session_storage_envelope.json"]
+    storage_schema = documents["session_storage_envelope.schema.json"]
+    validate_schema(storage, storage_schema, storage_schema)
+    require(storage["status"] == "contract-allocation-only", "storage provenance")
+
+    created_tenants: dict[str, str] = {}
+    for node in walk([documents, []]):
+        if (
+            isinstance(node, dict)
+            and node.get("kind") == "session_created"
+            and isinstance(node.get("payload"), dict)
+            and isinstance(node["payload"].get("principal"), dict)
+        ):
+            created_tenants[node["session_id"]] = node["payload"]["principal"][
+                "tenant_id"
+            ]
+
+    accepted_count = rejected_count = 0
+    for case in storage["cases"]:
+        logical = case["logical_record"]
+        digest = jcs_digest(root, logical)
+        require(digest == case["logical_record_digest"], "storage logical digest")
+        codec.validate(logical)
+        envelope = case["envelope"]
+        expected_tenant = created_tenants.get(logical["session_id"])
+        valid = (
+            matches(envelope, storage_schema["$defs"]["Envelope"], storage_schema)
+            and envelope.get("record_digest") == digest
+            and envelope.get("session_id") == logical["session_id"]
+            and envelope.get("tenant_id") == expected_tenant
+            and envelope.get("chain_digest")
+            == frame_chain(
+                case["previous_chain_digest"],
+                envelope.get("seq", 0),
+                case["logical_record_digest"],
+            )
+        )
+        if envelope.get("seq") == 1:
+            valid = valid and case["previous_chain_digest"] == initial_chain(
+                expected_tenant, logical["session_id"]
+            )
+        require(valid == case["accepted"], f"storage case outcome: {case['name']}")
+        if case["accepted"]:
+            accepted_count += 1
+        else:
+            rejected_count += 1
+    return accepted_count, rejected_count
+
+
+def validate_lifecycle_fixtures(
+    root: Path,
+    codec: Codec,
+    documents: dict[str, Any],
+    catalog: dict[str, Any],
+) -> tuple[int, int, int]:
+    fixtures = root / "fixtures"
+    lifecycle = documents["session_storage_lifecycle.json"]
+    schema = documents["session_storage_lifecycle.schema.json"]
+    storage = documents["session_storage_envelope.json"]
+    validate_schema(lifecycle, schema, schema)
+    require(lifecycle["status"] == "contract-allocation-only", "lifecycle provenance")
+
+    accepted_storage = [
+        case
+        for case in storage["cases"]
+        if case["accepted"]
+        and case["logical_record"]["session_id"]
+        == lifecycle["key_capability"]["session_id"]
+    ]
+    storage_by_seq = {case["envelope"]["seq"]: case for case in accepted_storage}
+    head_case = max(accepted_storage, key=lambda case: case["envelope"]["seq"])
+    head = head_case["envelope"]
+    key_id = lifecycle["key_capability"]["key_id"]
+    require(
+        key_id == head_case["logical_record"]["payload"]["workspace"]["key_id"],
+        "key capability binding",
+    )
+
+    destroy_accepted = destroy_rejected = 0
+    for case in lifecycle["destroy_cases"]:
+        request = case["request"]
+        valid = (
+            request["domain"] == "vv-agent/S1/key-destroy"
+            and request["tenant_id"] == lifecycle["key_capability"]["tenant_id"]
+            and request["key_id"] == key_id
+            and case["status"] in {"destroyed", "already_destroyed"}
+            and case["evidence_id"] is not None
+        )
+        require(valid == case["accepted"], f"destroy case outcome: {case['name']}")
+        if case["accepted"]:
+            destroy_accepted += 1
+        else:
+            destroy_rejected += 1
+
+    def tombstone_valid(tombstone: dict[str, Any]) -> bool:
+        return (
+            tombstone["tenant_id"] == head["tenant_id"]
+            and tombstone["session_id"] == head["session_id"]
+            and tombstone["final_seq"] == head["seq"]
+            and tombstone["chain_digest"] == head["chain_digest"]
+            and tombstone["key_id"] == key_id
+            and tombstone["state"] == "complete"
+            and tombstone["scope_root_session_id"] == head["session_id"]
+        )
+
+    require(tombstone_valid(lifecycle["forget_tombstone"]), "forget tombstone")
+    forget_accepted = forget_rejected = 0
+    for case in lifecycle["forget_verification_cases"]:
+        require(
+            tombstone_valid(case["tombstone"]) == case["accepted"],
+            f"forget case outcome: {case['name']}",
+        )
+        if case["accepted"]:
+            forget_accepted += 1
+        else:
+            forget_rejected += 1
+
+    catalog_keys = {entry["key_id"]: entry for entry in catalog["keys"]}
+    catalog_contents = catalog["contents"]
+
+    def export_valid(case: dict[str, Any]) -> bool:
+        header = case["header"]
+        if not matches(header, schema["$defs"]["ExportHeader"], schema):
+            return False
+        if (
+            header["tenant_id"] != head["tenant_id"]
+            or header["session_id"] != head["session_id"]
+            or header["head_seq"] != head["seq"]
+            or header["chain_digest"] != head["chain_digest"]
+        ):
+            return False
+        lines = case["lines"]
+        if any(
+            not matches(line, schema["$defs"]["ExportLine"], schema) for line in lines
+        ):
+            return False
+        if header["content_mode"] == "skeleton" and any(
+            line["line"] == "content" for line in lines
+        ):
+            return False
+        records = [line for line in lines if line["line"] == "record"]
+        inboxes = [line for line in lines if line["line"] == "inbox"]
+        checkpoints = [line for line in lines if line["line"] == "checkpoint"]
+        manifests = [line for line in lines if line["line"] == "manifest"]
+        if len(manifests) != 1 or manifests[0]["head_seq"] != header["head_seq"]:
+            return False
+        if manifests[0]["record_lines"] != len(records):
+            return False
+        if manifests[0]["inbox_lines"] != len(inboxes):
+            return False
+        if manifests[0]["checkpoint_lines"] != len(checkpoints):
+            return False
+        for line in records:
+            record = line["record"]
+            envelope = line["storage_envelope"]
+            codec.validate(record)
+            expected = storage_by_seq.get(envelope["seq"])
+            if expected is None:
+                return False
+            if (
+                envelope["record_digest"] != jcs_digest(root, record)
+                or envelope["session_id"] != record["session_id"]
+                or envelope["chain_digest"] != expected["envelope"]["chain_digest"]
+                or envelope["record_digest"] != expected["envelope"]["record_digest"]
+            ):
+                return False
+        for line in inboxes:
+            codec.validate(line["input"], inbox=True)
+        for line in checkpoints:
+            expected = storage_by_seq.get(line["seq"])
+            if expected is None or line["chain_digest"] != expected["envelope"]["chain_digest"]:
+                return False
+        for line in lines:
+            if line["line"] != "content":
+                continue
+            content = catalog_contents.get(line["content_id"])
+            if (
+                content is None
+                or content["key_id"] != line["key_id"]
+                or content["value"] != line["decoded_value"]
+                or line["key_id"] not in catalog_keys
+            ):
+                return False
+        return True
+
+    export_accepted = export_rejected = 0
+    for case in lifecycle["export_cases"]:
+        require(export_valid(case) == case["accepted"], f"export case outcome: {case['name']}")
+        if case["accepted"]:
+            export_accepted += 1
+        else:
+            export_rejected += 1
+    return destroy_accepted + destroy_rejected, forget_accepted + forget_rejected, export_accepted + export_rejected
+
+
+def validate_trusted_storage(
+    root: Path, codec: Codec, fixture: dict[str, Any]
+) -> int:
+    require(fixture["status"] == "contract-allocation-only", "trusted fixture status")
+    require(fixture["provenance"]["producer_capture"] is False, "synthetic fixture provenance")
+    accepted = {case["name"]: case for case in fixture["accepted_cases"]}
+    for case in accepted.values():
+        raw = decode(case)
+        require(strict_json_loads(raw.decode("utf-8")) == case["wire"], "trusted wire bytes")
+        codec.validate(case["wire"], inbox="record_id" not in case["wire"])
+    for case in fixture["rejected_cases"]:
+        wire = case_base = accepted[case["base"]]["wire"]
+        wire = json.loads(json.dumps(case_base))
+        for operation in case["patch"]:
+            target: Any = wire
+            for part in operation["path"][:-1]:
+                target = target[part]
+            if operation.get("delete"):
+                del target[operation["path"][-1]]
+            else:
+                target[operation["path"][-1]] = operation["set"]
+        try:
+            codec.validate(wire, inbox="record_id" not in wire)
+        except ValidationError:
+            continue
+        raise ValidationError(f"trusted negative accepted: {case['name']}")
+    return len(fixture["rejected_cases"])
+
+
+def validate_content_catalog(
+    root: Path,
+    documents: dict[str, Any],
+    streams: dict[str, Any],
+    catalog: dict[str, Any],
+) -> None:
+    require(catalog["status"] == "synthetic-contract-fixture", "content catalog provenance")
+    keys = {entry["key_id"]: entry for entry in catalog["keys"]}
+    items = sorted(catalog["contents"].items())
+    canonical = subprocess.run(
+        ["node", str(root / "scripts/verify_jcs.mjs"), "--canonicalize"],
+        input=json.dumps([entry["value"] for _, entry in items], ensure_ascii=True, allow_nan=False),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    require(canonical.returncode == 0, f"content canonicalization: {canonical.stderr[:500]}")
+    encoded_values = json.loads(canonical.stdout)
+    require(len(encoded_values) == len(items), "content canonicalization count")
+    refs_by_id: dict[str, list[dict[str, Any]]] = {}
+    current_documents = {
+        name: document
+        for name, document in documents.items()
+        if document.get("historical_contract_version") != "39.0.0"
+        and name != "session_content_catalog.json"
+    }
+    for node in walk([current_documents, streams]):
+        if (
+            isinstance(node, dict)
+            and set(node) == {"content_id", "mac", "size", "key_id", "labels"}
+            and isinstance(node["content_id"], str)
+        ):
+            refs_by_id.setdefault(node["content_id"], []).append(node)
+    require(
+        set(refs_by_id) <= set(catalog["contents"]),
+        f"unresolved content references: {sorted(set(refs_by_id) - set(catalog['contents']))[:5]}",
+    )
+    for (content_id, entry), encoded in zip(items, encoded_values):
+        require(entry["key_id"] in keys, f"missing content key: {content_id}")
+        plaintext = base64.b64decode(encoded, validate=True)
+        expected = hmac.new(
+            base64.b64decode(keys[entry["key_id"]]["key_base64"], validate=True),
+            plaintext,
+            hashlib.sha256,
+        ).hexdigest()
+        for reference in refs_by_id.get(content_id, []):
+            require(reference["key_id"] == entry["key_id"], f"content key: {content_id}")
+            require(reference["mac"] == expected, f"content MAC: {content_id}")
+            require(reference["size"] == len(plaintext), f"content size: {content_id}")
+
+
+def hydrate_content_refs(value: Any, catalog: dict[str, Any]) -> Any:
+    contents = catalog["contents"]
+    if (
+        isinstance(value, dict)
+        and set(value) == {"content_id", "mac", "size", "key_id", "labels"}
+        and value.get("content_id") in contents
+        and contents[value["content_id"]]["key_id"] == value.get("key_id")
+    ):
+        return hydrate_content_refs(contents[value["content_id"]]["value"], catalog)
+    if isinstance(value, dict):
+        return {key: hydrate_content_refs(item, catalog) for key, item in value.items()}
+    if isinstance(value, list):
+        return [hydrate_content_refs(item, catalog) for item in value]
+    return value
+
+
 def validate_session_fixtures(root: Path) -> dict[str, int]:
     fixtures = root / "fixtures"
     documents = {p.name: load_json(p) for p in fixtures.glob("*.json")}
@@ -412,6 +772,7 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
         except (ValueError, UnicodeError):
             pass
     codec = Codec(root, [documents, streams, decoded])
+    catalog = documents["session_content_catalog.json"]
     counts = Counter()
     historical_documents = {
         name
@@ -427,6 +788,12 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
         for name, document in documents.items()
         if name not in historical_documents
     }
+    validate_content_catalog(root, documents, streams, catalog)
+    storage_cases = validate_storage_fixtures(root, codec, documents)
+    lifecycle_cases = validate_lifecycle_fixtures(root, codec, documents, catalog)
+    trusted_negatives = validate_trusted_storage(
+        root, codec, documents["trusted_storage_s1.json"]
+    )
     for node in walk([current_documents, streams]):
         if not isinstance(node, dict) or not isinstance(node.get("kind"), str):
             continue
@@ -604,4 +971,11 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
         for node in walk(strict_json_loads(source)):
             if isinstance(node, dict) and "enum" in node and "archived" in node["enum"]:
                 require(node["enum"] == statuses, "inconsistent thread status enum")
-    return {**counts, "codec_vectors": len(vectors), "invalid_vectors": len(invalid)}
+    return {
+        **counts,
+        "codec_vectors": len(vectors),
+        "invalid_vectors": len(invalid),
+        "storage_envelope_cases": sum(storage_cases),
+        "storage_lifecycle_cases": sum(lifecycle_cases),
+        "trusted_negative_cases": trusted_negatives,
+    }

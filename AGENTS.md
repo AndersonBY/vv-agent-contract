@@ -38,6 +38,11 @@ mandatory routing map; durable detail belongs in `docs/`.
   each public API, prompt, tool, runtime record, event, session,
   and wire protocol. Delete replaced readers, aliases, shims, migrations,
   fixtures, and documentation in the same change; Git is the history.
+- Within one storage major, an optional field, enum value, or record kind may be
+  added only under an assigned `feature_level` with an explicit absent/default
+  behavior. Readers must read unchanged old data; workers must not claim a higher
+  level than they advertise; unknown fields still reject; and changing an
+  existing field's meaning still requires a major release.
 - Backward compatibility is not a contract goal. Prefer a breaking replacement
   when it produces a clearer current design; update active consumers together,
   while consumers that require old behavior must pin an old release.

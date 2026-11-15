@@ -3,10 +3,12 @@
 ## 40.0.0 — unreleased — trusted storage S1 schema allocation
 
 This major replaces the current session storage discriminators with logical and SQL
-`"S1"` plus `feature_level=1`. Record and inbox envelopes now require the S1
-identity, `chain_digest` on records, tenant-scoped Principal/actor, admission/input
-proof slots, frozen session requirements, policy/environment binding slots, and
-closed ContentRef labels. Unknown fields and levels reject.
+`"S1"` plus `feature_level=1`. Record and inbox envelopes now require tenant-scoped
+Principal/actor, admission/input proofs, frozen session requirements,
+policy/environment/usage/tokenizer slots, and closed ContentRef labels. Logical C
+fields use reference form. Storage `record_digest`, `chain_digest`, sequence,
+writer epoch and creation time live in a separate envelope excluded from record
+identity. Unknown fields and levels reject.
 
 This is a contract-first allocation: no Python S1 producer or storage implementation
 is claimed, and the 39.0.0 producer captures remain historical evidence rather than

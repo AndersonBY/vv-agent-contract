@@ -13,7 +13,8 @@ scope. There is one current wire, with no historical decoder.
 | `S`, `T` | JSON string; `T` has `minLength=1` (not a trim/nonblank requirement) |
 | `N`, `P` | Integer ≥0 / ≥1, within I-JSON safe integer range; boolean and `1.0` are rejected as integer fields |
 | `B`, `H` | Boolean; exactly 64 lowercase hexadecimal characters (full-match `^[0-9a-f]{64}$`; no trailing newline) |
-| `J`, `V` | Explicit opaque JSON object / any I-JSON value, including null |
+| `J`, `V` | Content-only opaque JSON object / any I-JSON value, including null |
+| `C` | Closed `ContentRef` pointing to encrypted typed content |
 | `X?` | Optional member, omitted when absent; null is allowed only if its type permits it |
 | `X\|null`, `[X]` | Required nullable value; array of X, empty permitted |
 | `{...}` | Closed object; every listed member required unless marked `?` |
@@ -25,13 +26,14 @@ and array elements are not implicitly normalized, trimmed, sorted or deduplicate
 
 | Envelope | Required fields (no other fields) |
 | --- | --- |
-| Record | `schema_version:string const "S1"`, `feature_level:integer const 1`, `chain_digest:H`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload:J` selected by kind |
+| Record | `schema_version:string const "S1"`, `feature_level:integer const 1`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload` closed by kind |
 | InboxItem | `schema_version:string const "S1"`, `feature_level:integer const 1`, `actor:Principal`, `admission_proof:proof\|null`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
 
-The logical record has no top-level sequence, receiving time, commit identity or
-writer epoch. `chain_digest` is required in the current logical envelope; storage
-supplies ordered positions and commit metadata separately. `op_started.payload.epoch`
-is retained dispatch evidence, not the omitted storage-envelope writer epoch.
+The logical record has no top-level sequence, receiving time, record digest, chain
+digest, commit identity or writer epoch. Storage supplies ordered positions,
+record/integrity digests and the chain envelope separately; `chain_digest` is not
+part of logical record bytes or record identity. `op_started.payload.epoch` is
+retained dispatch evidence, not the omitted storage-envelope writer epoch.
 Nullable fields MUST be present.
 `operation_id` and `attempt` MUST both be non-null exactly for `op_*` records and
 null otherwise. `session_created.turn_id` MUST be null. All other record kinds
@@ -41,37 +43,37 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 
 | Kind | Closed payload fields |
 | --- | --- |
-| `session_created` | `principal:Principal`, `workspace:T`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:J` |
-| `turn_started` | `input_ids:[T]`, `definition:J`, `definition_digest:H`, `handler_version:T`, `budget:J`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `environment:EnvironmentBinding\|null` |
-| `input_applied` | `input:InboxItem`, `input_digest:H`, `input_proof:InputProof\|null`, `disposition:applied/rejected/noop/queued`, `reason:T\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, `model_binding?:ModelBinding` |
-| `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:J`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:J\|null`, `idempotency_key:T\|null`, `budget_admission:J`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]` |
-| `op_prepared` | `request:J`, `request_digest:H`, `op_kind:tool/interaction`, `tool:J`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:V`, `shared_state:J` |
-| `turn_parked` | `interaction_id:T`, `question:S`, `source_operation_id:T`, `source_attempt:P` |
+| `session_created` | `principal:Principal`, `workspace:C`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:C` |
+| `turn_started` | `input_ids:[T]`, `definition:C`, `definition_digest:H`, `handler_version:T`, `budget:C`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `tokenizer_binding:TokenizerBinding\|null`, `environment:EnvironmentBinding\|null` |
+| `input_applied` | `input:InboxItem`, `input_digest:H`, `input_proof:InputProof\|null`, `disposition:applied/rejected/noop/queued`, `reason:C\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, optional `model_binding:C` |
+| `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:C`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:C\|null`, `idempotency_key:T\|null`, `budget_admission:C`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]`, `policy_decision:PolicyDecision\|null` |
+| `op_prepared` | `request:C`, `request_digest:H`, `op_kind:tool/interaction`, `tool:C`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:C\|null`, `shared_state:C`, `policy_decision:PolicyDecision\|null` |
+| `turn_parked` | `interaction_id:T`, `question:C`, `source_operation_id:T`, `source_attempt:P` |
 | `op_started` | `dispatch_id:T`, `authorization_version:T`, `epoch:P`, `mode:sync/provider/managed`, `endpoint_id?:T` |
-| `op_parked` | `phase:before_dispatch/after_dispatch`, `handle:Handle`, `poll_at_ms:N\|null`, `deadline_ms:N\|null`, `interaction_result?:J`, `delegation?:Delegation`, `yield_on_steer?:true`, `yieldable_children?:[T]` |
-| `op_completed` | `result:V`, `result_digest:H`, `usage:J`, `shared_state:J\|null`, `evidence:[T]`, `execution_started:B`, `context:normal/correction/audit`, `request_digest:H`, `provider_binding:T\|null`, `yielded_by?:T` |
-| `op_unknown` | `reason:T`, `dispatch_evidence:[T]`, `observation:J`, `retry:retry/stop/manual`, `retry_at_ms:N\|null`, `duplicate_cost_risk:B`, `measurement_missing:B` |
-| `context_compacted` | `source_digest:H`, `prefix_ids:[T]`, `tail_ids:[T]`, `mode:micro/summary/emergency`, `summary_operation_id:T\|null`, `replacement:[V]`, `evidence_manifest:J`, `micro_usage?:{archived_count:N,reclaimed_tokens:N,artifact_failure_count:N}` |
-| `boundary_recorded` | `boundary_id:T`, `stage:boundary enum`, `source_operation_id:T\|null`, `source_digest:H\|null`, `data:J` selected by stage |
-| `usage_observed` | `meter_id:T`, `observation:P`, `mode:cumulative/correction`, `usage:J`, `source:T` |
-| `turn_ended` | `status:completed/failed/cancelled/aborted`, `reason:T\|null`, `result:V`, `adopted_results:[ResultId]`, `budget:J`, `unconfirmed_operations:[T]` |
+| `op_parked` | `phase:before_dispatch/after_dispatch`, `handle:Handle`, `poll_at_ms:N\|null`, `deadline_ms:N\|null`, optional `interaction_result:C`, optional `delegation:Delegation`, `yield_on_steer?:true`, `yieldable_children?:[T]` |
+| `op_completed` | `result:C`, `result_digest:H`, `usage:C`, optional `usage_counts:UsageCounts`, `shared_state:C\|null`, `evidence:C`, `execution_started:B`, `context:normal/correction/audit`, `request_digest:H`, `provider_binding:T\|null`, optional `policy_decision:PolicyDecision`, `yielded_by?:T` |
+| `op_unknown` | `reason:C`, `dispatch_evidence:C`, `observation:C`, `retry:retry/stop/manual`, `retry_at_ms:N\|null`, `duplicate_cost_risk:B`, `measurement_missing:B` |
+| `context_compacted` | `source_digest:H`, `prefix_ids:[T]`, `tail_ids:[T]`, `mode:micro/summary/emergency`, `summary_operation_id:T\|null`, `replacement:[C]`, `evidence_manifest:C`, `micro_usage?:{archived_count:N,reclaimed_tokens:N,artifact_failure_count:N}` |
+| `boundary_recorded` | `boundary_id:T`, `stage:boundary enum`, `source_operation_id:T\|null`, `source_digest:H\|null`, `data` closed by stage with C leaves |
+| `usage_observed` | `meter_id:T`, `observation:P`, `mode:cumulative/correction`, `usage:C`, `source:C` |
+| `turn_ended` | `status:completed/failed/cancelled/aborted`, `reason:C\|null`, `result:C\|null`, `adopted_results:[ResultId]`, `budget:C`, `unconfirmed_operations:[T]` |
 
 `ResultId = {operation_id:T, attempt:P}`. `op_planned.purpose` MUST be non-null
 exactly when `op_kind=model`. Payload validation alone does not impose a
-model-request, ToolExecutionResult or budget schema on `J`/`V`; producer/consumer
-validation and fold rules supply their existing typed boundaries.
+model-request, ToolExecutionResult or budget schema on `ContentRef`; hydration
+validates the original typed content boundary before execution.
 
 ## Inbox payloads
 
 | Kind | Closed payload fields |
 | --- | --- |
-| `user` | `content:V` |
-| `steer` | `content:V` |
-| `follow_up` | `content:V` |
-| `model_selection` | `selection:ModelSelection\|null` |
-| `provider_result` | `operation_id:T`, `attempt:P`, `request_digest:H`, `provider_binding:T\|null`, `result:V`, `usage:J`, `evidence:[T]` |
-| `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:[T]`, `reason?:S`, `metadata?:J` |
-| `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:V`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
+| `user` | `content:C` |
+| `steer` | `content:C` |
+| `follow_up` | `content:C` |
+| `model_selection` | `selection:C\|null` |
+| `provider_result` | `operation_id:T`, `attempt:P`, `request_digest:H`, `provider_binding:T\|null`, `result:C`, `usage:C`, `evidence:C` |
+| `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:C`, optional `reason:C`, `metadata:C`, `policy_digest:H`, `rule_id:T`, `expires_ms:N\|null` |
+| `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:C\|null`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
 | `control` | `action:close/archive/suspend/resume/cancel/abort` |
 | `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle`, optional `yield_on_steer:true` |
 
@@ -79,9 +81,10 @@ User content remains opaque at the generic boundary. Kernel reply producers curr
 `{interaction_id,text}` (optionally operation_id) for ask_user and `{interaction_id,text}` for
 turn-level waits; the target turn/generation is supplied in the envelope.
 
-`provider_result.usage` MUST be a required JSON object, just like
-`op_completed.usage`; `{}` means no observed usage. Missing, null, non-object
-usage and unknown payload members MUST reject. Authentication MUST cover usage
+`provider_result.usage` MUST be a required `ContentRef`, just like
+`op_completed.usage`; after hydration it MUST be a JSON object and `{}` means no
+observed usage. Missing, null or plaintext usage, non-object hydrated usage and
+unknown payload members MUST reject. Authentication MUST cover the encrypted usage
 as well as result and the attempt identity. An authenticated result MUST retain
 usage unchanged in `op_completed.usage`, including normal, correction and audit
 completions. Synchronous model returns and provider submit/query Definitive
@@ -102,20 +105,21 @@ All other result fields and usage remain part of the canonical comparison.
 
 | Type / location | Fields |
 | --- | --- |
-| Provider Handle | `kind:const provider`, `provider:T`, `job_id:T`, `operation_id:T`, `attempt:P`, `request_digest:H`, `evidence:T`, `query_ref:T\|null`, `cancel_ref:T\|null` |
-| Approval Handle | `kind:const approval`, `request_id:T`, `request_digest:H`, `scope:[T]` |
-| User Handle | `kind:const user`, `interaction_id:T`, `question:T` |
+| Provider Handle | `kind:const provider`, `provider:T`, `job_id:C`, `operation_id:T`, `attempt:P`, `request_digest:H`, `evidence:C`, `query_ref:C\|null`, `cancel_ref:C\|null` |
+| Approval Handle | `kind:const approval`, `request_id:T`, `request_digest:H`, `scope:C` |
+| User Handle | `kind:const user`, `interaction_id:T`, `question:C` |
 | Child Handle | `kind:const child`, `session_id:T`, `turn_id:T`, `generation:N`, `background:B`, `delivery_target:DeliveryTarget`, `siblings?:[ChildIdentity]` |
 | DeliveryTarget | `session_id:T`, `turn_id:T`, `generation:N`, `operation_id:T`, `attempt:P` |
 | ChildIdentity | `session_id:T`, `turn_id:T`, `generation:N` |
-| Delegation | `mode:configured/agent_as_tool/background_task/handoff`, `agent_name:T`, `handoff_count:N`, `max_handoffs:N`, `metadata:J` |
+| Delegation | `mode:configured/agent_as_tool/background_task/handoff`, `agent_name:C`, `handoff_count:N`, `max_handoffs:N`, `metadata:C` |
 | `attributes.seed` | Optional `unseen_input_protection:B`, `response_rejection:B`; optional paired `messages:[Message JSON]`, `shared_state:J`; at least one declaration or the pair is required |
 | `attributes.app_server` | `agent_key:S`, `cwd:S\|null`, `metadata:J` |
 | `attributes.child_admission` | `mode:configured/agent_as_tool/background_task/handoff`, `selector:T`, `definition:J`, `definition_digest:H`, `budget:J`, `handler_version:T`, `sub_config:SubConfig\|null`, `exclude_files_pattern:T\|null`, `handoff_count:N`, `max_handoffs:N`, `handoff_metadata:J` |
 | SubConfig | `model:T`, `description:S`, `backend:S\|null`, `system_prompt:S\|null`, `max_cycles:N`, `session_memory_enabled:B`, `exclude_tools:[S]`, `metadata:J`, `denied_side_effects:[T]`, `denied_capability_tags:[T]`, `deny_terminal_tools:B`, `denied_cost_dimensions:[T]` |
 
-Handle is exactly one of its four closed variants. `attributes` remains an explicit
-extension object; `app_server`, `child_admission` and `seed` have additional closed codec validation. The producer retains `attributes.child_handle`;
+Handle is exactly one of its four closed variants. Logical `attributes` is a
+`ContentRef`; its hydrated content remains an explicit extension object, while
+`app_server`, `child_admission` and `seed` retain closed typed validation. The producer retains `attributes.child_handle`;
 the child reducer/authenticator validates that against admission. It MUST NOT be
 described as a third codec-validated attributes schema without corresponding work.
 The codec permits duplicate `siblings`; the fold MUST reject duplicate member
@@ -125,20 +129,20 @@ identities and mismatched creation/delivery targets.
 
 | Stage | Closed `data` fields | Observable boundary |
 | --- | --- | --- |
-| `before_memory` | `messages:[J]`, `shared_state:J` | Retain hook replacement and source digest before compaction |
-| `after_cycle` | `action:continue/steer/stop_non_success`, `steering_messages:[T]`, `disallow_tools:[T]`, `stop:{code:T,message:T}\|null`, `shared_state:J`, `error:T\|null` | Retain composed decision before another dispatch |
-| `memory_started` | `event:J` | Retain MemoryProvider/lifecycle start observation |
-| `memory_completed` | `event:J` | Retain completion and archive statistics |
+| `before_memory` | `messages:[C]`, `shared_state:C` | Retain hook replacement and source digest before compaction |
+| `after_cycle` | `action:continue/steer/stop_non_success`, `steering_messages:[C]`, `disallow_tools:[T]`, `stop:{code:T,message:C}\|null`, `shared_state:C`, `error:C\|null` | Retain composed decision before another dispatch |
+| `memory_started` | `event:C` | Retain MemoryProvider/lifecycle start observation |
+| `memory_completed` | `event:C` | Retain completion and archive statistics |
 | `session_memory_saved` | `state:MemoryState` | Structured memory precedes disposable file projection |
-| `output_checked` | `status:completed/failed/repair`, `reason:T\|null`, `value:V`, `partial_output?:V` | Retain candidate, repair decision and final validation |
-| `budget` | `usage:J`, `exhaustion:J\|null`, `tool_names:[T]` | Retain admission/accounting and exhaustion decision |
+| `output_checked` | `status:completed/failed/repair`, `reason:C\|null`, `value:C`, `partial_output?:C` | Retain candidate, repair decision and final validation |
+| `budget` | `usage:C`, `exhaustion:C\|null`, `tool_names:[T]` | Retain admission/accounting and exhaustion decision |
 
 `MemoryState = {entries:[MemoryEntry], last_extracted_message_index:integer≥-1,
 tokens_at_last_extraction:N, initialized:B}`.
 `MemoryEntry = {category:user_intent/decision/file_change/error_fix/key_fact,
-content:T, source_cycle:N, importance:integer in 1..10}`. Both are closed.
-The generic codec does not replace the strict Message, event or budget readers
-inside opaque boundary values.
+content:C, source_cycle:N, importance:integer in 1..10}`. Both are closed. The
+generic codec does not replace the strict Message, event or budget readers after
+hydrating their typed content.
 
 ## Identities, bytes and rejection
 
@@ -233,9 +237,9 @@ introduced. See [39.0.0 release notes](release-39.0.0.md).
 ## S1 storage allocation
 
 `Principal` is the closed
-`{tenant_id:T,subject_id:T,subject_kind:T,attributes:ContentRef}` object. Creation
-principal identity is immutable; an inbox actor's tenant MUST equal the owning
-session tenant. A single-tenant host uses `tenant_id="default"` explicitly.
+`{tenant_id:T,subject_id:T,subject_kind:user|service|agent,attributes:C}` object.
+Creation principal identity is immutable; an inbox actor's tenant MUST equal the
+owning session tenant. A single-tenant host uses `tenant_id="default"` explicitly.
 
 `ContentRef` is closed `{content_id:T,mac:H,size:N,key_id:T,labels:ContentLabels}`.
 `ContentLabels` is closed `{source:[system|user|internal|untrusted],classification:public|internal|confidential|restricted}`. Source order is the listed enum order, duplicates reject, and the inactive P2 default is `source=[]`,
@@ -253,15 +257,45 @@ cannot downgrade a missing proof to unsigned mode.
 `SessionRequirements` is closed `{level:P,handler_version:T|null,capabilities:[T]}`.
 The initial level is 1. Host bootstrap may use a null handler; capability IDs are
 opaque, sorted and duplicate-free with no wildcard or numeric ordering.
+`turn_started.tokenizer_binding` is null or closed
+`{model_identity:T,counting_method:provider_reported|tokenizer,implementation_id:T,
+asset_identity:T,normalization_id:T}`. A replayable counting capability freezes this
+binding and matching worker capability IDs before dispatch.
 
 `turn_started.policy_digest` is `H|null`. `environment` is null or the closed
 `{descriptor:ContentRef,environment_capabilities:[T],capabilities_digest:H|null,
-network_policy_ref_digest:H|null,isolation_policy_ref_digest:H|null,operational_policy:OperationalPolicy|null}`
+network_policy_ref_digest:H|null,isolation_policy_ref_digest:H|null,operational_policy:C|null}`
 binding. Environment capabilities are sorted and duplicate-free and remain a
-separate namespace from worker requirements. `operational_policy`, when non-null,
-is the closed `{network_policy_digest:H,isolation_policy_digest:H}` object.
+separate namespace from worker requirements. `operational_policy` MUST be
+`ContentRef|null`; it never places the clear closed C object
+`{network_policy_digest:H,isolation_policy_digest:H}` in the skeleton. Hydration
+validates that object and its operational digests.
 
-Every envelope and nested S1 object rejects unknown members. Old record 1, inbox
+`PolicyDecision` is null or `{policy_digest:H,rule_id:T,effect:allow|deny|require_approval}`
+at operation plan, preparation and completion. `approval_answer` may carry
+`policy_digest`, `rule_id` and `expires_ms`; approval scope and prose remain C.
+`UsageCounts` is the optional closed `{tokens:TokenCounts|null,budget:BudgetCounts|null}`
+projection. It contains numeric/enumerated accounting and C unit/currency refs;
+the raw upstream usage remains authoritative C. No missing metric is filled with
+zero.
+
+Storage framing is separate from every logical record. The language-neutral
+`fixtures/session_storage_envelope.json` and its schema define the closed envelope
+`{schema_version:"S1",tenant_id,session_id,seq,record_digest,chain_digest,writer_epoch,created_ms}`.
+The initial chain hashes `UTF8("vv-agent/S1")`, then length-prefixed tenant/session
+IDs; each next digest frames the previous 32-byte digest, `U64BE(seq)` and decoded
+`record_digest`. `chain_digest` is excluded from logical record bytes and identity.
+It is storage integrity metadata, not a second execution record and not SQL DDL.
+
+`fixtures/session_storage_lifecycle.json` allocates the independently destroyable
+session-key capability, idempotent destroy outcomes, complete/pending tombstone
+verification, and the versioned JSONL export header. Export version 1 supports
+closed `skeleton` and explicit `include-content` modes with record, inbox, content,
+checkpoint and manifest lines. Skeleton export rejects content lines.
+
+Every envelope and nested S1 object rejects unknown members. Plaintext objects in
+C slots, including workspace, request/tool, results, inbox bodies, provider
+handles/evidence and operational policy, reject at the logical boundary. Old record 1, inbox
 3, SQL schema 1 and unsupported feature levels reject; there is no historical
 decoder, alias or dual-format path. SQL DDL, PostgreSQL RLS and Python symbol
 spellings are not canonical wire fields.

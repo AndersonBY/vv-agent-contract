@@ -56,8 +56,18 @@ class YieldableWaitsTests(unittest.TestCase):
         park = next(r for r in self.fixture["cases"][0]["records"] if r["kind"] == "op_parked")
         self.assertIs(park["payload"]["yield_on_steer"], True)
         self.assertTrue(park["payload"]["yieldable_children"])
-        self.assertEqual(self.schema["oneOf"][0]["properties"]["schema_version"]["const"], "S1")
-        self.assertEqual(self.inbox_schema["oneOf"][0]["properties"]["schema_version"]["const"], "S1")
+        self.assertEqual(
+            self.schema["$defs"]["RecordEnvelope"]["properties"]["schema_version"][
+                "const"
+            ],
+            "S1",
+        )
+        self.assertEqual(
+            self.inbox_schema["$defs"]["InboxEnvelope"]["properties"]["schema_version"][
+                "const"
+            ],
+            "S1",
+        )
 
     def test_current_s1_yield_declarations_are_strict(self):
         vectors = self.vectors["vectors"]
