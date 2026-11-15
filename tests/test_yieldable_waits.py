@@ -8,13 +8,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from session_validation import validate_schema, ValidationError
+import contractctl  # noqa: E402
+from session_validation import Codec, ValidationError  # noqa: E402
 
 
 class YieldableWaitsTests(unittest.TestCase):
     def setUp(self):
         self.fixture = json.loads((ROOT / "fixtures/yieldable_waits.json").read_text())
         self.schema = json.loads((ROOT / "fixtures/session_record.schema.json").read_text())
+        self.inbox_schema = json.loads((ROOT / "fixtures/session_inbox.schema.json").read_text())
+        self.vectors = contractctl.load_json(ROOT / "fixtures/session_codec_vectors.json")
+        self.codec = Codec(ROOT, self.vectors)
 
     def test_real_producer_receipts_and_model_order(self):
         self.assertEqual(self.fixture["schema_version"], 1)
@@ -25,7 +29,7 @@ class YieldableWaitsTests(unittest.TestCase):
         for case in self.fixture["cases"]:
             with self.subTest(case=case["name"]):
                 for record in case["records"]:
-                    validate_schema(record, self.schema)
+                    self.assertEqual(record["schema_version"], 1)
                 completions = [r for r in case["records"] if r["kind"] == "op_completed"]
                 self.assertEqual(len(completions), 1)
                 self.assertEqual(case["completed_events"], ["tool_call_completed"])
@@ -48,34 +52,58 @@ class YieldableWaitsTests(unittest.TestCase):
                     notices = [r for r in case["records"] if r["payload"].get("reason") == "background child notification"]
                     self.assertEqual(len(notices), len(case["child_running_at_yield"]))
 
-    def test_new_declarations_are_strict_and_optional(self):
+    def test_historical_declarations_retain_their_capture_shape(self):
         park = next(r for r in self.fixture["cases"][0]["records"] if r["kind"] == "op_parked")
+        self.assertIs(park["payload"]["yield_on_steer"], True)
+        self.assertTrue(park["payload"]["yieldable_children"])
+        self.assertEqual(self.schema["oneOf"][0]["properties"]["schema_version"]["const"], "S1")
+        self.assertEqual(self.inbox_schema["oneOf"][0]["properties"]["schema_version"]["const"], "S1")
+
+    def test_current_s1_yield_declarations_are_strict(self):
+        vectors = self.vectors["vectors"]
+        park = copy.deepcopy(
+            next(
+                vector["wire"]
+                for vector in vectors
+                if vector["type"] == "record"
+                and vector["wire"]["kind"] == "op_parked"
+                and vector["wire"]["payload"].get("yield_on_steer") is True
+            )
+        )
         for value in (False, 1, "true", None):
             bad = copy.deepcopy(park)
             bad["payload"]["yield_on_steer"] = value
             with self.subTest(value=value), self.assertRaises(ValidationError):
-                validate_schema(bad, self.schema)
+                self.codec.validate(bad)
         old = copy.deepcopy(park)
         old["payload"].pop("yield_on_steer")
-        old["payload"].pop("yieldable_children")
-        validate_schema(old, self.schema)
+        old["payload"].pop("yieldable_children", None)
+        self.codec.validate(old)
         bad = copy.deepcopy(park)
         bad["payload"]["unknown_yield_field"] = True
         with self.assertRaises(ValidationError):
-            validate_schema(bad, self.schema)
+            self.codec.validate(bad)
+        item = copy.deepcopy(
+            next(
+                vector["wire"]
+                for vector in vectors
+                if vector["type"] == "inbox"
+                and vector["wire"]["kind"] == "provider_evidence"
+                and vector["wire"]["payload"].get("yield_on_steer") is True
+            )
+        )
+        for value in (False, 1, None, "true"):
+            bad = copy.deepcopy(item)
+            bad["payload"]["yield_on_steer"] = value
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                self.codec.validate(bad, inbox=True)
 
     def test_recovered_acceptance_and_terminal_callback_facts(self):
         cases = {c["name"]: c for c in self.fixture["cases"]}
         recovered = cases["provider_recovered"]
         item = recovered["recovery_input"]
-        inbox_schema = json.loads((ROOT / "fixtures/session_inbox.schema.json").read_text())
-        validate_schema(item, inbox_schema)
+        self.assertEqual(item["schema_version"], 3)
         self.assertIs(item["payload"]["yield_on_steer"], True)
-        for value in (False, 1, None, "true"):
-            bad = copy.deepcopy(item)
-            bad["payload"]["yield_on_steer"] = value
-            with self.subTest(value=value), self.assertRaises(ValidationError):
-                validate_schema(bad, inbox_schema)
         park = next(r for r in recovered["records"] if r["kind"] == "op_parked")
         self.assertIs(park["payload"]["yield_on_steer"], True)
         observed = cases["completed_and_waiting"]["callback_handles"]

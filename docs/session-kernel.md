@@ -1,6 +1,6 @@
 # Session kernel
 
-Contract 27.0.0 defines one execution authority: the ordered session log and inbox.
+Contract 40.0.0 defines one execution authority: the ordered session log and inbox.
 MUST, MUST NOT and SHOULD are normative. Logical bytes, admission, authenticity,
 fencing and delivery are public requirements. SQL tables, DDL, Redis keys, store
 constructors, method signatures, connection ownership and thread layout are out of
@@ -25,13 +25,14 @@ and array elements are not implicitly normalized, trimmed, sorted or deduplicate
 
 | Envelope | Required fields (no other fields) |
 | --- | --- |
-| Record | `schema_version:integer const 1`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload:J` selected by kind |
-| InboxItem | `schema_version:integer const 3`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
+| Record | `schema_version:string const "S1"`, `feature_level:integer const 1`, `chain_digest:H`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload:J` selected by kind |
+| InboxItem | `schema_version:string const "S1"`, `feature_level:integer const 1`, `actor:Principal`, `admission_proof:proof\|null`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
 
-The logical record has no top-level sequence, receiving time, writer epoch or
-digest member. Storage supplies ordered positions, timestamps and integrity
-digests separately. `op_started.payload.epoch` is retained dispatch evidence,
-not that excluded storage-envelope epoch. Nullable fields MUST be present.
+The logical record has no top-level sequence, receiving time, commit identity or
+writer epoch. `chain_digest` is required in the current logical envelope; storage
+supplies ordered positions and commit metadata separately. `op_started.payload.epoch`
+is retained dispatch evidence, not the omitted storage-envelope writer epoch.
+Nullable fields MUST be present.
 `operation_id` and `attempt` MUST both be non-null exactly for `op_*` records and
 null otherwise. `session_created.turn_id` MUST be null. All other record kinds
 require a turn except `input_applied` and `usage_observed`, which permit null.
@@ -40,9 +41,9 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 
 | Kind | Closed payload fields |
 | --- | --- |
-| `session_created` | `principal:T`, `workspace:T`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:J` |
-| `turn_started` | `input_ids:[T]`, `definition:J`, `definition_digest:H`, `handler_version:T`, `budget:J`, `binding:T\|null`, `generation:N` |
-| `input_applied` | `input:InboxItem`, `input_digest:H`, `disposition:applied/rejected/noop/queued`, `reason:T\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, `model_binding?:ModelBinding` |
+| `session_created` | `principal:Principal`, `workspace:T`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:J` |
+| `turn_started` | `input_ids:[T]`, `definition:J`, `definition_digest:H`, `handler_version:T`, `budget:J`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `environment:EnvironmentBinding\|null` |
+| `input_applied` | `input:InboxItem`, `input_digest:H`, `input_proof:InputProof\|null`, `disposition:applied/rejected/noop/queued`, `reason:T\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, `model_binding?:ModelBinding` |
 | `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:J`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:J\|null`, `idempotency_key:T\|null`, `budget_admission:J`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]` |
 | `op_prepared` | `request:J`, `request_digest:H`, `op_kind:tool/interaction`, `tool:J`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:V`, `shared_state:J` |
 | `turn_parked` | `interaction_id:T`, `question:S`, `source_operation_id:T`, `source_attempt:P` |
@@ -227,6 +228,43 @@ schema 1, inbox schema 3, SQL layouts, canonical IDs/digests, existing stored
 bytes, RunEvent v6, App Server v5 and the public API inventory remain unchanged.
 No data migration, store drain, historical decoder or compatibility mode is
 introduced. See [39.0.0 release notes](release-39.0.0.md).
+
+
+## S1 storage allocation
+
+`Principal` is the closed
+`{tenant_id:T,subject_id:T,subject_kind:T,attributes:ContentRef}` object. Creation
+principal identity is immutable; an inbox actor's tenant MUST equal the owning
+session tenant. A single-tenant host uses `tenant_id="default"` explicitly.
+
+`ContentRef` is closed `{content_id:T,mac:H,size:N,key_id:T,labels:ContentLabels}`.
+`ContentLabels` is closed `{source:[system|user|internal|untrusted],classification:public|internal|confidential|restricted}`. Source order is the listed enum order, duplicates reject, and the inactive P2 default is `source=[]`,
+`classification="internal"`. ContentRef is not a path, URL or plaintext digest.
+
+`InboxAdmissionProof` is null in explicit unsigned local mode or the closed
+`{admission_key_id:T,admission_signature:S,admission_signed_ms:N}` object.
+`InputProof` is null in that mode or the closed
+`{input_seq:P,received_ms:N,key_id:T,signature:S,signed_ms:N}` object copied from
+the original inbox admission. Key ID, signature and signing time MUST equal the
+embedded admission proof; mismatches reject. Signature strings use canonical
+base64; an empty or noncanonical value rejects. Signed deployment configuration
+cannot downgrade a missing proof to unsigned mode.
+
+`SessionRequirements` is closed `{level:P,handler_version:T|null,capabilities:[T]}`.
+The initial level is 1. Host bootstrap may use a null handler; capability IDs are
+opaque, sorted and duplicate-free with no wildcard or numeric ordering.
+
+`turn_started.policy_digest` is `H|null`. `environment` is null or the closed
+`{descriptor:ContentRef,environment_capabilities:[T],capabilities_digest:H|null,
+network_policy_ref_digest:H|null,isolation_policy_ref_digest:H|null,operational_policy:OperationalPolicy|null}`
+binding. Environment capabilities are sorted and duplicate-free and remain a
+separate namespace from worker requirements. `operational_policy`, when non-null,
+is the closed `{network_policy_digest:H,isolation_policy_digest:H}` object.
+
+Every envelope and nested S1 object rejects unknown members. Old record 1, inbox
+3, SQL schema 1 and unsupported feature levels reject; there is no historical
+decoder, alias or dual-format path. SQL DDL, PostgreSQL RLS and Python symbol
+spellings are not canonical wire fields.
 
 ## Creation seed and reserved metadata
 

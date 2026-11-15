@@ -1,5 +1,19 @@
 # Changelog
 
+## 40.0.0 — unreleased — trusted storage S1 schema allocation
+
+This major replaces the current session storage discriminators with logical and SQL
+`"S1"` plus `feature_level=1`. Record and inbox envelopes now require the S1
+identity, `chain_digest` on records, tenant-scoped Principal/actor, admission/input
+proof slots, frozen session requirements, policy/environment binding slots, and
+closed ContentRef labels. Unknown fields and levels reject.
+
+This is a contract-first allocation: no Python S1 producer or storage implementation
+is claimed, and the 39.0.0 producer captures remain historical evidence rather than
+S1 adoption. There is no compatibility reader, alias, legacy decoder or dual format.
+Rust remains frozen at contract 23.0.0 / package series 0.21.x. See
+[release notes](docs/release-40.0.0.md).
+
 ## 39.0.0 — unreleased — concise session-schema diagnostics
 
 Closed session-schema failures report exactly `invalid session schema`, without

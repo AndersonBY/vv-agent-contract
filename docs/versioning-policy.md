@@ -81,9 +81,9 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-39.0.0 with local real-producer diagnostic evidence; immutable
-publication/lock/snapshot, required Python full gates and central adoption are
-pending.
+40.0.0 with contract-first S1 schema allocation; a real S1 producer/storage
+implementation, immutable publication/lock/snapshot, required Python full gates
+and central adoption are pending.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -191,3 +191,20 @@ Rust remains frozen at 23.0.0 / 0.21.x with its existing verified baseline.
 39.0.0 includes a real Python diagnostic capture and its regenerated fixture
 manifest. Required implementation full gates, immutable publication and central
 adoption remain outstanding; this is not a verified 39.0.0 release. See [release notes](release-39.0.0.md).
+
+## 40.0.0 trusted storage S1 allocation
+
+This major replaces the session storage discriminators with `"S1"` and
+`feature_level=1`. It changes the record and inbox envelopes, so record 1, inbox
+3 and every earlier wire reject without a decoder. SQL table layout, PostgreSQL
+RLS and Python symbol spelling remain outside the contract.
+
+The first allocation adds Principal/actor, record `chain_digest`, admission and
+input proof slots, frozen session requirements, policy and environment binding
+slots, and closed ContentRef labels. Unknown fields still reject. Null signed-proof
+slots mean explicit unsigned local mode, not silent fallback in signed deployment.
+
+No Python S1 producer, storage implementation or adoption is claimed. The frozen
+Rust entry remains 23.0.0 / 0.21.x. Worker support filtering, full policy/label
+propagation, remaining encrypted-slot migration and SQLite/PostgreSQL
+implementation remain P3/P4 work. See [release notes](release-40.0.0.md).

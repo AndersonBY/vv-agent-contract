@@ -42,6 +42,62 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(report["codec_vectors"], 85)
         self.assertEqual(report["invalid_vectors"], 84)
 
+
+    def test_trusted_storage_s1_allocation(self) -> None:
+        fixture = contractctl.load_json(ROOT / "fixtures/trusted_storage_s1.json")
+        self.assertEqual(fixture["schema_version"], "vv-agent.trusted-storage-s1.v1")
+        self.assertEqual(fixture["status"], "contract-allocation-only")
+        self.assertEqual(fixture["storage_major"], "S1")
+        self.assertEqual(fixture["feature_level"], 1)
+        self.assertEqual(
+            set(fixture["field_dispositions"]),
+            {
+                "session_record.envelope",
+                "session_inbox.envelope",
+                "session_created.payload.principal",
+                "turn_started.payload.policy_digest",
+                "turn_started.payload.requirements",
+                "turn_started.payload.environment",
+                "input_applied.payload.input_proof",
+                "ContentRef",
+                "ContentLabels",
+            },
+        )
+        accepted = {case["name"]: case for case in fixture["accepted_cases"]}
+        codec = session.Codec(ROOT, [self.vectors, fixture])
+        self.assertEqual(
+            set(accepted),
+            {
+                "session_created_principal_and_content_ref",
+                "turn_started_requirements_policy_and_environment",
+                "signed_user_inbox_admission_proof",
+                "input_applied_copied_input_proof",
+            },
+        )
+        for case in accepted.values():
+            with self.subTest(case=case["name"]):
+                self.assertEqual(case["wire"]["schema_version"], "S1")
+                self.assertEqual(case["wire"]["feature_level"], 1)
+                self.assertEqual(
+                    hashlib.sha256(session.decode(case)).hexdigest(), case["sha256"]
+                )
+                codec.validate(case["wire"], inbox="record_id" not in case["wire"])
+
+        for vector in fixture["rejected_cases"]:
+            with self.subTest(case=vector["name"]):
+                wire = copy.deepcopy(accepted[vector["base"]]["wire"])
+                for operation in vector["patch"]:
+                    target = wire
+                    for part in operation["path"][:-1]:
+                        target = target[part]
+                    field = operation["path"][-1]
+                    if operation.get("delete"):
+                        del target[field]
+                    else:
+                        target[field] = operation["set"]
+                with self.assertRaises(session.ValidationError):
+                    codec.validate(wire, inbox="record_id" not in wire)
+
     def test_endpoint_routing_uses_host_order_and_closes_missing_attempt(self) -> None:
         cases = contractctl.load_json(ROOT / "fixtures/session_semantics.json")["cases"]
         case = next(c for c in cases if c["case"] == "endpoint_routing")
@@ -79,7 +135,7 @@ class SessionKernelContractTests(unittest.TestCase):
         zero_capability["payload"]["model_binding"]["max_output_tokens"] = 0
         self.codec.validate(zero_capability)
         item = case["selection_record"]["payload"]["input"]
-        self.assertEqual(item["schema_version"], 3)
+        self.assertEqual(item["schema_version"], "S1")
         self.codec.validate(item, inbox=True)
         self.codec.validate(item | {"payload": {"selection": None}}, inbox=True)
         negatives = [
@@ -115,7 +171,7 @@ class SessionKernelContractTests(unittest.TestCase):
                 if v["type"] == "inbox" and v["wire"]["kind"] == "provider_result"
             )
         )
-        self.assertEqual(inbox["schema_version"], 3)
+        self.assertEqual(inbox["schema_version"], "S1")
         for usage in [{}, {"prompt_tokens": 12000, "completion_tokens": 300}]:
             inbox["payload"]["usage"] = usage
             self.codec.validate(inbox, inbox=True)

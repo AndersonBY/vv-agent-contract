@@ -207,6 +207,11 @@ if (process.argv.includes("--canonicalize")) {
 } else {
   const codec = readFixture("session_codec_vectors.json");
   for (const [index, vector] of codec.vectors.entries()) verifyFact(vector, `codec/${index}`, vector.wire);
+  const trustedStorage = readFixture("trusted_storage_s1.json");
+  for (const vector of trustedStorage.accepted_cases) {
+    verifyFact(vector, `trusted-storage-s1/${vector.name}`, vector.wire);
+    verifyVector(`trusted-storage-s1/${vector.name}`, vector.wire, vector);
+  }
   const diagnostics = readFixture("session_record_diagnostics.json").canonical;
   for (const kind of ["record", "inbox"]) {
     const bytes = Buffer.from(diagnostics[`${kind}_utf8`], "utf8");

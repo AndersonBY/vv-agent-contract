@@ -4,8 +4,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -246,8 +367,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "type": "null"
@@ -255,6 +376,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -267,8 +391,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -300,8 +545,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -317,6 +562,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -329,8 +577,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -362,8 +731,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -379,6 +748,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -391,8 +763,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -424,8 +917,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -441,6 +934,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -453,8 +949,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -526,8 +1143,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -543,6 +1160,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -555,8 +1175,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -631,8 +1372,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -648,6 +1389,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -660,8 +1404,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -734,8 +1599,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -751,6 +1616,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -763,8 +1631,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -806,8 +1795,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -823,6 +1812,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",
@@ -835,8 +1827,129 @@
     {
       "additionalProperties": false,
       "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": false,
+              "properties": {
+                "content_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "labels": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "confidential",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "items": {
+                        "enum": [
+                          "system",
+                          "user",
+                          "internal",
+                          "untrusted"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "classification"
+                  ],
+                  "type": "object"
+                },
+                "mac": {
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content_id",
+                "mac",
+                "size",
+                "key_id",
+                "labels"
+              ],
+              "type": "object"
+            },
+            "subject_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subject_kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenant_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tenant_id",
+            "subject_id",
+            "subject_kind",
+            "attributes"
+          ],
+          "type": "object"
+        },
+        "admission_proof": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "admission_key_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "admission_signature": {
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "admission_signed_ms": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "admission_key_id",
+                "admission_signature",
+                "admission_signed_ms"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "available_ms": {
           "minimum": 0,
+          "type": "integer"
+        },
+        "feature_level": {
+          "const": 1,
           "type": "integer"
         },
         "generation": {
@@ -1102,8 +2215,8 @@
           "type": "object"
         },
         "schema_version": {
-          "const": 3,
-          "type": "integer"
+          "const": "S1",
+          "type": "string"
         },
         "target_turn_id": {
           "anyOf": [
@@ -1119,6 +2232,9 @@
       },
       "required": [
         "schema_version",
+        "feature_level",
+        "actor",
+        "admission_proof",
         "input_id",
         "kind",
         "target_turn_id",

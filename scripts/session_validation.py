@@ -52,6 +52,13 @@ BOUNDARY_STAGES = {
     "budget",
 }
 HANDLE_VARIANTS = {"provider", "approval", "user", "child"}
+HISTORICAL_SESSION_FIXTURES = {
+    "host_summary_requests.json",
+    "model_rejection.json",
+    "session_projection.json",
+    "unseen_input_protection.json",
+    "yieldable_waits.json",
+}
 KEYWORDS = {
     "$schema",
     "type",
@@ -66,6 +73,7 @@ KEYWORDS = {
     "required",
     "additionalProperties",
     "items",
+    "uniqueItems",
     "minLength",
     "maxLength",
     "pattern",
@@ -166,9 +174,13 @@ def validate_schema(value: Any, schema: dict[str, Any]) -> None:
                 validate_schema(value[key], schema["additionalProperties"])
         for key in value.keys() & properties.keys():
             validate_schema(value[key], properties[key])
-    if isinstance(value, list) and "items" in schema:
-        for item in value:
-            validate_schema(item, schema["items"])
+    if isinstance(value, list):
+        if schema.get("uniqueItems") is True:
+            encoded = [json_key(item) for item in value]
+            require(len(encoded) == len(set(encoded)), "duplicate array item")
+        if "items" in schema:
+            for item in value:
+                validate_schema(item, schema["items"])
     if isinstance(value, str):
         require(len(value) >= schema.get("minLength", 0), "short string")
         require(len(value) <= schema.get("maxLength", math.inf), "long string")
@@ -182,6 +194,30 @@ def validate_schema(value: Any, schema: dict[str, Any]) -> None:
             <= schema.get("maximum", math.inf),
             "number bounds",
         )
+
+
+def require_sorted_unique(value: list[str], label: str) -> None:
+    require(len(value) == len(set(value)), f"{label} contains duplicate items")
+    require(value == sorted(value), f"{label} is not sorted")
+
+
+def validate_content_ref(value: dict[str, Any], label: str) -> None:
+    source = value["labels"]["source"]
+    source_order = {"system": 0, "user": 1, "internal": 2, "untrusted": 3}
+    require(len(source) == len(set(source)), f"{label}.labels.source contains duplicate items")
+    require(
+        [source_order[item] for item in source] == sorted(source_order[item] for item in source),
+        f"{label}.labels.source is not in source-kind order",
+    )
+
+
+def validate_proof_signature(value: str, label: str) -> None:
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except ValueError as exc:
+        raise ValidationError(f"{label} is not canonical base64") from exc
+    require(bool(raw), f"{label} is empty")
+    require(base64.b64encode(raw).decode("ascii") == value, f"{label} is not canonical base64")
 
 
 def record_id(wire: dict[str, Any]) -> str:
@@ -276,6 +312,12 @@ class Codec:
         json_value(wire)
         validate_schema(wire, self.inbox_schema if inbox else self.record_schema)
         if inbox:
+            validate_content_ref(wire["actor"]["attributes"], "inbox.actor.attributes")
+            proof = wire["admission_proof"]
+            if proof is not None:
+                validate_proof_signature(
+                    proof["admission_signature"], "inbox.admission_signature"
+                )
             if wire["kind"] == "model_selection":
                 require(
                     wire["target_turn_id"] is None and wire["generation"] is None,
@@ -292,6 +334,7 @@ class Codec:
         require((wire["attempt"] is not None) == operation, "attempt nullability")
         if kind == "session_created":
             require(wire["turn_id"] is None, "creation turn must be null")
+            validate_content_ref(p["principal"]["attributes"], "principal.attributes")
         elif kind not in {"input_applied", "usage_observed"}:
             require(wire["turn_id"] is not None, "turn required")
         if kind == "op_planned":
@@ -299,6 +342,18 @@ class Codec:
                 (p["purpose"] is not None) == (p["op_kind"] == "model"),
                 "purpose nullability",
             )
+        if kind == "turn_started":
+            requirements = p["requirements"]
+            require_sorted_unique(
+                requirements["capabilities"], "turn_started.requirements.capabilities"
+            )
+            environment = p["environment"]
+            if environment is not None:
+                validate_content_ref(environment["descriptor"], "turn_started.environment.descriptor")
+                require_sorted_unique(
+                    environment["environment_capabilities"],
+                    "turn_started.environment.environment_capabilities",
+                )
         pair = {
             "turn_started": ("definition_digest", "definition"),
             "op_planned": ("request_digest", "request"),
@@ -316,6 +371,22 @@ class Codec:
             )
         if kind == "input_applied":
             self.validate(p["input"], inbox=True)
+            proof = p["input_proof"]
+            admission = p["input"]["admission_proof"]
+            require(
+                (proof is None) == (admission is None),
+                "input proof admission mismatch",
+            )
+            if proof is not None and admission is not None:
+                validate_proof_signature(
+                    proof["signature"], "input_applied.input_proof.signature"
+                )
+                require(
+                    proof["key_id"] == admission["admission_key_id"]
+                    and proof["signature"] == admission["admission_signature"]
+                    and proof["signed_ms"] == admission["admission_signed_ms"],
+                    "input proof does not copy admission proof",
+                )
 
 
 def decode(vector: dict[str, Any]) -> bytes:
@@ -342,7 +413,21 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
             pass
     codec = Codec(root, [documents, streams, decoded])
     counts = Counter()
-    for node in walk([documents, streams]):
+    historical_documents = {
+        name
+        for name, document in documents.items()
+        if document.get("historical_contract_version") == "39.0.0"
+    }
+    require(
+        historical_documents == HISTORICAL_SESSION_FIXTURES,
+        "historical session fixture inventory mismatch",
+    )
+    current_documents = {
+        name: document
+        for name, document in documents.items()
+        if name not in historical_documents
+    }
+    for node in walk([current_documents, streams]):
         if not isinstance(node, dict) or not isinstance(node.get("kind"), str):
             continue
         if "record_id" in node and "payload" in node:

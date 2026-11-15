@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from contractctl import load_json  # noqa: E402
-from session_validation import Codec  # noqa: E402
+from session_validation import record_id  # noqa: E402
 
 
 class SessionRecordDiagnosticsTests(unittest.TestCase):
@@ -19,6 +19,8 @@ class SessionRecordDiagnosticsTests(unittest.TestCase):
 
     def test_closed_schema_and_propagated_diagnostics(self):
         self.assertEqual(self.fixture["version"], 1)
+        self.assertEqual(self.fixture["producer_contract_version"], "39.0.0")
+        self.assertTrue(self.fixture["historical_capture"])
         cases = self.fixture["schema_diagnostics"]
         self.assertEqual(len(cases), 4)
         self.assertEqual(
@@ -61,13 +63,23 @@ class SessionRecordDiagnosticsTests(unittest.TestCase):
             {name: {"type": "RecordError", "message": text} for name, text in expected.items()},
         )
 
-    def test_canonical_record_and_inbox_validate_and_hash(self):
-        codec = Codec(ROOT, load_json(ROOT / "fixtures/session_codec_vectors.json"))
-        for kind in ("record", "inbox"):
+    def test_historical_canonical_capture_bytes_and_identity(self):
+        for kind, old_version in (("record", 1), ("inbox", 3)):
             with self.subTest(kind=kind):
                 body = self.fixture["canonical"][f"{kind}_utf8"].encode()
-                codec.validate(json.loads(body), inbox=kind == "inbox")
+                value = json.loads(body)
+                self.assertEqual(value["schema_version"], old_version)
+                canonical = json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode()
+                self.assertEqual(body, canonical)
                 self.assertEqual(
                     hashlib.sha256(body).hexdigest(),
                     self.fixture["canonical"][f"{kind}_sha256"],
                 )
+                if kind == "record":
+                    self.assertEqual(value["record_id"], record_id(value))

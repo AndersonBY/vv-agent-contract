@@ -9,6 +9,7 @@
     "record_sha256": "ab2ed968bd89994659da4819eb42667b703bcdbe6435f19352142378365d97a7",
     "record_utf8": "{\"attempt\":null,\"kind\":\"session_created\",\"operation_id\":null,\"payload\":{\"attributes\":{\"seed\":{\"response_rejection\":true,\"unseen_input_protection\":true}},\"parent_operation_id\":null,\"parent_session_id\":null,\"principal\":\"p\",\"workspace\":\"/fixture\"},\"record_id\":\"session/s/created\",\"schema_version\":1,\"session_id\":\"s\",\"turn_id\":null}"
   },
+  "historical_capture": true,
   "model_selection_reason": "model_selection_unresolvable",
   "preserved_diagnostics": [
     {
@@ -54,6 +55,7 @@
       }
     }
   ],
+  "producer_contract_version": "39.0.0",
   "provider_reason": "provider_result_invalid",
   "schema_diagnostics": [
     {
@@ -85,5 +87,6 @@
       }
     }
   ],
+  "schema_version": 1,
   "version": 1
 }

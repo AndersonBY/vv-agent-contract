@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "contract_version": "39.0.0",
+  "contract_version": "40.0.0",
   "status": "pending-adoption",
   "required_implementations": [
     "python"
@@ -9,7 +9,7 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "39.0.0",
+      "contract_version": "40.0.0",
       "status": "pending-adoption",
       "verified_revision": null
     },
@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v39.0.0 has local real-producer session diagnostic evidence from the Python codec, App Server, provider acceptance and model-selection paths. Immutable publication/lock/snapshot, required Python full gates and central adoption remain pending. Record/inbox/SQL boundaries and the frozen Rust baseline are unchanged.",
+  "adoption_note": "v40.0.0 allocates the forward-only S1 record/inbox schema, Principal/actor, admission and input proofs, requirements/environment bindings, policy digest slots, ContentRef/labels, and chain_digest. Python producer/storage adoption, publication, fixtures copied from a real S1 producer and cross-repository gates remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no compatibility reader, alias or dual format is defined.",
   "last_verified_at": null,
   "cross_repository_run": null
 }
