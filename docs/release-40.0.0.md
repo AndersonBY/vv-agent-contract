@@ -1,9 +1,10 @@
 # Contract 40.0.0
 
-Status: unpublished contract-first S1 allocation; adoption pending. Python is the
-only required implementation. No Python 40.0.0 revision, real S1 producer capture,
-storage implementation or central adoption is claimed. Rust remains frozen at
-contract 23.0.0 / package series 0.21.x, verified revision
+Status: unpublished contract-first S1 capture; adoption pending. Python is the
+only required implementation. A real Python producer capture now records the
+current S1 logical shapes and ContentRef bytes, but no immutable Python 40.0.0
+revision or central adoption is claimed. Rust remains frozen at contract 23.0.0 /
+package series 0.21.x, verified revision
 `00f4240786f1adea1dc0c4730da8ddd06a5ab8ac`.
 
 ## Public boundary
@@ -48,13 +49,18 @@ semantics, forget tombstones, and versioned JSONL skeleton/include-content expor
 with deterministic accepted/rejected cases.
 
 The focused fixture `fixtures/trusted_storage_s1.json` supplies accepted S1
-shapes and deterministic rejection cases. `session_record.schema.json`,
+shapes captured from the Python record/inbox encoders and content publication
+writer, including canonical byte, identity and ContentRef evidence, plus
+deterministic rejection cases. `session_record.schema.json`,
 `session_inbox.schema.json`, codec vectors and current record/inbox streams reject
 unknown fields, old discriminators and unsupported feature levels. The
 `fixtures/session_record_diagnostics.json` and other marked producer captures
-remain historical 39 evidence: their canonical producer bytes were not rewritten
-and they are not evidence that Python emits S1. Every S1 fixture here is synthetic
-allocation material until a pinned Python producer runs the adoption gates.
+remain historical 39 evidence: their canonical producer bytes were not rewritten.
+The trusted-storage fixture records the current source revision and a digest of
+the dirty producer source tree so reviewers can reproduce it, but it is not an
+adoption claim until the Python revision is immutable and the central
+cross-repository gate passes. The local evidence is recorded in
+[contract 40 producer capture evidence](adoption-evidence-40.0.0.md).
 
 ## Deferred implementation work
 

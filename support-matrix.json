@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v40.0.0 is an allocation-only, forward-only S1 contract: logical record/inbox C fields use ContentRef, policy/usage/tokenizer slots and a separate storage envelope/chain fixture are defined, and key/export lifecycle cases are reserved. Python producer/storage adoption, publication, fixtures captured from a real S1 producer and cross-repository gates remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no compatibility reader, alias or dual format is defined.",
+  "adoption_note": "v40.0.0 is a forward-only S1 contract: logical record/inbox C fields use ContentRef, policy/usage/tokenizer slots and a separate storage envelope/chain fixture are defined, and key/export lifecycle cases are reserved. A real Python S1 producer capture is recorded in the trusted-storage fixture, but immutable Python revision and central cross-repository adoption evidence remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no compatibility reader, alias or dual format is defined.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

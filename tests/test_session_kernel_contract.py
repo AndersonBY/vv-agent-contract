@@ -52,7 +52,7 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(report["trusted_negative_cases"], 26)
 
 
-    def test_trusted_storage_s1_allocation(self) -> None:
+    def test_trusted_storage_s1_producer_capture(self) -> None:
         fixture = contractctl.load_json(ROOT / "fixtures/trusted_storage_s1.json")
         record_schema = contractctl.load_json(ROOT / "fixtures/session_record.schema.json")
         storage_schema = contractctl.load_json(
@@ -62,7 +62,14 @@ class SessionKernelContractTests(unittest.TestCase):
             ROOT / "fixtures/session_storage_lifecycle.schema.json"
         )
         self.assertEqual(fixture["schema_version"], "vv-agent.trusted-storage-s1.v1")
-        self.assertEqual(fixture["status"], "contract-allocation-only")
+        self.assertEqual(fixture["status"], "producer-captured")
+        self.assertTrue(fixture["provenance"]["producer_capture"])
+        self.assertEqual(
+            fixture["revision"], fixture["provenance"]["source_revision"]
+        )
+        self.assertRegex(fixture["revision"], r"^[0-9a-f]{40}$")
+        self.assertEqual(fixture["record_schema_version"], "S1")
+        self.assertEqual(fixture["inbox_schema_version"], "S1")
         self.assertEqual(fixture["storage_major"], "S1")
         self.assertEqual(fixture["feature_level"], 1)
         self.assertNotIn(

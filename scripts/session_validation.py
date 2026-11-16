@@ -241,6 +241,26 @@ def validate_content_refs(value: Any, label: str = "wire") -> None:
             validate_content_ref(node, label)
 
 
+def content_ref_entries(
+    value: Any, path: tuple[str | int, ...] = ()
+) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    if isinstance(value, dict):
+        if set(value) == {"content_id", "mac", "size", "key_id", "labels"}:
+            return [{"path": list(path), **value}]
+        for key, child in value.items():
+            refs.extend(content_ref_entries(child, (*path, key)))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            refs.extend(content_ref_entries(child, (*path, index)))
+    return sorted(
+        refs,
+        key=lambda ref: json.dumps(
+            ref["path"], ensure_ascii=True, separators=(",", ":")
+        ),
+    )
+
+
 def validate_proof_signature(value: str, label: str) -> None:
     try:
         raw = base64.b64decode(value, validate=True)
@@ -664,12 +684,48 @@ def validate_lifecycle_fixtures(
 def validate_trusted_storage(
     root: Path, codec: Codec, fixture: dict[str, Any]
 ) -> int:
-    require(fixture["status"] == "contract-allocation-only", "trusted fixture status")
-    require(fixture["provenance"]["producer_capture"] is False, "synthetic fixture provenance")
+    provenance = fixture["provenance"]
+    require(fixture["status"] == "producer-captured", "trusted fixture status")
+    require(provenance["producer_capture"] is True, "producer capture provenance")
+    require(
+        isinstance(provenance.get("source_revision"), str)
+        and re.fullmatch(r"[0-9a-f]{40}", provenance["source_revision"]) is not None,
+        "producer capture revision",
+    )
+    require(
+        fixture.get("revision") == provenance["source_revision"],
+        "trusted fixture revision",
+    )
+    require(
+        isinstance(provenance.get("source_tree_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", provenance["source_tree_sha256"])
+        is not None,
+        "producer source tree digest",
+    )
+    require(fixture.get("record_schema_version") == "S1", "record schema capture")
+    require(fixture.get("inbox_schema_version") == "S1", "inbox schema capture")
     accepted = {case["name"]: case for case in fixture["accepted_cases"]}
     for case in accepted.values():
         raw = decode(case)
-        require(strict_json_loads(raw.decode("utf-8")) == case["wire"], "trusted wire bytes")
+        wire = strict_json_loads(raw.decode("utf-8"))
+        require(wire == case["wire"], "trusted wire bytes")
+        require(
+            case["canonical_json_base64"] == case["bytes_base64"],
+            "trusted canonical bytes",
+        )
+        require(case["canonical_json_utf8_bytes"] == len(raw), "trusted byte count")
+        require(case["wire"]["schema_version"] == "S1", "trusted logical schema version")
+        require(case["wire"]["feature_level"] == 1, "trusted logical feature level")
+        require(
+            case["content_refs"] == content_ref_entries(wire),
+            f"trusted ContentRef evidence: {case['name']}",
+        )
+        require(bool(case["content_refs"]), f"trusted case has no ContentRef: {case['name']}")
+        require(
+            case["producer"].startswith("vv_agent.session.records.")
+            and case["producer"].endswith(".encode"),
+            f"trusted producer: {case['name']}",
+        )
         codec.validate(case["wire"], inbox="record_id" not in case["wire"])
     for case in fixture["rejected_cases"]:
         wire = case_base = accepted[case["base"]]["wire"]
@@ -714,7 +770,7 @@ def validate_content_catalog(
         name: document
         for name, document in documents.items()
         if document.get("historical_contract_version") != "39.0.0"
-        and name != "session_content_catalog.json"
+        and name not in {"session_content_catalog.json", "trusted_storage_s1.json"}
     }
     for node in walk([current_documents, streams]):
         if (
