@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "contract_version": "40.0.0",
-  "status": "pending-adoption",
+  "contract_version": "41.0.0",
+  "status": "in-progress",
   "required_implementations": [
     "python"
   ],
@@ -9,8 +9,8 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "40.0.0",
-      "status": "pending-adoption",
+      "contract_version": "41.0.0",
+      "status": "in-progress",
       "verified_revision": null
     },
     "rust": {
@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v40.0.0 is a forward-only S1 contract: logical record/inbox C fields use ContentRef, policy/usage/tokenizer slots and a separate storage envelope/chain fixture are defined, and key/export lifecycle cases are reserved. A real Python S1 producer capture is recorded in the trusted-storage fixture, but immutable Python revision and central cross-repository adoption evidence remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no compatibility reader, alias or dual format is defined.",
+  "adoption_note": "v41.0.0 is an in-progress W4 behavior allocation on storage S1. L1 bytes remain unchanged; typed session creation bootstrap and pre-turn inbox requirements are L2 only, and the single sk_session cache is recomputed under existing transaction and lease fences. worker_compatibility.json is contract-allocation-only with no producer capture or adoption evidence. Python implementation, immutable revision and full gates remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no DDL migration, second drain, compatibility reader, alias or dual format is defined.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

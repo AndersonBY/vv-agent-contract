@@ -95,9 +95,9 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-40.0.0 with contract-first S1 schema allocation; a real S1 producer/storage
-implementation, immutable publication/lock/snapshot, required Python full gates
-and central adoption are pending.
+41.0.0 with the W4 worker-routing replacement on storage S1. Python implementation,
+real producer capture, immutable publication/lock/snapshot, required full gates and
+central adoption remain in progress.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -226,3 +226,43 @@ propagation, execution-environment adoption, remaining producer/storage work and
 SQLite/PostgreSQL implementation remain later work. This repository contains
 synthetic allocation fixtures, not a Python S1 producer capture or adoption claim.
 See [release notes](release-40.0.0.md).
+
+## 41.0.0 W4 worker routing requirements
+
+This is a major behavior replacement, not an optional compatibility layer. Storage
+remains S1 with the existing set of columns and state machines: there is no DDL
+replacement, second drain, historical decoder, alias or shim. Feature level 1 keeps
+its current bytes and defaults. Level 2 adds a required typed
+`session_created.bootstrap` and required `requirements` on `user`, `follow_up` and
+`model_selection` inbox items. Those fields reject at level 1, and level 2 rejects
+for kinds outside that closed allocation.
+
+The existing `sk_session` routing group is recomputed at creation, turn start,
+input publication and turn end in the same transaction. Active turns use the frozen
+turn requirements plus applied/pending model-selection tags; idle turns use the
+complete queued-plus-ready-pending admission/start order, otherwise bootstrap or
+existing level-1 defaults.
+No active/next row, source sequence/digest copy, profile, registry or new queue is
+introduced. Workers are still filtered by the complete trusted supports catalog;
+the cache first records the trusted static conservative bound from immutable typed
+input and later the exact tags frozen by `turn_started`. Actual requirements must be
+a subset of that bound, use the same handler and not lower the level; overflow keeps
+the immutable bytes unchanged and exposes an unsatisfiable-bound configuration
+error without dispatch, a fabricated terminal or automatic retry. The producer has
+already queued the input before compilation, and existing controls cannot safely
+discard it; correcting the declaration requires a new session. No cancellation,
+supersession or replacement-input protocol is introduced. Understatement is an
+integrity failure checked before epoch or lease grant using the existing raw chain
+and admission proofs.
+Tool identities hash the complete registry-returned OpenAI function object rather
+than its parameters alone. Model identities hash each atomic resolved four-field
+binding and exclude endpoint lists; internal bindings are decomposed and reused
+model tags are deduplicated.
+Worker supports grant execution eligibility only. Authorized S1/level-compatible
+gateway, thin-client and projection readers do not need executor/model/tool supports;
+their existing tenant/Principal/RLS authorization and read-dependency gates remain
+unchanged. No reader registry or second permission protocol is introduced.
+
+`fixtures/worker_compatibility.json` is contract-allocation-only. It has no producer
+capture and is excluded from adoption evidence. Python producer capture and all
+implementation gates remain pending. Rust remains frozen at 23.0.0 / 0.21.x.

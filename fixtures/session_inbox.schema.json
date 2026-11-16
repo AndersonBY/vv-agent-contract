@@ -4,72 +4,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -87,72 +22,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -170,72 +40,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -253,72 +58,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -336,72 +76,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -419,72 +94,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -502,72 +112,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -585,72 +130,7 @@
     {
       "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "payload": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          "$ref": "#/$defs/InboxEnvelope"
         },
         {
           "type": "object",
@@ -668,72 +148,61 @@
     {
       "allOf": [
         {
+          "$ref": "#/$defs/InboxEnvelope"
+        },
+        {
           "type": "object",
-          "additionalProperties": false,
           "properties": {
-            "schema_version": {
-              "const": "S1",
-              "type": "string"
-            },
-            "feature_level": {
-              "const": 1,
-              "type": "integer"
-            },
-            "actor": {
-              "$ref": "#/$defs/Principal"
-            },
-            "admission_proof": {
-              "$ref": "#/$defs/AdmissionProof"
-            },
-            "input_id": {
-              "type": "string",
-              "minLength": 1
-            },
             "kind": {
-              "type": "string"
-            },
-            "target_turn_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generation": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "available_ms": {
-              "type": "integer",
-              "minimum": 0
+              "const": "model_selection"
             },
             "payload": {
-              "type": "object"
+              "$ref": "#/$defs/ModelSelectionPayload"
             }
-          },
-          "required": [
-            "schema_version",
-            "feature_level",
-            "actor",
-            "admission_proof",
-            "input_id",
-            "kind",
-            "target_turn_id",
-            "generation",
-            "available_ms",
-            "payload"
-          ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/InboxEnvelopeLevel2"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "user"
+            },
+            "payload": {
+              "$ref": "#/$defs/ContentPayload"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/InboxEnvelopeLevel2"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "follow_up"
+            },
+            "payload": {
+              "$ref": "#/$defs/ContentPayload"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/InboxEnvelopeLevel2"
         },
         {
           "type": "object",
@@ -1278,7 +747,7 @@
         "budget"
       ]
     },
-    "Requirements": {
+    "SessionRequirements": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -2213,13 +1682,13 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "S1",
-          "type": "string"
-        },
         "feature_level": {
           "const": 1,
           "type": "integer"
+        },
+        "schema_version": {
+          "const": "S1",
+          "type": "string"
         },
         "actor": {
           "$ref": "#/$defs/Principal"
@@ -2265,8 +1734,8 @@
         }
       },
       "required": [
-        "schema_version",
         "feature_level",
+        "schema_version",
         "actor",
         "admission_proof",
         "input_id",
@@ -2277,77 +1746,84 @@
         "payload"
       ]
     },
+    "InboxEnvelopeLevel2": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "feature_level": {
+          "const": 2,
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "S1",
+          "type": "string"
+        },
+        "actor": {
+          "$ref": "#/$defs/Principal"
+        },
+        "admission_proof": {
+          "$ref": "#/$defs/AdmissionProof"
+        },
+        "input_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string"
+        },
+        "target_turn_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generation": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "available_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "type": "object"
+        },
+        "requirements": {
+          "$ref": "#/$defs/SessionRequirements"
+        }
+      },
+      "required": [
+        "feature_level",
+        "schema_version",
+        "actor",
+        "admission_proof",
+        "input_id",
+        "kind",
+        "target_turn_id",
+        "generation",
+        "available_ms",
+        "payload",
+        "requirements"
+      ]
+    },
     "InboxItem": {
       "oneOf": [
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2365,72 +1841,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2448,72 +1859,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2531,72 +1877,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2614,72 +1895,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2697,72 +1913,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2780,72 +1931,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2863,72 +1949,7 @@
         {
           "allOf": [
             {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "payload": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              "$ref": "#/$defs/InboxEnvelope"
             },
             {
               "type": "object",
@@ -2946,72 +1967,61 @@
         {
           "allOf": [
             {
+              "$ref": "#/$defs/InboxEnvelope"
+            },
+            {
               "type": "object",
-              "additionalProperties": false,
               "properties": {
-                "schema_version": {
-                  "const": "S1",
-                  "type": "string"
-                },
-                "feature_level": {
-                  "const": 1,
-                  "type": "integer"
-                },
-                "actor": {
-                  "$ref": "#/$defs/Principal"
-                },
-                "admission_proof": {
-                  "$ref": "#/$defs/AdmissionProof"
-                },
-                "input_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
                 "kind": {
-                  "type": "string"
-                },
-                "target_turn_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "generation": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "available_ms": {
-                  "type": "integer",
-                  "minimum": 0
+                  "const": "model_selection"
                 },
                 "payload": {
-                  "type": "object"
+                  "$ref": "#/$defs/ModelSelectionPayload"
                 }
-              },
-              "required": [
-                "schema_version",
-                "feature_level",
-                "actor",
-                "admission_proof",
-                "input_id",
-                "kind",
-                "target_turn_id",
-                "generation",
-                "available_ms",
-                "payload"
-              ]
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InboxEnvelopeLevel2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "user"
+                },
+                "payload": {
+                  "$ref": "#/$defs/ContentPayload"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InboxEnvelopeLevel2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "follow_up"
+                },
+                "payload": {
+                  "$ref": "#/$defs/ContentPayload"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InboxEnvelopeLevel2"
             },
             {
               "type": "object",

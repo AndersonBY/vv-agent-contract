@@ -51,6 +51,92 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(report["storage_lifecycle_cases"], 11)
         self.assertEqual(report["trusted_negative_cases"], 26)
 
+    def test_feature_level_two_control_fields_are_strict(self) -> None:
+        requirements = {
+            "level": 2,
+            "handler_version": "handler-h1",
+            "capabilities": ["handler-family:demo", "tool:" + "1" * 64],
+        }
+
+        created = self.record("session_created")
+        self.codec.validate(created)
+        self.assertNotIn("bootstrap", created["payload"])
+        l1_with_bootstrap = copy.deepcopy(created)
+        l1_with_bootstrap["payload"]["bootstrap"] = requirements
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(l1_with_bootstrap)
+
+        created_l2 = copy.deepcopy(created)
+        created_l2["feature_level"] = 2
+        created_l2["payload"]["bootstrap"] = requirements
+        self.codec.validate(created_l2)
+        missing_bootstrap = copy.deepcopy(created_l2)
+        del missing_bootstrap["payload"]["bootstrap"]
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(missing_bootstrap)
+
+        inbox = copy.deepcopy(
+            next(
+                vector["wire"]
+                for vector in self.vectors["vectors"]
+                if vector["type"] == "inbox" and vector["wire"]["kind"] == "user"
+            )
+        )
+        self.codec.validate(inbox, inbox=True)
+        l1_with_requirements = copy.deepcopy(inbox)
+        l1_with_requirements["requirements"] = requirements
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(l1_with_requirements, inbox=True)
+
+        for kind in ("user", "follow_up", "model_selection"):
+            vector = copy.deepcopy(
+                next(
+                    item["wire"]
+                    for item in self.vectors["vectors"]
+                    if item["type"] == "inbox" and item["wire"]["kind"] == kind
+                )
+            )
+            vector["feature_level"] = 2
+            vector["requirements"] = requirements
+            with self.subTest(kind=kind):
+                self.codec.validate(vector, inbox=True)
+                missing = copy.deepcopy(vector)
+                del missing["requirements"]
+                with self.assertRaises(session.ValidationError):
+                    self.codec.validate(missing, inbox=True)
+
+        steer = copy.deepcopy(
+            next(
+                item["wire"]
+                for item in self.vectors["vectors"]
+                if item["type"] == "inbox" and item["wire"]["kind"] == "steer"
+            )
+        )
+        steer["feature_level"] = 2
+        steer["requirements"] = requirements
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(steer, inbox=True)
+
+        for target, inbox_value in (
+            (created_l2, False),
+            (l1_with_requirements, True),
+        ):
+            malformed = copy.deepcopy(target)
+            location = malformed if inbox_value else malformed["payload"]
+            control = location["requirements"] if inbox_value else location["bootstrap"]
+            control["capabilities"] = [control["capabilities"][0]] * 2
+            with self.assertRaises(session.ValidationError):
+                self.codec.validate(malformed, inbox=inbox_value)
+            control = copy.deepcopy(requirements)
+            control["unknown"] = True
+            unknown = copy.deepcopy(target)
+            if inbox_value:
+                unknown["requirements"] = control
+            else:
+                unknown["payload"]["bootstrap"] = control
+            with self.assertRaises(session.ValidationError):
+                self.codec.validate(unknown, inbox=inbox_value)
+
 
     def test_trusted_storage_s1_producer_capture(self) -> None:
         fixture = contractctl.load_json(ROOT / "fixtures/trusted_storage_s1.json")

@@ -245,6 +245,9 @@ def requirements() -> dict[str, Any]:
     )
 
 
+BOOTSTRAP_INBOX_KINDS = ("user", "follow_up", "model_selection")
+
+
 def environment_binding() -> dict[str, Any]:
     return nullable(
         obj(
@@ -459,15 +462,17 @@ def inbox_payload_defs() -> dict[str, Any]:
 
 
 def record_payload_defs() -> dict[str, Any]:
+    session_created = {
+        "principal": ref("Principal"),
+        "workspace": ref("ContentRef"),
+        "parent_session_id": NULLABLE_TEXT,
+        "parent_operation_id": NULLABLE_TEXT,
+        "attributes": ref("ContentRef"),
+    }
     return {
-        "SessionCreatedPayload": obj(
-            {
-                "principal": ref("Principal"),
-                "workspace": ref("ContentRef"),
-                "parent_session_id": NULLABLE_TEXT,
-                "parent_operation_id": NULLABLE_TEXT,
-                "attributes": ref("ContentRef"),
-            }
+        "SessionCreatedPayload": obj(session_created),
+        "SessionCreatedPayloadLevel2": obj(
+            {**session_created, "bootstrap": ref("SessionRequirements")}
         ),
         "TurnStartedPayload": obj(
             {
@@ -479,7 +484,7 @@ def record_payload_defs() -> dict[str, Any]:
                 "binding": NULLABLE_TEXT,
                 "generation": NONNEGATIVE,
                 "policy_digest": NULLABLE_HASH,
-                "requirements": ref("Requirements"),
+                "requirements": ref("SessionRequirements"),
                 "tokenizer_binding": ref("TokenizerBinding"),
                 "environment": ref("EnvironmentBinding"),
             }
@@ -670,7 +675,7 @@ def common_defs() -> dict[str, Any]:
         "TokenCounts": token_counts(),
         "BudgetCounts": budget_counts(),
         "UsageCounts": usage_counts(),
-        "Requirements": requirements(),
+        "SessionRequirements": requirements(),
         "EnvironmentBinding": environment_binding(),
         "ResultId": result_id(),
         **inbox_payload_defs(),
@@ -777,6 +782,19 @@ def record_schema() -> dict[str, Any]:
             "payload": {"type": "object"},
         }
     )
+    defs["RecordEnvelopeLevel2"] = obj(
+        {
+            "schema_version": {"const": "S1", "type": "string"},
+            "feature_level": {"const": 2, "type": "integer"},
+            "record_id": TEXT,
+            "kind": {"type": "string"},
+            "session_id": TEXT,
+            "turn_id": NULLABLE_TEXT,
+            "operation_id": NULLABLE_TEXT,
+            "attempt": NULLABLE_POSITIVE,
+            "payload": {"type": "object"},
+        }
+    )
     defs["InboxItem"] = inbox_schema_item(defs)
     defs["Handle"] = handle()
     branches = []
@@ -795,32 +813,49 @@ def record_schema() -> dict[str, Any]:
                 ]
             }
         )
+    branches.append(
+        {
+            "allOf": [
+                ref("RecordEnvelopeLevel2"),
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"const": "session_created"},
+                        "payload": ref("SessionCreatedPayloadLevel2"),
+                    },
+                },
+            ]
+        }
+    )
     return {"$schema": DRAFT, "oneOf": branches, "$defs": defs}
 
 
 def inbox_schema_item(defs: dict[str, Any]) -> dict[str, Any]:
-    envelope = obj(
+    common = {
+        "schema_version": {"const": "S1", "type": "string"},
+        "actor": ref("Principal"),
+        "admission_proof": ref("AdmissionProof"),
+        "input_id": TEXT,
+        "kind": {"type": "string"},
+        "target_turn_id": NULLABLE_TEXT,
+        "generation": nullable(NONNEGATIVE),
+        "available_ms": NONNEGATIVE,
+        "payload": {"type": "object"},
+    }
+    envelope = obj({"feature_level": {"const": 1, "type": "integer"}, **common})
+    level2_envelope = obj(
         {
-            "schema_version": {"const": "S1", "type": "string"},
-            "feature_level": {"const": 1, "type": "integer"},
-            "actor": ref("Principal"),
-            "admission_proof": ref("AdmissionProof"),
-            "input_id": TEXT,
-            "kind": {"type": "string"},
-            "target_turn_id": NULLABLE_TEXT,
-            "generation": nullable(NONNEGATIVE),
-            "available_ms": NONNEGATIVE,
-            "payload": {"type": "object"},
+            "feature_level": {"const": 2, "type": "integer"},
+            **common,
+            "requirements": ref("SessionRequirements"),
         }
     )
-    # Avoid recursive copying: the caller retains this definition and branches
-    # add the discriminator and payload below.
     branches = []
     for kind, payload_name in inbox_kind_map().items():
         branches.append(
             {
                 "allOf": [
-                    envelope,
+                    ref("InboxEnvelope"),
                     {
                         "type": "object",
                         "properties": {
@@ -831,7 +866,23 @@ def inbox_schema_item(defs: dict[str, Any]) -> dict[str, Any]:
                 ]
             }
         )
+    for kind in BOOTSTRAP_INBOX_KINDS:
+        branches.append(
+            {
+                "allOf": [
+                    ref("InboxEnvelopeLevel2"),
+                    {
+                        "type": "object",
+                        "properties": {
+                            "kind": {"const": kind},
+                            "payload": ref(inbox_kind_map()[kind]),
+                        },
+                    },
+                ]
+            }
+        )
     defs["InboxEnvelope"] = envelope
+    defs["InboxEnvelopeLevel2"] = level2_envelope
     return {"oneOf": branches}
 
 
@@ -1106,12 +1157,321 @@ def lifecycle_schema() -> dict[str, Any]:
     }
 
 
+def worker_compatibility_schema() -> dict[str, Any]:
+    tool_schema = obj(
+        {
+            "type": {"const": "function", "type": "string"},
+            "function": obj(
+                {
+                    "name": TEXT,
+                    "description": TEXT,
+                    "parameters": {"type": "object"},
+                    "strict": {"type": "boolean"},
+                }
+            ),
+        }
+    )
+    model_identity_properties = {
+        "backend": TEXT,
+        "model": TEXT,
+        "context_length": NULLABLE_POSITIVE,
+        "max_output_tokens": nullable(NONNEGATIVE),
+    }
+    model_identity = obj(model_identity_properties)
+    model_binding_for_tag = obj(
+        {
+            **model_identity_properties,
+            "endpoints": array(TEXT, unique=True),
+        }
+    )
+    routing_cache = obj(
+        {
+            "level": POSITIVE,
+            "handler_version": NULLABLE_TEXT,
+            "required_capabilities": array(TEXT, unique=True),
+            "active_turn_id": NULLABLE_TEXT,
+        }
+    )
+    scenario = obj(
+        {
+            "name": TEXT,
+            "kind": enum(
+                "tool_visible_subset",
+                "tool_tag_mismatch",
+                "active_model_union",
+                "active_unsupported_model",
+                "active_supported_model",
+                "bootstrap_family",
+                "selection_handler_mismatch",
+                "cache_understatement",
+            ),
+            "phase": enum("bootstrap", "idle", "active"),
+            "active_handler_version": NULLABLE_TEXT,
+            "input_handler_version": NULLABLE_TEXT,
+            "bootstrap_handler_version": NULLABLE_TEXT,
+            "active_requirements": nullable(ref("SessionRequirements")),
+            "input_requirements": ref("SessionRequirements"),
+            "supports": array(TEXT, unique=True),
+            "cache_before": nullable(ref("RoutingCache")),
+            "expected_cache": ref("RoutingCache"),
+            "expected_action": enum(
+                "grant_lease",
+                "reject_unroutable",
+                "reject_publication",
+                "reject_ledger_integrity",
+            ),
+            "expected_compatible": {"type": "boolean"},
+            "content_hydrated": {"type": "boolean"},
+            "epoch_granted": {"type": "boolean"},
+        }
+    )
+    admission_candidate = obj(
+        {
+            "input_id": TEXT,
+            "kind": enum("user", "follow_up", "model_selection"),
+            "input_seq": POSITIVE,
+            "ready": {"type": "boolean"},
+            "target_turn_id": NULLABLE_TEXT,
+            "requirements": ref("SessionRequirements"),
+        }
+    )
+    admission_order_case = obj(
+        {
+            "name": TEXT,
+            "queued_inputs": array(admission_candidate),
+            "ready_pending_inputs": array(admission_candidate),
+            "expected_apply_order": array(TEXT),
+            "expected_turn_start_order": array(TEXT),
+            "current_worker_supports": array(TEXT, unique=True),
+            "expected_cache": ref("RoutingCache"),
+            "expected_worker_disposition": enum("defer_to_compatible_worker"),
+            "content_hydrated": {"const": False, "type": "boolean"},
+        }
+    )
+    capability_bound_case = obj(
+        {
+            "name": TEXT,
+            "input_id": TEXT,
+            "trusted_static_sources": array(
+                enum(
+                    "handler",
+                    "model",
+                    "base-tools",
+                    "dynamic-potential-tools",
+                    "custom-factory-declaration",
+                ),
+                unique=True,
+            ),
+            "pre_admission_requirements": ref("SessionRequirements"),
+            "actual_turn_started_requirements": ref("SessionRequirements"),
+            "pre_admission_work": obj(
+                {
+                    "compile_invocations": NONNEGATIVE,
+                    "guardrail_invocations": NONNEGATIVE,
+                    "instruction_resolution_invocations": NONNEGATIVE,
+                    "context_provider_invocations": NONNEGATIVE,
+                }
+            ),
+            "turn_start_work": obj(
+                {
+                    "compile_invocations": NONNEGATIVE,
+                    "guardrail_invocations": NONNEGATIVE,
+                    "instruction_resolution_invocations": NONNEGATIVE,
+                    "context_provider_invocations": NONNEGATIVE,
+                }
+            ),
+            "expected_capability_relation": enum("subset", "exceeds"),
+            "expected_action": enum(
+                "route_after_turn_start",
+                "fail_unsatisfiable_bound_configuration",
+            ),
+            "dispatch_started": {"type": "boolean"},
+            "terminal_recorded": {"type": "boolean"},
+            "input_bytes_mutated": {"type": "boolean"},
+            "opaque_content_used_as_control": {"type": "boolean"},
+            "bound_failure": nullable(
+                obj(
+                    {
+                        "configuration_error_exposed": {"type": "boolean"},
+                        "input_already_queued": {"type": "boolean"},
+                        "safe_discard_available": {"type": "boolean"},
+                        "requires_new_session": {"type": "boolean"},
+                        "replacement_input_published": {"type": "boolean"},
+                        "cancel_or_supersede_protocol_added": {
+                            "type": "boolean"
+                        },
+                        "automatic_retry_started": {"type": "boolean"},
+                    }
+                )
+            ),
+        }
+    )
+    model_tag_case = obj(
+        {
+            "name": TEXT,
+            "bindings": array(
+                obj(
+                    {
+                        "purpose": TEXT,
+                        "binding": ref("ModelBindingForTag"),
+                    }
+                )
+            ),
+            "expected_tags": array(
+                {"type": "string", "pattern": "^model:[0-9a-f]{64}$"}
+            ),
+        }
+    )
+    return {
+        "$schema": DRAFT,
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "schema_version": {"const": "vv-agent.worker-compatibility.v1"},
+            "contract_version": {"const": "41.0.0"},
+            "status": {"const": "contract-allocation-only"},
+            "provenance": obj(
+                {
+                    "producer_capture": {"const": False, "type": "boolean"},
+                    "capture": {"const": "none", "type": "string"},
+                    "adoption_evidence": {"const": False, "type": "boolean"},
+                    "note": TEXT,
+                }
+            ),
+            "allocation": obj(
+                {
+                    "bootstrap_source": {
+                        "const": "trusted-session-creation",
+                        "type": "string",
+                    },
+                    "tool_requirements": {
+                        "const": "trusted-static-conservative-bound",
+                        "type": "string",
+                    },
+                    "turn_started_requirements": {
+                        "const": "compiled-definition-exact-visible-subset",
+                        "type": "string",
+                    },
+                    "tool_supports": {
+                        "const": "trusted-complete-catalog",
+                        "type": "string",
+                    },
+                    "model_source": {
+                        "const": "trusted-resolved-model-binding",
+                        "type": "string",
+                    },
+                    "cache": {
+                        "const": "active-turn-or-combined-idle-admission-order",
+                        "type": "string",
+                    },
+                    "cache_verification": {
+                        "const": "raw-chain-and-input-proof-before-epoch",
+                        "type": "string",
+                    },
+                }
+            ),
+            "tagging": obj(
+                {
+                    "tool_fields": {
+                        "type": "array",
+                        "items": enum("name", "schema", "metadata"),
+                        "uniqueItems": True,
+                    },
+                    "tool_identity": {
+                        "const": "SHA256(JCS({name,schema,metadata}))",
+                        "type": "string",
+                    },
+                    "model_fields": {
+                        "type": "array",
+                        "items": enum(
+                            "backend",
+                            "model",
+                            "context_length",
+                            "max_output_tokens",
+                        ),
+                        "uniqueItems": True,
+                    },
+                    "model_excluded_fields": {
+                        "type": "array",
+                        "items": enum(
+                            "endpoints",
+                            "internal",
+                            "route",
+                            "credentials",
+                        ),
+                        "uniqueItems": True,
+                    },
+                    "model_identity": {
+                        "const": "SHA256(JCS({backend,model,context_length,max_output_tokens}))",
+                        "type": "string",
+                    },
+                    "tool_prefix": {"const": "tool:", "type": "string"},
+                    "model_prefix": {"const": "model:", "type": "string"},
+                }
+            ),
+            "trusted_catalog": obj(
+                {
+                    "tools": array(
+                        obj(
+                            {
+                                "name": TEXT,
+                                "schema": ref("ToolSchema"),
+                                "metadata": {"type": "object"},
+                                "tag": {
+                                    "type": "string",
+                                    "pattern": "^tool:[0-9a-f]{64}$",
+                                },
+                            }
+                        )
+                    ),
+                    "models": array(
+                        obj(
+                            {
+                                "identity": ref("ModelIdentity"),
+                                "tag": {
+                                    "type": "string",
+                                    "pattern": "^model:[0-9a-f]{64}$",
+                                },
+                            }
+                        )
+                    ),
+                }
+            ),
+            "cases": array(scenario),
+            "admission_order_cases": array(admission_order_case),
+            "capability_bound_cases": array(capability_bound_case),
+            "model_tag_cases": array(model_tag_case),
+        },
+        "required": [
+            "schema_version",
+            "contract_version",
+            "status",
+            "provenance",
+            "allocation",
+            "tagging",
+            "trusted_catalog",
+            "cases",
+            "admission_order_cases",
+            "capability_bound_cases",
+            "model_tag_cases",
+        ],
+        "$defs": {
+            "SessionRequirements": requirements(),
+            "RoutingCache": routing_cache,
+            "ToolSchema": tool_schema,
+            "ModelIdentity": model_identity,
+            "ModelBindingForTag": model_binding_for_tag,
+        },
+    }
+
+
 def rendered() -> dict[Path, dict[str, Any]]:
     return {
         FIXTURES / "session_record.schema.json": record_schema(),
         FIXTURES / "session_inbox.schema.json": inbox_schema(),
         FIXTURES / "session_storage_envelope.schema.json": storage_envelope_schema(),
         FIXTURES / "session_storage_lifecycle.schema.json": lifecycle_schema(),
+        FIXTURES / "worker_compatibility.schema.json": worker_compatibility_schema(),
     }
 
 

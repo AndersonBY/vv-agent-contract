@@ -1,6 +1,6 @@
 # Session kernel
 
-Contract 40.0.0 defines one execution authority: the ordered session log and inbox.
+Contract 41.0.0 defines one execution authority: the ordered session log and inbox.
 MUST, MUST NOT and SHOULD are normative. Logical bytes, admission, authenticity,
 fencing and delivery are public requirements. SQL tables, DDL, Redis keys, store
 constructors, method signatures, connection ownership and thread layout are out of
@@ -26,8 +26,8 @@ and array elements are not implicitly normalized, trimmed, sorted or deduplicate
 
 | Envelope | Required fields (no other fields) |
 | --- | --- |
-| Record | `schema_version:string const "S1"`, `feature_level:integer const 1`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload` closed by kind |
-| InboxItem | `schema_version:string const "S1"`, `feature_level:integer const 1`, `actor:Principal`, `admission_proof:proof\|null`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, `payload:J` selected by kind |
+| Record | `schema_version:string const "S1"`, `feature_level:integer 1\|2`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload` closed by kind |
+| InboxItem | `schema_version:string const "S1"`, `feature_level:integer 1\|2`, `actor:Principal`, `admission_proof:proof\|null`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, optional `requirements:SessionRequirements`, `payload:J` selected by kind |
 
 The logical record has no top-level sequence, receiving time, record digest, chain
 digest, commit identity or writer epoch. Storage supplies ordered positions,
@@ -35,6 +35,13 @@ record/integrity digests and the chain envelope separately; `chain_digest` is no
 part of logical record bytes or record identity. `op_started.payload.epoch` is
 retained dispatch evidence, not the omitted storage-envelope writer epoch.
 Nullable fields MUST be present.
+Feature level 1 is the unchanged current level-1 byte and behavior shape: it has
+no `session_created.bootstrap` and no `InboxItem.requirements`, and either added
+field at level 1 rejects. Level 2 is allocated only for `session_created` with its
+required `bootstrap`, and for `user`, `follow_up` and `model_selection` with their
+required `requirements`. A level-2 shape for any other record or inbox kind, or a
+level-2 control item missing its field, rejects. Existing level-1 fixtures and
+producer bytes remain readable without inserting defaults into the logical value.
 `operation_id` and `attempt` MUST both be non-null exactly for `op_*` records and
 null otherwise. `session_created.turn_id` MUST be null. All other record kinds
 require a turn except `input_applied` and `usage_observed`, which permit null.
@@ -43,7 +50,7 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 
 | Kind | Closed payload fields |
 | --- | --- |
-| `session_created` | `principal:Principal`, `workspace:C`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:C` |
+| `session_created` | `principal:Principal`, `workspace:C`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:C`; level 2 also requires `bootstrap:SessionRequirements` |
 | `turn_started` | `input_ids:[T]`, `definition:C`, `definition_digest:H`, `handler_version:T`, `budget:C`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `tokenizer_binding:TokenizerBinding\|null`, `environment:EnvironmentBinding\|null` |
 | `input_applied` | `input:InboxItem`, `input_digest:H`, `input_proof:InputProof\|null`, `disposition:applied/rejected/noop/queued`, `reason:C\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, optional `model_binding:C` |
 | `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:C`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:C\|null`, `idempotency_key:T\|null`, `budget_admission:C`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]`, `policy_decision:PolicyDecision\|null` |
@@ -255,8 +262,43 @@ base64; an empty or noncanonical value rejects. Signed deployment configuration
 cannot downgrade a missing proof to unsigned mode.
 
 `SessionRequirements` is closed `{level:P,handler_version:T|null,capabilities:[T]}`.
-The initial level is 1. Host bootstrap may use a null handler; capability IDs are
-opaque, sorted and duplicate-free with no wildcard or numeric ordering.
+The initial level is 1. At level 2 it is the typed control value for
+`session_created.bootstrap` and for the three pre-turn inbox kinds. Missing level-1
+control fields retain the existing default behavior: no bootstrap requirements and
+the runtime's existing level-1 cache default. No default field is materialized in
+old logical bytes, and the `definition.digest` input is unchanged.
+
+Capability IDs are opaque, sorted and duplicate-free with no wildcard or numeric
+ordering. User content, opaque creation or task attributes, executor class names
+and agent names MUST NOT supply or override these values. A non-null trusted
+`handler_version` identifies the handler family directly. A null bootstrap handler
+is permitted only when the host's trusted bootstrap declares an explicit family
+capability in `capabilities`; absence of that capability rejects before routing.
+The runtime's trusted configuration supplies the declared value. It MUST NOT infer
+it from opaque attributes or prompt content.
+
+Level-2 `user`, `follow_up` and `model_selection` requirements are a pre-admission
+capability bound published in the same transaction as the inbox item. They come
+from trusted static declarations and already-frozen handler/model configuration:
+the configured base tools, all potential dynamic tools that may become model-visible
+for that turn, and any explicit trusted host declaration for a custom factory whose
+candidates cannot be enumerated without side effects. A bound MUST cover every tool
+that the eventual turn can enable, and MAY include tools that the compiled turn does
+not use. The publisher MUST NOT run compile to make the bound precise.
+
+`turn_started.requirements` is separate and exact: after the normal single turn
+compile, its stable tags describe the actual model-visible tool subset in the frozen
+definition. The tools metadata map and whole-tool-set digest remain invalid
+substitutes. The actual set MUST be a subset of the pre-admission bound; capabilities
+MUST NOT be lowered in level, and a non-null handler MUST equal the bound handler.
+The clear frozen definition remains in `turn_started.definition`; opaque C content
+cannot carry or override either control value.
+
+`model_selection.requirements` contains model tags only and its non-null handler
+MUST equal the current routing handler (the active turn handler, or the idle cache
+handler); a different handler rejects publication before the input is stored.
+`steer`, provider/result evidence, control and other
+inbox kinds remain level 1 and do not add a control requirement.
 `turn_started.tokenizer_binding` is null or closed
 `{model_identity:T,counting_method:provider_reported|tokenizer,implementation_id:T,
 asset_identity:T,normalization_id:T}`. A replayable counting capability freezes this
@@ -322,6 +364,154 @@ Request metadata has one closed `vv_session` object with optional
 Opaque surrounding metadata cannot override canonical fields. `op_completed.usage`
 contains measurements only; its separate required-nullable `shared_state` retains
 JSON state. Other explicitly opaque J/V locations keep their content boundaries.
+
+## Worker requirements and routing cache
+
+Stable capability tags replace whole-tool-set identities:
+
+```text
+tool:<lowerhex SHA256(RFC8785_JCS({name,schema,metadata}))>
+model:<lowerhex SHA256(RFC8785_JCS({backend,model,context_length,max_output_tokens}))>
+```
+
+`schema` is the complete normalized OpenAI function tool object returned by
+`ToolRegistry.get_schema`/`list_openai_schemas`: outer `{type:"function",function}`
+with the actual `function.name`, `description`, `parameters`, `strict` and any
+provider-supported function fields. The `name` member of the tag fact MUST equal
+`schema.function.name`. A parameters schema alone is not the tool schema and
+produces a different tag. `metadata` is normalized `ToolMetadata.to_dict()`, or
+`{}` when absent. A pre-admission bound contains tags
+for the configured base tools and the trusted host-declared potential dynamic/tool
+factory set. It is deliberately conservative and is not an enumeration of all 2^n
+runtime subsets. `definition.capabilities` is a tool-name-to-metadata lookup and is
+never itself a capability list.
+
+The exact `turn_started.requirements` tool tags are computed only from the
+model-visible subset in the actual compiled definition. Hosts MUST derive the bound
+from trusted static declarations without running input guardrails,
+`is_enabled` callbacks, instruction resolution, context providers, file reads or any
+other compile effect. When a custom factory cannot be enumerated without those
+effects, the existing trusted host configuration declares its complete potential
+capability bound explicitly; the implementation MUST NOT infer it from runtime
+class, agent name or opaque attributes.
+
+A worker's supports are computed from the trusted complete tool registry, including
+host-declared dynamic agent tools, plus its trusted model configuration. Extra
+catalog tools do not make a worker incompatible. A schema or normalized metadata
+change produces a different tag.
+
+Tool, model and handler supports are execution capabilities. They are not tenant
+content-read authorization and MUST NOT become a generic record, inbox, projection,
+replay or consumer-ACK gate. Tenant identity, Principal checks, RLS and content-label
+authorization retain their existing rules unchanged. After those checks, an
+authenticated thin client, gateway or projection consumer may read and decode the
+current S1 records and inbox values it is authorized to access even when its host
+has no executor, model or tool capability tags.
+
+Such a reader still validates the S1 discriminator, its reader format level against
+the record/feature level, and the existing chain, input-proof, cursor or projection
+read dependencies before decoding or projecting. An unknown/future feature level
+rejects before unsafe decode; a level-1-only reader cannot project a level-2 value.
+Those format and dependency checks are distinct from worker support. A projection
+read acquires no execution lease and grants no claim, drive or dispatch authority.
+
+An execution worker claiming or driving a session MUST still fully match the current
+routing cache before it reads run bodies for execution: level, handler, pre-admission
+bound, active actual requirements and applicable model-selection tags. Worker
+acceptance is therefore an execution-side condition, never a requirement imposed on
+every store reader. This boundary adds no reader registry, read capability field or
+alternate permission protocol; implementation wiring MUST remove generic-read use of
+worker acceptance while preserving the existing tenant/Principal/RLS controls.
+
+The model tag fact is the exact four-field atomic resolved model identity
+`{backend,model,context_length,max_output_tokens}`. All four members are present,
+including explicit null capacity limits. Resolved `model_binding.endpoints` is
+removed before identity and endpoint order therefore does not affect the tag.
+Route, credentials and other host-routing data are not tag inputs. A capacity
+change produces a new tag.
+
+When frozen `definition.model_binding` contains `internal`, the primary binding and
+each internal purpose binding are separate atomic model capabilities. Hash each
+binding with the same four-field identity; never hash the `internal` object as one
+model tag. Reusing the same binding across primary/internal purposes emits one
+deduplicated capability tag in the requirements set. A logged `model_selection`
+remains the effective application source; its requirements carry the same trusted
+atomic tag so routing can be checked structurally. Supports come from trusted model
+configuration/catalog. No executor identity is guessed from a runtime class, agent
+name or opaque metadata.
+
+The only persisted routing cache is the existing `sk_session` group
+`{level,handler_version,required_capabilities,active_turn_id}`. It is derived, not
+another execution authority, and adds no active/next row, source sequence/digest
+copy, profile object, registry or SQL major. Recompute it under the session row lock:
+
+| Boundary | Expected cache |
+| --- | --- |
+| Session creation | Copy the trusted level-2 `session_created.bootstrap` initially, or retain existing level-1 defaults when absent. |
+| Turn start | Compile normally once. Before committing `turn_started`, verify the actual requirements are a capability subset of the pre-admission bound, use the same non-null handler and do not lower the level. On success commit the exact actual requirements and `active_turn_id` in that transaction; on failure start no dispatch and record no fabricated terminal. |
+| Input publication, idle | Derive the next route from both existing queued inputs and currently ready pending `user`/`follow_up`/`model_selection` inputs using the complete `apply_input` then `start_turn` order below, then apply effective model-selection model tags. With no eligible input, use bootstrap or the existing level-1 default. |
+| Input publication, active | Keep the active handler and all initial turn requirements. Union model tags from valid applied and pending `model_selection` inputs for this turn. User/follow-up requirements stay pending and do not replace the active route. |
+| Turn end | Commit `turn_ended` and recompute the idle cache from the same combined queued-plus-ready-pending derivation, otherwise bootstrap or the level-1 default, in the same transaction. |
+
+Idle routing simulation has two phases. First, process currently ready pending
+inputs in `peek_inbox` `input_seq` order with `apply_input`, repeating until no
+input can be applied. Each applied `user` or `follow_up` becomes queued using its
+typed `requirements`; a `model_selection` follows its existing position and the
+existing pending-batch rule. Only then, sort all queued but unadmitted new-turn
+inputs with `start_turn`'s stable key `kind == "follow_up"`: users precede
+follow-ups while application order is retained within each kind. Therefore an
+existing queued follow-up does not win merely because it is already queued. If an
+h2 follow-up is queued and a later ready h3 user is published, the cache must route
+for h3; the producer first admits h3 as queued across the normal `step()` calls,
+then `start_turn` selects h3 before h2. A cache derived only from the old queued
+row is invalid.
+
+The same derivation uses only inbox order, target/generation metadata and typed
+requirements for this routing decision. It MUST NOT hydrate a pending user or
+model-selection body to decide worker support. If the current worker lacks a ready
+pending item's requirements, it leaves that item pending and does not claim merely
+to process an older queued row; a compatible worker performs the existing
+application. Model selections cannot be moved ahead of or behind their existing
+pending application position.
+
+The relation at turn start is `actual_required ⊆ pre_admission_bound`, never the
+reverse. Input publication and worker routing use the bound and MUST NOT invoke
+compile, guardrails, `is_enabled`, instruction resolution, context providers or
+file reads to make it exact. The selected worker then performs the normal compile
+once. If the resulting actual tags exceed the bound, handler differs or level is
+lower, it MUST NOT dispatch or fabricate a terminal record. It releases the claim
+and exposes a clear unsatisfiable pre-admission-bound configuration error, then
+stops without an automatic retry. The existing producer has already recorded the
+input as `queued` before `start_turn` compiles it, and the current control surface
+cannot safely discard that queued item: cancel/abort require a turn while
+close/archive do not supersede one input. The original inbox bytes MUST remain
+immutable, and publishing another input does not remove the queued item or its
+place in the normal apply-to-exhaustion and stable `start_turn` order. With the
+current flow, correcting the trusted declaration therefore requires a new session.
+Hosts MUST NOT describe a replacement input as recovering this session, replace
+the cache with an unproved value, or treat the cache as a second ledger.
+Recompiling the same input merely to discover a different answer, an automatic
+retry loop, and a new cancel, supersede, input-discard or replacement-input
+protocol are prohibited.
+
+Active selection retains the old model tag while an old-model batch can still be
+queried and adds the new model tag through the existing model-selection boundary.
+It is effective in the current turn at that boundary, not merely in a later turn.
+A worker supporting both models may finish the old batch and apply the selection; a
+worker lacking either tag cannot decode/apply the selection or dispatch against it.
+A handler mismatch rejects publication. There is no second user queue and no
+change to model-selection replay, pending-batch delay or target rules.
+
+Before incrementing the writer epoch or granting/renewing an execution lease, under
+the session lock, the host validates existing raw record chain/checkpoints and inbox
+admission/input proofs and reads their structural requirements. It then recomputes
+the expected four-column cache. No C body hydration is needed or permitted to make
+this routing decision. A cache that understates the required handler, tool or model
+tags fails integrity before support filtering and before any epoch/lease grant.
+Only after that proof does the trusted full support set route the requester. A later
+hydrated definition or selection is still validated by its own typed reader; the
+cache is not a substitute for that validation. Existing signatures and chain are
+the source proof; no second digest/source state is copied into the cache.
 
 ## Admission and authority
 

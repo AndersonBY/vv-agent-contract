@@ -1,5 +1,49 @@
 # Changelog
 
+## 41.0.0 — unreleased — W4 worker routing requirements
+
+This major replaces worker routing behavior while retaining storage S1 and its
+existing columns/state machines. Level 1 bytes and defaults remain unchanged.
+Level 2 adds a required typed `session_created.bootstrap` and required
+`InboxItem.requirements` for `user`, `follow_up` and `model_selection`; the new
+fields reject at level 1 and level 2 rejects for any other kind. The bootstrap and
+pre-turn requirements are trusted static capability bounds derived from frozen
+configuration, including host declarations for custom factories, rather than
+opaque content, `definition.capabilities` or pre-admission compile effects.
+
+The single `sk_session` cache is recomputed atomically at creation, turn start,
+input publication and turn end. Active turns retain the initial requirements and
+union applied/pending model-selection model tags until turn end; idle turns process
+both queued inputs and ready pending inputs through the existing apply-to-exhaustion
+then stable start order, then bootstrap or level-1 defaults. Tool tags
+cover `{name,schema,metadata}` for the conservative pre-admission bound and the
+exact subset later frozen by `turn_started`; `schema` is the complete OpenAI
+function object from the registry, including its function description and strict
+flag. Model tags hash each atomic resolved binding's backend, model and nullable
+capacity limits, excluding endpoints and never hashing `internal` as one model.
+Workers advertise the complete trusted registry and model configuration. Actual
+requirements must be a subset of
+the bound with the same handler and no lower level; overflow leaves the immutable
+input bytes unchanged and exposes an unsatisfiable-bound configuration error
+without dispatch, a fabricated terminal or automatic retry. The current producer
+has already queued the input before compilation, and the existing control surface
+cannot safely discard it; correcting the declaration therefore requires a new
+session. No cancellation, supersession or replacement-input protocol is added.
+Cache understatement is
+checked against existing raw chain and admission proofs before epoch/lease grant.
+Tool/model/handler supports remain execution capabilities: an authorized gateway,
+thin client or projection consumer with the matching S1 format level may decode and
+project records without executor supports, while claim/drive still requires the full
+worker match. Reader authorization continues to use the existing tenant, Principal,
+RLS and content-label rules.
+No active/next state, copied source digest, profile framework, DDL replacement,
+second drain, compatibility reader or shim is introduced. Existing immediate model
+selection, pending-batch delay, target and replay semantics remain unchanged.
+
+`fixtures/worker_compatibility.json` is marked `contract-allocation-only`, has no
+producer capture and does not count as adoption. Python implementation and real
+capture are pending. Rust remains frozen at contract 23.0.0 / package series 0.21.x.
+
 ## 40.0.0 — unreleased — trusted storage S1 schema allocation
 
 This major replaces the current session storage discriminators with logical and SQL
