@@ -59,6 +59,18 @@ verified retained records authorize terminal notifications. Callback defects mus
 escape through the host's existing error boundary; an admission ACK already
 attempted MUST NOT cause a second RPC response on later failure.
 
+A retained provider-query failure is scoped to the original session, turn,
+operation and attempt. Its fence MUST NOT be rebound to a later healthy wait,
+including another wait in the same turn. Input admission alone is not permission
+to retry the failed query: inputs still pass through the core's typed readers
+and authentication while the original query remains fenced. Unrelated input
+consumption or head growth MUST NOT clear that fence. Both execution and pure
+observation paths MUST reconcile it against the retained original wait; another
+worker's definitive completion, cancellation or terminal turn can resolve the
+old error without a local execution claim. A new failing operation has its own
+error identity and notification acknowledgement. Retained records remain the
+sole authority for business terminals.
+
 Tool completions use the bounded [tool result projection](tool-results.md).
 Raw result bodies and private resource locators MUST NOT travel in the
 `tool_result` diagnostic. Reprojection changes event bytes under stable IDs;
