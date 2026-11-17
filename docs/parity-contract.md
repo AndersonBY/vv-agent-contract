@@ -278,7 +278,7 @@ cross-repository CI. Frozen Rust evidence remains scoped to its pinned release.
 Publishing is pending adoption until those gates pass; see
 [change workflow](change-workflow.md) and [version policy](versioning-policy.md).
 
-Completed-boundary App Server forks follow [session kernel](session-kernel.md#app-server-completed-boundary-forks-301). Python maps the typed request to AppServerClient.fork_thread. Artifact references reuse or populate the existing immutable backend through host bindings.
+Completed-boundary App Server forks follow [session kernel](session-kernel.md#app-server-completed-boundary-forks). Python maps the typed request to AppServerClient.fork_thread. Artifact references reuse or populate the existing immutable backend through host bindings.
 
 Typed user interactions, free-text labeling, strict target/answer validation, and the public heartbeat-stop signal follow [interactions](interactions.md). Child messages are steering rather than implicit human answers.
 
@@ -289,8 +289,10 @@ suffix across compaction, hooks and replay. See [the normative rule](unseen-inpu
 
 Yieldable observations follow [yieldable waits](yieldable-waits.md), including
 the optional closed record fields, default results, atomic steering, ordering
-and audit-only late provider receipts. This release implements SQL kernel yielding
-and L1; local App Server, Interactive and Runner accept declarations but do not
-yield. Hosts exclusively own shared raw connections; concurrent native
-transactions are unsupported and detection is not promised. L2–L5 remain unfixed.
-Frozen Rust does not support yielding.
+and audit-only late provider receipts. Current S1/W4 defines SQL kernel yielding;
+lease safety comes from database owner/epoch/expiry fencing rather than the
+historical L1 process-lock ordering. Declared local App Server, Interactive and
+Runner entry points MUST use the same core W4 worker path. Producer capture and
+Python adoption remain governed by the support matrix. Hosts exclusively own
+shared raw connections; concurrent native transactions are unsupported and
+detection is not promised. Frozen Rust does not support yielding.

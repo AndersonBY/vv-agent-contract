@@ -250,11 +250,13 @@ mapping MUST retain `provider_result_invalid`; rejected model selections MUST
 retain `model_selection_unresolvable`. Execution, admission and retry behavior
 are unchanged. Opaque customer content is not rewritten.
 
-This is a public diagnostic replacement, not a persistence boundary. Record
-schema 1, inbox schema 3, SQL layouts, canonical IDs/digests, existing stored
-bytes, RunEvent v6, App Server v5 and the public API inventory remain unchanged.
-No data migration, store drain, historical decoder or compatibility mode is
-introduced. See [39.0.0 release notes](release-39.0.0.md).
+This is a public diagnostic replacement, not a persistence boundary. Release 39
+recorded the replacement against the then-current record 1 / inbox 3 formats while
+leaving SQL layouts, canonical IDs/digests, stored bytes, RunEvent v6, App Server
+v5 and the public API inventory unchanged. Those format references are release
+history. Current Contract 41 uses the S1 formats above and rejects record 1 /
+inbox 3 without conversion or compatibility mode. See
+[39.0.0 release notes](release-39.0.0.md).
 
 
 ## S1 storage allocation
@@ -800,7 +802,8 @@ descriptor used by items and event replay.
 
 ### Status
 
-AppThread.status, thread/status and thread/status/changed use one projection:
+The current App Server v5 AppThread.status, thread/status and thread/status/changed
+use one projection:
 idle, running, provider_running, child_running, user_wait, approval_wait,
 retry_backoff, suspended, terminal, archived, closed. Terminal means the last
 turn ended and there is no queued next turn; idle means no turn yet.
@@ -834,7 +837,8 @@ The frozen model with empty route always reuses its frozen client/config before
 any host hook. CLI and interactive use the same default provider resolver through
 SessionDriver; the App Server additionally binds its host hook.
 Primary call usage and billing identify the actual retained model/backend.
-Record schema 1, inbox schema 3 and SQL schemas are unchanged.
+This resolver behavior uses the current S1 record and inbox envelopes and
+introduces no SQL layout migration or store boundary.
 
 Schema export is self-contained and strict. jsonSchema values are JSON strings;
 current JSON/TypeScript bundle names are listed in app_server_observable.json.
@@ -871,12 +875,11 @@ metadata.vv_session.model_binding. Resolution and execution use that retained
 logical model; changing endpoint IDs MUST NOT cause binding drift.
 
 Runtime definitions MUST exclude endpoint IDs, including internal model routes.
-New definitions retain both model limits. Existing definitions containing
-endpoints MUST remain readable with record schema 1 and inbox schema 3. When
-checking an existing definition, use its recorded endpoint fields only to
-reproduce its original digest; they MUST NOT be compared with current routing.
-Limits absent from those definitions cannot be checked retroactively. All other
-recorded definition fields and the stored digest remain authoritative.
+Current S1 definitions retain both model limits and reject endpoint-bearing model
+bindings as unknown fields. Endpoint IDs in `op_started.endpoint_id`, request
+`endpoint_order` and retained `input_applied.model_binding` are routing evidence;
+they MUST NOT be treated as runtime-definition fields or compared as model
+identity.
 
 Every new model plan MUST resolve the current client for its purpose. Primary
 plans, including retained selections, use the runtime resolver. Compaction,
@@ -914,7 +917,7 @@ Canonical evidence: `session_semantics.json` case
 `session_invalid.json` and `app_server_protocol.json`.
 
 
-### App Server context management (v4)
+### App Server context management
 
 `thread/context/read` is a pure projection. It MUST NOT acquire a lease, drive,
 write, acknowledge inputs or call a provider. It returns a SHA-256 contextVersion
@@ -989,7 +992,7 @@ Null means the catalog does not know; false and [] mean known unsupported.
 Never infer support from a model name or provider name. Selection remains only
 thread/model/select.
 
-### App Server completed-boundary forks (30.1)
+### App Server completed-boundary forks
 
 `thread/fork` requires threadId and stable forkId (the client-ID grammar).
 Optional throughTurnId and beforeTurnId are mutually exclusive nonempty turn IDs.
@@ -1047,12 +1050,14 @@ reuses the winning bytes after verification. A failed session creation may leave
 only reusable immutable artifact bytes; it never leaves a partial session. It never copies business
 files, snapshots a directory, or creates a worktree. Source artifact retention is
 host-owned and must include surviving forks. Source and fork then admit independent
-turns. Record schema 1, inbox schema 3, SQL schemas and App Server v4 stay unchanged.
+turns. This uses current App Server protocolVersion v5 and the S1 record and inbox
+envelopes, with no SQL layout migration, store boundary or parallel session format.
 
 
 Typed user answers and free-text host replies follow [interactions](interactions.md).
-They reuse the current JSON content extension, record 1, inbox 3 and RunEvent v6;
-no SQL or session store boundary is introduced. Hosts may catch the public
+They use the current JSON content extension, App Server v5, RunEvent v6 and S1
+record and inbox envelopes; no SQL layout migration or new store boundary is
+introduced. Hosts may catch the public
 heartbeat-stopped signal before lease-loss errors when intentionally stopping a
 renewal worker; it never certifies ownership for further execution.
 
@@ -1063,16 +1068,20 @@ suffix across compaction, hooks and replay. See [the normative rule](unseen-inpu
 
 ## Yieldable waits
 
-Contract 38.0.0 adds optional `yield_on_steer`, `yieldable_children` park fields
-and `yielded_by` completion evidence. The complete normative rule, including
-atomicity, ordering, callbacks and late work, is [yieldable waits](yieldable-waits.md).
+Contract 38.0.0 introduced the optional `yield_on_steer`, `yieldable_children`
+park fields and `yielded_by` completion evidence. Current Contract 41 applies them
+to S1/W4. The complete normative rule, including atomicity, ordering, callbacks and
+late work, is [yieldable waits](yieldable-waits.md).
 
 ## L1 lease lock ordering
 
-Lease renewal serializes the snapshot, renewal and lease publication under one
-renewal lock. It MUST release the lease-value lock during database I/O and MUST
-NOT acquire the commit lock while renewing. A synchronous poll while the same
-thread owns this latch's commit or renewal lock MUST fail before connection I/O;
-the ownership marker covers acquisition through release, including reentry
-windows and exception cleanup. Other latches and threads remain independent.
-This rule does not add connection ownership or native transaction concurrency.
+The heading preserves the historical Contract 38 anchor. Its process-local
+renewal lock, lease-value lock, commit lock and same-thread reentry exception are
+replaced by current S1/W4 rules and are not current correctness requirements.
+Under W4, one process-level LeaseKeeper thread uses its own connection to renew
+only lease rows. The worker coordinator and its single bounded drive slot each use
+their own store/connection. Session writes commit only when the transaction has
+verified the database lease owner, epoch and unexpired deadline; a renewal affects
+liveness, while that database fence prevents a stale owner from writing. Hosts
+still exclusively own the shared raw connection for atomic admission; the SDK
+does not promise concurrent native transactions on that connection.

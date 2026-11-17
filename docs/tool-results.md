@@ -1,8 +1,10 @@
 # Replayable tool results
 
 App Server v5 exposes one bounded projection of each immutable tool
-`op_completed` record. The public API remains v15, RunEvent v6, record 1,
-inbox 3 and SQL layout 3. This change does not require a store boundary.
+`op_completed` record. The public API remains v15, RunEvent v6 and App Server v5;
+session records and inbox items use S1. This subsection does not change the
+tool-result field or projection shapes and requires no SQL layout migration or
+store boundary.
 
 Completed `toolCall` items carry `operationId`, `attempt` and `result`.
 The same result descriptor appears in `RunEvent.metadata.tool_result` and

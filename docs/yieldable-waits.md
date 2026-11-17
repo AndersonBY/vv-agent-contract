@@ -1,23 +1,27 @@
 # Yieldable waits
 
-Contract 38.0.0 covers yieldable waits in the SQL session kernel and L1 lease
-lock ordering. Python 0.35.0 local App Server, Interactive and Runner entry
-points accept and retain declarations but do not yield: they wait for the real
-child/provider result, keep steer queued, and do not call on_yield. The rules
-below describe SQL kernel execution and host scheduling that implements yielding.
+Contract 41.0.0 applies yieldable waits to current S1 storage and the W4 worker
+execution boundary. Current lease safety uses a process-level LeaseKeeper with its own
+connection plus database owner/epoch/expiry fencing; the historical L1
+process-local renewal/value/commit locks and reentry exception are replaced.
+Declared Python local App Server, Interactive and Runner entry points MUST use the
+same core W4 worker path for yielding. The rules below define the contract;
+surface producer capture and adoption remain governed by the support matrix.
 
 A wait observes work; yielding the wait does not stop that work. A host MAY opt
 in at admission for each foreground child, or at the first Accepted return for
-a tool provider. Absent declarations MUST retain the previous wait scheduling and declaration
-bytes. The shared long-result archive identity correction applies to all newly
-prepared long results, declared or undeclared; existing stored references and
-record bytes MUST NOT be rewritten.
+a tool provider. Under current S1, an absent declaration MUST be non-yieldable and
+retain the declaration bytes selected by the current producer. This does not
+promise that a reader for the historical record 1 / inbox 3 formats can read S1.
+The shared long-result archive identity correction applies to all newly prepared
+long results, declared or undeclared; existing stored references and record bytes
+MUST NOT be rewritten.
 Replaying or restoring an operation MUST use its recorded declaration, never a
 new host default. Model calls, approvals and user waits cannot declare this policy.
 
 ## Records
 
-Record schema 1 and inbox schema 3 add optional closed fields:
+Current S1 records and inbox items use these optional closed fields:
 
 - `provider_evidence.payload.yield_on_steer`: literal `true` from the original
   acceptance, absent for an undeclared acceptance. Hosts MUST persist this with
@@ -40,9 +44,10 @@ changing the park. A query Accepted return changing the handle or declaration
 MUST fail with `provider_result_invalid`; it cannot upgrade or downgrade policy.
 Missing declaration means undeclared, never a current host default.
 
-These fields do not change child records or handles. Old strict readers reject
-them. There is no record/inbox discriminator bump and no SQL layout migration.
-Sessions without declarations retain their original readable format.
+These fields do not change child records or handles. W4 requires no SQL layout
+migration or second drain. Current S1 sessions without declarations omit the
+fields and remain non-yieldable; record 1 / inbox 3 and their readers are not part
+of the current format.
 
 ## Admission and ordering
 
@@ -128,14 +133,17 @@ callbacks. New waits require fresh declarations. Child runtimes retain ordinary
 bindings; the parent observation declaration is not a child creation policy.
 SQL hosts schedule child work independently and recover committed inputs by
 scanning durable state; a wake is only a hint. Parked waits MUST NOT spin or
-repeat effects. The local entry points listed above do not provide the yielding
-scheduler/owner handoff described in [session consumers](session-consumers.md).
-After-cycle hook steering remains a completed-cycle decision,
-not inbox steering.
+repeat effects. Declared Python local App Server, Interactive and Runner entries
+MUST drive the same core W4 worker path and owner handoff described in
+[session consumers](session-consumers.md); they do not add a separate yielding
+runtime. Surface producer capture and adoption remain governed by the support
+matrix. After-cycle hook steering remains a completed-cycle decision, not inbox
+steering.
 Compaction sees ordinary tool completion plus protected input. App Server
 projection of a retained SQL-produced yield shows the tool as completed and
-retains the steering input normally; this does not enable local App Server yielding.
+retains the steering input normally.
 
-Contract 38.0.0 is major because it extends closed record shapes and changes
-observable scheduling for declared waits. Python 0.35.0 is required. Frozen Rust
-23.0.0 / 0.21.x does not support yieldable waits; its baseline is unchanged.
+Contract 38.0.0 introduced these records and observable scheduling as a major
+release. Contract 41.0.0 carries those rules into current S1/W4; support-matrix
+status remains the authority for Python adoption. Frozen Rust 23.0.0 / 0.21.x
+does not support yieldable waits; its baseline is unchanged.

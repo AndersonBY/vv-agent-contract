@@ -10,20 +10,26 @@ waits and unresolved dependencies MUST NOT spin.
 
 ## Yield scheduling and host responsibilities
 
-These requirements apply to SQL hosts that implement yield scheduling. Python
-0.35.0 local App Server, Interactive and Runner entry points accept declarations
-but do not yield; they retain their existing completion lifecycle.
+These requirements apply to current S1/W4 execution. Declared Python local App
+Server, Interactive and Runner entry points MUST use the same core W4 worker path
+for yielding. Surface producer capture and Python adoption remain governed by the
+support matrix; a declaration surface is not adoption proof.
 
-A host wake either marks the active owner or starts ordinary recovery under the
-host's scheduling lock. Only active execution is coalesced. An empty recovery
-pass MUST NOT repeat model calls, tool effects or receipts. Input push MUST NOT
-create a root run independently of the host scheduler. A marker records a wake
-received by an active owner. Before releasing ownership, that owner clears the
-marker, drives a full idempotent pass outside the scheduling lock, and checks the
-marker again under that lock. It may finish only after a pass makes no progress
-and no wake remains. Predictive work filters MUST NOT determine correctness.
-A scheduler holding its lock MUST NOT acquire store connection/transaction
-locks, resolve bindings or scan delivery; read durable state outside that lock.
+Under W4, each LocalWorker has one coordinator and one bounded drive slot. The
+coordinator makes periodic scans and claims due work through SQL; the coordinator
+and drive thread each use their own store/connection. PostgreSQL claims with
+`FOR NO KEY UPDATE ... SKIP LOCKED`. Wake is a droppable coalescing hint, so a lost
+wake MUST NOT lose work and a wake marker is not correctness state. An empty scan
+MUST NOT repeat model calls, tool effects or receipts. Input push MUST NOT create a
+root run independently of the worker. Predictive work filters MUST NOT determine
+correctness.
+
+One process-level LeaseKeeper has its own connection, renews only lease rows and
+does not drive sessions. Session writes MUST verify the database lease owner,
+epoch and unexpired deadline in the committing transaction. Renewal affects
+liveness; the database fence makes a stale owner unable to write. Correctness MUST
+NOT depend on process-local scheduling, renewal/value or commit locks, and no
+same-thread reentry exception is a current requirement.
 
 Admission within a nested or host-owned transaction MUST NOT wait synchronously
 for an execution owner. Wake/recovery observes inputs only after the actual
@@ -41,17 +47,17 @@ The host that creates a run owns its wake, cancellation and completion handoff.
 A wake retains root and target session identity until a new owner can recover
 committed work. Cancellation targets its admitted turn and MUST NOT transfer to
 a successor. Closing a local owner discards hints, never durable inputs; another
-worker or the host scheduler can recover them. Late child delivery remains an
-atomic input push and delivery ACK, including after yielding.
+worker's periodic scan can recover them. Late child delivery remains an atomic
+input push and delivery ACK, including after yielding.
 
 Startup or asynchronous completion errors MUST retain their original identity
-and reach the host error path with the target session ID. An owner must release
-its own scheduling registration without removing another owner. An unstarted
-worker cannot publish completion. A reported execution/read failure MUST NOT be
-turned into a guessed business terminal or trigger repeated reads of corrupt
-state. Only verified retained records authorize terminal notifications. Callback
-defects must escape through the host's existing error boundary; an admission
-ACK already attempted MUST NOT cause a second RPC response on later failure.
+and reach the host error path with the target session ID. Lease loss, stop or
+completion MUST NOT mutate another owner's claim. An unstarted worker cannot
+publish completion. A reported execution/read failure MUST NOT be turned into a
+guessed business terminal or trigger repeated reads of corrupt state. Only
+verified retained records authorize terminal notifications. Callback defects must
+escape through the host's existing error boundary; an admission ACK already
+attempted MUST NOT cause a second RPC response on later failure.
 
 Tool completions use the bounded [tool result projection](tool-results.md).
 Raw result bodies and private resource locators MUST NOT travel in the
