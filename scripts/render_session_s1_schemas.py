@@ -1248,6 +1248,30 @@ def worker_compatibility_schema() -> dict[str, Any]:
             "content_hydrated": {"const": False, "type": "boolean"},
         }
     )
+    format_floor_case = obj(
+        {
+            "name": TEXT,
+            "boundary": enum("turn_end_idle", "idle_before_first_turn"),
+            "bootstrap_container_feature_level": {"const": 2, "type": "integer"},
+            "stored_record_feature_levels": {
+                "type": "array",
+                "items": {"type": "integer", "enum": [1, 2]},
+                "minItems": 1,
+            },
+            "activated_inbox_feature_levels": array(
+                {"type": "integer", "enum": [1, 2]},
+                unique=True,
+            ),
+            "bootstrap_requirements": ref("SessionRequirements"),
+            "current_routing_requirements": ref("SessionRequirements"),
+            "expected_cache": ref("RoutingCache"),
+            "level1_executor_accepted": {"type": "boolean"},
+            "level2_executor_accepted": {"type": "boolean"},
+            "level1_reader_accepted": {"type": "boolean"},
+            "level2_reader_without_execution_supports_accepted": {"type": "boolean"},
+            "content_hydrated": {"const": False, "type": "boolean"},
+        }
+    )
     capability_bound_case = obj(
         {
             "name": TEXT,
@@ -1361,11 +1385,11 @@ def worker_compatibility_schema() -> dict[str, Any]:
                         "type": "string",
                     },
                     "cache": {
-                        "const": "active-turn-or-combined-idle-admission-order",
+                        "const": "format-floor-plus-active-turn-or-combined-idle-admission-order",
                         "type": "string",
                     },
                     "cache_verification": {
-                        "const": "raw-chain-and-input-proof-before-epoch",
+                        "const": "complete-proof-projection-then-locked-now-before-epoch",
                         "type": "string",
                     },
                 }
@@ -1439,6 +1463,7 @@ def worker_compatibility_schema() -> dict[str, Any]:
             ),
             "cases": array(scenario),
             "admission_order_cases": array(admission_order_case),
+            "format_floor_cases": array(format_floor_case),
             "capability_bound_cases": array(capability_bound_case),
             "model_tag_cases": array(model_tag_case),
         },
@@ -1452,6 +1477,7 @@ def worker_compatibility_schema() -> dict[str, Any]:
             "trusted_catalog",
             "cases",
             "admission_order_cases",
+            "format_floor_cases",
             "capability_bound_cases",
             "model_tag_cases",
         ],

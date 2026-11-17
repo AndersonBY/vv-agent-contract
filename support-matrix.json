@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "v41.0.0 is an in-progress W4 behavior allocation on storage S1. L1 bytes remain unchanged; typed session creation bootstrap and pre-turn inbox requirements are L2 only, and the single sk_session cache is recomputed under existing transaction and lease fences. worker_compatibility.json is contract-allocation-only with no producer capture or adoption evidence. Python implementation, immutable revision and full gates remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no DDL migration, second drain, compatibility reader, alias or dual format is defined.",
+  "adoption_note": "v41.0.0 is an in-progress W4 behavior allocation on storage S1. L1 bytes remain unchanged; typed session creation bootstrap and pre-turn inbox requirements are L2 only, and the single sk_session cache is recomputed under existing transaction and lease fences. Its existing level column combines the monotonic envelope-format floor with applicable routing requirement levels, so L2 history does not fall to level 1 after turn end. Format remains a reader and executor gate; only execution supports are waived for thin readers. worker_compatibility.json is contract-allocation-only with no producer capture or adoption evidence. Python implementation, immutable revision and full gates remain pending. The frozen Rust entry stays at contract 23.0.0 / package series 0.21.x; no DDL migration, second drain, compatibility reader, alias or dual format is defined.",
   "last_verified_at": null,
   "cross_repository_run": null
 }

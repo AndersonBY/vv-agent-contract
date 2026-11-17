@@ -14,8 +14,8 @@
     "turn_started_requirements": "compiled-definition-exact-visible-subset",
     "tool_supports": "trusted-complete-catalog",
     "model_source": "trusted-resolved-model-binding",
-    "cache": "active-turn-or-combined-idle-admission-order",
-    "cache_verification": "raw-chain-and-input-proof-before-epoch"
+    "cache": "format-floor-plus-active-turn-or-combined-idle-admission-order",
+    "cache_verification": "complete-proof-projection-then-locked-now-before-epoch"
   },
   "tagging": {
     "tool_fields": [
@@ -567,6 +567,112 @@
         "active_turn_id": null
       },
       "expected_worker_disposition": "defer_to_compatible_worker",
+      "content_hydrated": false
+    }
+  ],
+  "format_floor_cases": [
+    {
+      "name": "l2_bootstrap_inner_level_one_preserves_format_floor_after_turn_end",
+      "boundary": "turn_end_idle",
+      "bootstrap_container_feature_level": 2,
+      "stored_record_feature_levels": [
+        2,
+        1,
+        1
+      ],
+      "activated_inbox_feature_levels": [
+        2
+      ],
+      "bootstrap_requirements": {
+        "level": 1,
+        "handler_version": "handler-h1",
+        "capabilities": []
+      },
+      "current_routing_requirements": {
+        "level": 1,
+        "handler_version": "handler-h1",
+        "capabilities": []
+      },
+      "expected_cache": {
+        "level": 2,
+        "handler_version": "handler-h1",
+        "required_capabilities": [],
+        "active_turn_id": null
+      },
+      "level1_executor_accepted": false,
+      "level2_executor_accepted": true,
+      "level1_reader_accepted": false,
+      "level2_reader_without_execution_supports_accepted": true,
+      "content_hydrated": false
+    },
+    {
+      "name": "l2_bootstrap_with_level_one_user_keeps_format_and_bootstrap_routing",
+      "boundary": "idle_before_first_turn",
+      "bootstrap_container_feature_level": 2,
+      "stored_record_feature_levels": [
+        2
+      ],
+      "activated_inbox_feature_levels": [
+        1
+      ],
+      "bootstrap_requirements": {
+        "level": 2,
+        "handler_version": "handler-h2",
+        "capabilities": [
+          "tool:7a6d12a4fba729cddaedb154b126c4f1be55e7d25221f59cb5e3eb4a04fb8bde"
+        ]
+      },
+      "current_routing_requirements": {
+        "level": 2,
+        "handler_version": "handler-h2",
+        "capabilities": [
+          "tool:7a6d12a4fba729cddaedb154b126c4f1be55e7d25221f59cb5e3eb4a04fb8bde"
+        ]
+      },
+      "expected_cache": {
+        "level": 2,
+        "handler_version": "handler-h2",
+        "required_capabilities": [
+          "tool:7a6d12a4fba729cddaedb154b126c4f1be55e7d25221f59cb5e3eb4a04fb8bde"
+        ],
+        "active_turn_id": null
+      },
+      "level1_executor_accepted": false,
+      "level2_executor_accepted": true,
+      "level1_reader_accepted": false,
+      "level2_reader_without_execution_supports_accepted": true,
+      "content_hydrated": false
+    },
+    {
+      "name": "unconsumed_future_l2_input_contributes_format_floor_not_ready_route",
+      "boundary": "idle_before_first_turn",
+      "bootstrap_container_feature_level": 2,
+      "stored_record_feature_levels": [
+        2
+      ],
+      "activated_inbox_feature_levels": [
+        2
+      ],
+      "bootstrap_requirements": {
+        "level": 1,
+        "handler_version": "handler-h1",
+        "capabilities": []
+      },
+      "current_routing_requirements": {
+        "level": 1,
+        "handler_version": "handler-h1",
+        "capabilities": []
+      },
+      "expected_cache": {
+        "level": 2,
+        "handler_version": "handler-h1",
+        "required_capabilities": [],
+        "active_turn_id": null
+      },
+      "level1_executor_accepted": false,
+      "level2_executor_accepted": true,
+      "level1_reader_accepted": false,
+      "level2_reader_without_execution_supports_accepted": true,
       "content_hydrated": false
     }
   ],

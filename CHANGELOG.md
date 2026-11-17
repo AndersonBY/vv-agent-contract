@@ -15,7 +15,21 @@ The single `sk_session` cache is recomputed atomically at creation, turn start,
 input publication and turn end. Active turns retain the initial requirements and
 union applied/pending model-selection model tags until turn end; idle turns process
 both queued inputs and ready pending inputs through the existing apply-to-exhaustion
-then stable start order, then bootstrap or level-1 defaults. Tool tags
+then stable start order, then bootstrap or level-1 defaults. Its existing `level`
+member is the maximum of the monotonic envelope-format floor and applicable routing
+requirement levels. A level-2 `session_created` or activated level-2 inbox item keeps
+the session at level 2 after turn end even when its nested requirements level is 1;
+an activated level-1 `user` or `follow_up` keeps its old bytes and inherits the
+level-2 session bootstrap for routing instead of replacing it with empty requirements.
+Level-1-only sessions retain their original level-1 behavior. The format floor
+includes every stored unconsumed inbox item, including future-unavailable and
+otherwise non-ready items; a ready-only count understates the rule. Format level
+remains a reader and executor gate, while only tool/model/handler supports are
+waived for thin readers. Cache validation permits a legal time projection after the
+last authenticated proof boundary, validates it under the claim lock before
+refreshing `now`, and rejects signed projections whose boundary precedes the signed
+checkpoint/input lower bounds. Weak no-signature mode trusts SQL metadata and
+ordering but keeps the same completeness, structural and availability rules. Tool tags
 cover `{name,schema,metadata}` for the conservative pre-admission bound and the
 exact subset later frozen by `turn_started`; `schema` is the complete OpenAI
 function object from the registry, including its function description and strict

@@ -65,11 +65,11 @@
           "type": "string"
         },
         "cache": {
-          "const": "active-turn-or-combined-idle-admission-order",
+          "const": "format-floor-plus-active-turn-or-combined-idle-admission-order",
           "type": "string"
         },
         "cache_verification": {
-          "const": "raw-chain-and-input-proof-before-epoch",
+          "const": "complete-proof-projection-then-locked-now-before-epoch",
           "type": "string"
         }
       },
@@ -506,6 +506,92 @@
         ]
       }
     },
+    "format_floor_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "boundary": {
+            "type": "string",
+            "enum": [
+              "turn_end_idle",
+              "idle_before_first_turn"
+            ]
+          },
+          "bootstrap_container_feature_level": {
+            "const": 2,
+            "type": "integer"
+          },
+          "stored_record_feature_levels": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "enum": [
+                1,
+                2
+              ]
+            },
+            "minItems": 1
+          },
+          "activated_inbox_feature_levels": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "enum": [
+                1,
+                2
+              ]
+            },
+            "uniqueItems": true
+          },
+          "bootstrap_requirements": {
+            "$ref": "#/$defs/SessionRequirements"
+          },
+          "current_routing_requirements": {
+            "$ref": "#/$defs/SessionRequirements"
+          },
+          "expected_cache": {
+            "$ref": "#/$defs/RoutingCache"
+          },
+          "level1_executor_accepted": {
+            "type": "boolean"
+          },
+          "level2_executor_accepted": {
+            "type": "boolean"
+          },
+          "level1_reader_accepted": {
+            "type": "boolean"
+          },
+          "level2_reader_without_execution_supports_accepted": {
+            "type": "boolean"
+          },
+          "content_hydrated": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "boundary",
+          "bootstrap_container_feature_level",
+          "stored_record_feature_levels",
+          "activated_inbox_feature_levels",
+          "bootstrap_requirements",
+          "current_routing_requirements",
+          "expected_cache",
+          "level1_executor_accepted",
+          "level2_executor_accepted",
+          "level1_reader_accepted",
+          "level2_reader_without_execution_supports_accepted",
+          "content_hydrated"
+        ]
+      }
+    },
     "capability_bound_cases": {
       "type": "array",
       "items": {
@@ -740,6 +826,7 @@
     "trusted_catalog",
     "cases",
     "admission_order_cases",
+    "format_floor_cases",
     "capability_bound_cases",
     "model_tag_cases"
   ],

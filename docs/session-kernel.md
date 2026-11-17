@@ -42,6 +42,22 @@ required `bootstrap`, and for `user`, `follow_up` and `model_selection` with the
 required `requirements`. A level-2 shape for any other record or inbox kind, or a
 level-2 control item missing its field, rejects. Existing level-1 fixtures and
 producer bytes remain readable without inserting defaults into the logical value.
+When a level-1 `user` or `follow_up` input activates in a level-2 session, its
+bytes remain level 1 and the session's trusted `bootstrap` supplies that input's
+pre-admission routing bound; the absent field MUST NOT be interpreted as a
+`(1,null,[])` replacement for the bootstrap.
+An envelope's `feature_level` is a format requirement and is independent of the
+nested `SessionRequirements.level`. The format floor of a session is the maximum
+`feature_level` of every persisted record and every currently stored, unconsumed
+inbox item activated for that session, including an item whose `available_ms` is
+still in the future or which is otherwise not ready for application. "Activated
+inbox" does not mean only ready inputs. A consumed input remains represented by
+its persisted `input_applied` record; an unconsumed item remains part of the floor
+until it is consumed. The floor never decreases. In particular, a level-2
+`session_created` remains a level-2 format even when its trusted `bootstrap.level`
+is 1. Such an inner level does not make the level-2 record decodable or executable
+by a level-1-only reader or worker. A session containing only level-1 envelopes
+retains its original level-1 behavior and floor.
 `operation_id` and `attempt` MUST both be non-null exactly for `op_*` records and
 null otherwise. `session_created.turn_id` MUST be null. All other record kinds
 require a turn except `input_applied` and `usage_observed`, which permit null.
@@ -406,7 +422,9 @@ replay or consumer-ACK gate. Tenant identity, Principal checks, RLS and content-
 authorization retain their existing rules unchanged. After those checks, an
 authenticated thin client, gateway or projection consumer may read and decode the
 current S1 records and inbox values it is authorized to access even when its host
-has no executor, model or tool capability tags.
+has no executor, model or tool capability tags. It MUST still satisfy the same
+format level as an executor; only tool, model and handler execution supports are
+waived for a thin reader.
 
 Such a reader still validates the S1 discriminator, its reader format level against
 the record/feature level, and the existing chain, input-proof, cursor or projection
@@ -445,13 +463,26 @@ The only persisted routing cache is the existing `sk_session` group
 another execution authority, and adds no active/next row, source sequence/digest
 copy, profile object, registry or SQL major. Recompute it under the session row lock:
 
+The existing `level` column is the maximum of the session's monotonic format floor
+and every routing requirement level applicable to the expected post-boundary cache.
+The format floor is the maximum envelope `feature_level` of all persisted records and
+all currently stored, unconsumed inbox items, including future-unavailable and
+otherwise non-ready inputs. The routing contribution comes from the trusted
+bootstrap, active turn and applicable queued or ready pending inputs under the
+ordering below. Thus an unconsumed future item can raise the format floor without
+being ready to route yet. A level-2 creation or input therefore keeps
+`sk_session.level` at least 2 when idle or after turn end, even if its nested
+requirements level is 1. A level-1-only session keeps the unchanged level-1 default.
+This is the same single cache column: there is no second format-floor column, DDL,
+decoder or persisted active/next state.
+
 | Boundary | Expected cache |
 | --- | --- |
 | Session creation | Copy the trusted level-2 `session_created.bootstrap` initially, or retain existing level-1 defaults when absent. |
 | Turn start | Compile normally once. Before committing `turn_started`, verify the actual requirements are a capability subset of the pre-admission bound, use the same non-null handler and do not lower the level. On success commit the exact actual requirements and `active_turn_id` in that transaction; on failure start no dispatch and record no fabricated terminal. |
 | Input publication, idle | Derive the next route from both existing queued inputs and currently ready pending `user`/`follow_up`/`model_selection` inputs using the complete `apply_input` then `start_turn` order below, then apply effective model-selection model tags. With no eligible input, use bootstrap or the existing level-1 default. |
 | Input publication, active | Keep the active handler and all initial turn requirements. Union model tags from valid applied and pending `model_selection` inputs for this turn. User/follow-up requirements stay pending and do not replace the active route. |
-| Turn end | Commit `turn_ended` and recompute the idle cache from the same combined queued-plus-ready-pending derivation, otherwise bootstrap or the level-1 default, in the same transaction. |
+| Turn end | Commit `turn_ended` and recompute the idle cache from the same combined queued-plus-ready-pending derivation, otherwise bootstrap or the level-1 default, in the same transaction. Preserve the monotonic format floor; level-2 history never falls back to cache level 1. |
 
 Idle routing simulation has two phases. First, process currently ready pending
 inputs in `peek_inbox` `input_seq` order with `apply_input`, repeating until no
@@ -502,16 +533,35 @@ worker lacking either tag cannot decode/apply the selection or dispatch against 
 A handler mismatch rejects publication. There is no second user queue and no
 change to model-selection replay, pending-batch delay or target rules.
 
-Before incrementing the writer epoch or granting/renewing an execution lease, under
-the session lock, the host validates existing raw record chain/checkpoints and inbox
-admission/input proofs and reads their structural requirements. It then recomputes
-the expected four-column cache. No C body hydration is needed or permitted to make
-this routing decision. A cache that understates the required handler, tool or model
-tags fails integrity before support filtering and before any epoch/lease grant.
-Only after that proof does the trusted full support set route the requester. A later
-hydrated definition or selection is still validated by its own typed reader; the
-cache is not a substitute for that validation. Existing signatures and chain are
-the source proof; no second digest/source state is copied into the cache.
+The cache may be a valid time projection after the last authenticated boundary of
+the complete captured proof source; it need not equal the source cut's recorded
+time. Before incrementing the writer epoch or granting/renewing an execution lease,
+under the session lock, the host first validates the existing cache as such a
+projection of the complete raw record chain/checkpoints and inbox admission/input
+proofs, using only their structural requirements. Only after that validation does it
+refresh the clock and recompute the expected four-column cache for that same source.
+No C body hydration is needed or permitted for this routing decision. The captured
+source must include the bootstrap and every other item needed for the claimed
+projection; a cut before bootstrap/source publication is incomplete and cannot be
+used to hide understated requirements.
+
+In signed mode, the authenticated capture time used for a projection is never
+earlier than `max(checkpoint.signed_ms, each captured input admission_signed_ms or
+received_ms that contributes to the source)`. An unsigned `created_ms` is not proof
+of the lower time bound. In the explicit weaker no-signature mode, the durable SQL
+metadata rows and their ordering are the trusted source, with the same structural
+completeness and lower-bound projection rules. Weak mode does not make a future
+`available_ms` input ready and does not permit ignoring its stored format floor.
+
+A cache that understates the required handler, tool or model tags or the computed
+format-and-routing level fails integrity before support filtering and before any
+epoch/lease grant. If the locked pre-refresh validation fails, the host MUST reject
+before epoch; refreshing `now` or rewriting the cache first would conceal the bad
+projection. Only after that proof does the trusted full support set route the
+requester. A later hydrated definition or selection is still validated by its own
+typed reader; the cache is not a substitute for that validation. Existing signatures
+and chain are the source proof; no second digest/source state is copied into the
+cache.
 
 ## Admission and authority
 

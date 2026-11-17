@@ -269,6 +269,94 @@ class WorkerCompatibilityAllocationTests(unittest.TestCase):
             self.assertNotIn("payload", item)
             self.assertNotIn("content", item)
 
+    def test_format_floor_does_not_follow_nested_requirements_level(self) -> None:
+        case = next(
+            item
+            for item in self.fixture["format_floor_cases"]
+            if item["name"] == "l2_bootstrap_inner_level_one_preserves_format_floor_after_turn_end"
+        )
+        format_floor = max(
+            case["stored_record_feature_levels"]
+            + case["activated_inbox_feature_levels"]
+        )
+        routing_level = max(
+            case["bootstrap_requirements"]["level"],
+            case["current_routing_requirements"]["level"],
+        )
+        self.assertEqual(case["boundary"], "turn_end_idle")
+        self.assertEqual(case["bootstrap_container_feature_level"], 2)
+        self.assertEqual(case["bootstrap_requirements"]["level"], 1)
+        self.assertEqual(case["current_routing_requirements"]["level"], 1)
+        self.assertEqual(format_floor, 2)
+        self.assertEqual(
+            case["expected_cache"]["level"], max(format_floor, routing_level)
+        )
+        self.assertEqual(
+            case["expected_cache"],
+            {
+                "level": 2,
+                "handler_version": "handler-h1",
+                "required_capabilities": [],
+                "active_turn_id": None,
+            },
+        )
+        self.assertFalse(case["level1_executor_accepted"])
+        self.assertTrue(case["level2_executor_accepted"])
+        self.assertFalse(case["level1_reader_accepted"])
+        self.assertTrue(
+            case["level2_reader_without_execution_supports_accepted"]
+        )
+        self.assertFalse(case["content_hydrated"])
+        self.assertEqual(
+            self.fixture["allocation"]["cache"],
+            "format-floor-plus-active-turn-or-combined-idle-admission-order",
+        )
+
+    def test_future_unconsumed_input_affects_format_floor_not_ready_route(self) -> None:
+        case = next(
+            item
+            for item in self.fixture["format_floor_cases"]
+            if item["name"]
+            == "unconsumed_future_l2_input_contributes_format_floor_not_ready_route"
+        )
+        self.assertEqual(case["boundary"], "idle_before_first_turn")
+        self.assertEqual(case["activated_inbox_feature_levels"], [2])
+        self.assertEqual(case["current_routing_requirements"]["level"], 1)
+        self.assertEqual(case["expected_cache"]["level"], 2)
+        self.assertFalse(case["level1_executor_accepted"])
+        self.assertTrue(case["level2_executor_accepted"])
+        self.assertFalse(case["level1_reader_accepted"])
+        self.assertTrue(
+            case["level2_reader_without_execution_supports_accepted"]
+        )
+        self.assertFalse(case["content_hydrated"])
+        self.assertEqual(
+            self.fixture["allocation"]["cache_verification"],
+            "complete-proof-projection-then-locked-now-before-epoch",
+        )
+
+    def test_level_one_input_in_l2_session_uses_bootstrap_routing(self) -> None:
+        case = next(
+            item
+            for item in self.fixture["format_floor_cases"]
+            if item["name"] == "l2_bootstrap_with_level_one_user_keeps_format_and_bootstrap_routing"
+        )
+        self.assertEqual(case["bootstrap_container_feature_level"], 2)
+        self.assertEqual(case["activated_inbox_feature_levels"], [1])
+        self.assertEqual(case["current_routing_requirements"], case["bootstrap_requirements"])
+        self.assertEqual(
+            case["expected_cache"],
+            {
+                "level": 2,
+                "handler_version": "handler-h2",
+                "required_capabilities": [
+                    "tool:7a6d12a4fba729cddaedb154b126c4f1be55e7d25221f59cb5e3eb4a04fb8bde"
+                ],
+                "active_turn_id": None,
+            },
+        )
+        self.assertFalse(case["content_hydrated"])
+
     def test_static_bound_and_compiled_actual_requirements(self) -> None:
         cases = {
             case["name"]: case for case in self.fixture["capability_bound_cases"]

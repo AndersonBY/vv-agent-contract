@@ -34,6 +34,17 @@ or validation of an existing field still requires a new major. Allocating
 `feature_level` in a canonical shape does not claim an implementation has adopted
 it.
 
+An envelope's `feature_level` is a format requirement; a nested
+`SessionRequirements.level` is routing semantics and cannot lower it. A session's
+format floor is the monotonic maximum of its persisted record and every currently
+stored, unconsumed inbox envelope level, including future-unavailable or otherwise
+non-ready items. A consumed item remains represented by its persisted
+`input_applied` record; an unconsumed item remains part of the floor until consumed.
+A level-2 container therefore remains level 2 even when its nested requirements
+level is 1. The existing session routing-cache `level` records the maximum of this
+format floor and applicable routing requirement levels in the same single column;
+no second floor field, decoder or implementation profile is added.
+
 30.0.0 replaces the closed model/list response and selects App Server v4. New
 context/read and compact/start methods alone would be minor additions. There is
 no record, inbox or SQL store boundary.
@@ -251,9 +262,17 @@ the immutable bytes unchanged and exposes an unsatisfiable-bound configuration
 error without dispatch, a fabricated terminal or automatic retry. The producer has
 already queued the input before compilation, and existing controls cannot safely
 discard it; correcting the declaration requires a new session. No cancellation,
-supersession or replacement-input protocol is introduced. Understatement is an
-integrity failure checked before epoch or lease grant using the existing raw chain
-and admission proofs.
+supersession or replacement-input protocol is introduced. The cache may be a legal
+time projection after the last authenticated boundary of the complete captured
+proof source. Before epoch or lease grant, the locked claim validates that existing
+projection, then refreshes its clock and recomputes it. Signed capture time cannot
+precede `max(checkpoint.signed_ms, contributing input admission_signed_ms/received_ms)`;
+unsigned `created_ms` is not a lower-bound proof. The explicit weak no-signature mode
+trusts durable SQL metadata and ordering,
+but applies the same completeness, structural projection and future-availability
+rules. A source cut before bootstrap/source publication is incomplete. Any
+understatement or invalid pre-refresh projection rejects before epoch; no new
+persisted time, source or active/next field is introduced.
 Tool identities hash the complete registry-returned OpenAI function object rather
 than its parameters alone. Model identities hash each atomic resolved four-field
 binding and exclude endpoint lists; internal bindings are decomposed and reused
