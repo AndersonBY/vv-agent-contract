@@ -100,7 +100,7 @@ protected message. Rejected/noop records and audit-only results add no model tex
 
 | Inbox kind | Model history and protection |
 | --- | --- |
-| `user` | Initial/queued input enters at `turn_started`; same-turn no-tool replies append user text at `input_applied`. Normal tool interaction replies update a tool result and protect the original assistant group. Audit-only replies after cancellation add no protection. Host compaction requests alone add no text. |
+| `user` | Initial/queued input enters at `turn_started`; same-turn no-tool replies append user text at `input_applied`. Normal tool interaction replies update a tool result and protect the original assistant group. Audit-only replies after cancellation add no protection. Host compaction requests use this existing kind and are queued in both idle and active states as compaction work, not as replies to a parked user wait; they alone add no user text. |
 | `steer` | Appends user/typed messages; protect from their committed source position. |
 | `follow_up` | Queues for the next turn; protect when `turn_started` actually inserts it. |
 | `child_result` | Background completion appends `Child completed: ...` and protects from that notice. A normal blocking completion updates the waiting tool result and protects the entire original assistant group. Generic non-model correction receipts protect only their appended correction text; the normal native child flow currently cannot reach that correction branch. An audit result adds no text or protection. |

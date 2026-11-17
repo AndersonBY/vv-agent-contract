@@ -961,6 +961,14 @@ identity into the existing requested_by summary path. While idle it admits a
 compaction-only turn using existing turn records; that turn makes no primary
 call and adds no user message. While a turn is running it waits for its batch;
 while suspended or waiting for a person it waits for resume/reply. Cancel wins.
+The intent uses the existing `user` input kind and `input_id`. `apply_input`
+records it as `disposition=queued` both while idle and while a turn is active:
+host compaction enters the existing compaction work queue rather than being a
+reply to a parked user wait. It adds no ordinary user text, is consumed once
+under its original input id, and requires no new kind, field, inbox identity or
+storage boundary. Producer evidence MUST include the host-compaction
+`input_applied` record.
+
 The holder MUST preserve concurrently accepted input and cancel. Summary source
 is an immutable prefix; acceptance precedes later context-changing input, so a
 replacement cannot overwrite it. Logged same-source summary receipts are reused.
