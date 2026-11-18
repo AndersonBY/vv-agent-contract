@@ -269,6 +269,129 @@ def environment_binding() -> dict[str, Any]:
     )
 
 
+def execution_environment_capability_fields() -> dict[str, Any]:
+    return {
+        "environment_id": TEXT,
+        "generation": NONNEGATIVE,
+        "isolation": enum("none", "container", "microvm"),
+        "network": enum("open", "allowlist", "none"),
+        "enforces_network_policy": {"type": "boolean"},
+        "enforces_resource_limits": {"type": "boolean"},
+        "persistent": {"type": "boolean"},
+        "environment_capabilities": array(TEXT, unique=True),
+        "capabilities_digest": NULLABLE_HASH,
+        "network_policy_ref_digest": NULLABLE_HASH,
+        "isolation_policy_ref_digest": NULLABLE_HASH,
+    }
+
+
+def execution_environment_binding() -> dict[str, Any]:
+    return obj(
+        {
+            "descriptor": ref("ContentRef"),
+            **execution_environment_capability_fields(),
+            "operational_policy": ref("ContentRef"),
+        }
+    )
+
+
+def execution_identity() -> dict[str, Any]:
+    return obj(
+        {
+            "operation_key": TEXT,
+            "tenant_id": TEXT,
+            "environment_id": TEXT,
+            "session_id": TEXT,
+            "operation_id": TEXT,
+            "execution_id": HASH,
+        }
+    )
+
+
+def provider_lookup_defs() -> dict[str, Any]:
+    handle = obj(
+        {
+            "kind": {"const": "provider", "type": "string"},
+            "provider": TEXT,
+            "job_id": TEXT,
+            "operation_id": TEXT,
+            "attempt": POSITIVE,
+            "request_digest": HASH,
+            "execution_id": HASH,
+            "command_digest": HASH,
+            "environment_id": TEXT,
+            "generation": NONNEGATIVE,
+            "evidence": array(TEXT),
+            "query_ref": nullable(TEXT),
+            "cancel_ref": nullable(TEXT),
+        }
+    )
+    binding = obj(
+        {
+            "tenant_id": TEXT,
+            "session_id": TEXT,
+            "operation_id": TEXT,
+            "attempt": POSITIVE,
+            "request_digest": HASH,
+            "idempotency_key": TEXT,
+            "execution_id": HASH,
+            "command_digest": HASH,
+            "environment_id": TEXT,
+            "generation": NONNEGATIVE,
+            "provider_id": TEXT,
+        }
+    )
+    accepted = obj(
+        {
+            "kind": {"const": "Accepted", "type": "string"},
+            "handle": handle,
+            "yield_on_steer": {"type": "boolean"},
+        }
+    )
+    definitive = obj(
+        {
+            "kind": {"const": "Definitive", "type": "string"},
+            "result": {"type": "object"},
+            "usage": {"type": "object"},
+            "shared_state": nullable({"type": "object"}),
+            "evidence": array(TEXT),
+        }
+    )
+    unknown = obj(
+        {
+            "kind": {"const": "Unknown", "type": "string"},
+            "reason": TEXT,
+        }
+    )
+    result = obj(
+        {
+            "schema_version": {
+                "const": "vv-agent.provider-lookup.v1",
+                "type": "string",
+            },
+            "status": enum("not_started", "running", "exited", "unknown"),
+            "binding": binding,
+            "outcome": {
+                "anyOf": [
+                    {"type": "null"},
+                    accepted,
+                    definitive,
+                    unknown,
+                ]
+            },
+            "evidence": array(TEXT),
+        }
+    )
+    return {
+        "ProviderExecutionHandle": handle,
+        "ProviderLookupBinding": binding,
+        "ProviderLookupAcceptedOutcome": accepted,
+        "ProviderLookupDefinitiveOutcome": definitive,
+        "ProviderLookupUnknownOutcome": unknown,
+        "ProviderLookupResult": result,
+    }
+
+
 def result_id() -> dict[str, Any]:
     return obj({"operation_id": TEXT, "attempt": POSITIVE})
 
@@ -464,6 +587,14 @@ def inbox_payload_defs() -> dict[str, Any]:
             },
             required=("operation_id", "attempt", "request_digest", "handle"),
         ),
+        "ProviderEvidencePayloadLevel3": obj(
+            {
+                "operation_id": TEXT,
+                "attempt": POSITIVE,
+                "request_digest": HASH,
+                "lookup": ref("ProviderLookupResult"),
+            }
+        ),
     }
 
 
@@ -475,24 +606,44 @@ def record_payload_defs() -> dict[str, Any]:
         "parent_operation_id": NULLABLE_TEXT,
         "attributes": ref("ContentRef"),
     }
+    turn_started = {
+        "input_ids": array(TEXT),
+        "definition": ref("ContentRef"),
+        "definition_digest": HASH,
+        "handler_version": TEXT,
+        "budget": ref("ContentRef"),
+        "binding": NULLABLE_TEXT,
+        "generation": NONNEGATIVE,
+        "policy_digest": NULLABLE_HASH,
+        "requirements": ref("SessionRequirements"),
+        "tokenizer_binding": ref("TokenizerBinding"),
+        "environment": ref("EnvironmentBinding"),
+    }
+    op_planned = {
+        "op_kind": enum("model", "tool", "interaction"),
+        "purpose": nullable(enum("primary", "compaction", "session_memory", "output_repair")),
+        "request": ref("ContentRef"),
+        "request_digest": HASH,
+        "context_version": TEXT,
+        "dependencies": array(TEXT),
+        "tool": nullable(ref("ContentRef")),
+        "idempotency_key": NULLABLE_TEXT,
+        "budget_admission": ref("ContentRef"),
+        "not_before_ms": nullable(NONNEGATIVE),
+        "provider_binding": NULLABLE_TEXT,
+        "consumed_unknowns": array(ref("ResultId")),
+        "policy_decision": ref("PolicyDecision"),
+    }
     return {
         "SessionCreatedPayload": obj(session_created),
         "SessionCreatedPayloadLevel2": obj(
             {**session_created, "bootstrap": ref("SessionRequirements")}
         ),
-        "TurnStartedPayload": obj(
+        "TurnStartedPayload": obj(turn_started),
+        "TurnStartedPayloadLevel3": obj(
             {
-                "input_ids": array(TEXT),
-                "definition": ref("ContentRef"),
-                "definition_digest": HASH,
-                "handler_version": TEXT,
-                "budget": ref("ContentRef"),
-                "binding": NULLABLE_TEXT,
-                "generation": NONNEGATIVE,
-                "policy_digest": NULLABLE_HASH,
-                "requirements": ref("SessionRequirements"),
-                "tokenizer_binding": ref("TokenizerBinding"),
-                "environment": ref("EnvironmentBinding"),
+                **turn_started,
+                "environment": ref("ExecutionEnvironmentBinding"),
             }
         ),
         "InputAppliedPayload": obj(
@@ -518,21 +669,12 @@ def record_payload_defs() -> dict[str, Any]:
                 "position",
             ),
         ),
-        "OpPlannedPayload": obj(
+        "OpPlannedPayload": obj(op_planned),
+        "OpPlannedPayloadLevel3": obj(
             {
-                "op_kind": enum("model", "tool", "interaction"),
-                "purpose": nullable(enum("primary", "compaction", "session_memory", "output_repair")),
-                "request": ref("ContentRef"),
-                "request_digest": HASH,
-                "context_version": TEXT,
-                "dependencies": array(TEXT),
-                "tool": nullable(ref("ContentRef")),
-                "idempotency_key": NULLABLE_TEXT,
-                "budget_admission": ref("ContentRef"),
-                "not_before_ms": nullable(NONNEGATIVE),
-                "provider_binding": NULLABLE_TEXT,
-                "consumed_unknowns": array(ref("ResultId")),
-                "policy_decision": ref("PolicyDecision"),
+                **op_planned,
+                "execution_identity": ref("ExecutionIdentity"),
+                "command_digest": HASH,
             }
         ),
         "OpPreparedPayload": obj(
@@ -683,6 +825,9 @@ def common_defs() -> dict[str, Any]:
         "UsageCounts": usage_counts(),
         "SessionRequirements": requirements(),
         "EnvironmentBinding": environment_binding(),
+        "ExecutionEnvironmentBinding": execution_environment_binding(),
+        "ExecutionIdentity": execution_identity(),
+        **provider_lookup_defs(),
         "ResultId": result_id(),
         **inbox_payload_defs(),
         "BeforeMemoryData": obj(
@@ -808,6 +953,19 @@ def record_schema() -> dict[str, Any]:
             "payload": {"type": "object"},
         }
     )
+    defs["RecordEnvelopeLevel3"] = obj(
+        {
+            "schema_version": {"const": "S1", "type": "string"},
+            "feature_level": {"const": 3, "type": "integer"},
+            "record_id": TEXT,
+            "kind": {"type": "string"},
+            "session_id": TEXT,
+            "turn_id": NULLABLE_TEXT,
+            "operation_id": NULLABLE_TEXT,
+            "attempt": NULLABLE_POSITIVE,
+            "payload": {"type": "object"},
+        }
+    )
     defs["InboxItem"] = inbox_schema_item(defs)
     defs["Handle"] = handle()
     branches = []
@@ -840,6 +998,24 @@ def record_schema() -> dict[str, Any]:
             ]
         }
     )
+    for kind, payload_name in (
+        ("turn_started", "TurnStartedPayloadLevel3"),
+        ("op_planned", "OpPlannedPayloadLevel3"),
+    ):
+        branches.append(
+            {
+                "allOf": [
+                    ref("RecordEnvelopeLevel3"),
+                    {
+                        "type": "object",
+                        "properties": {
+                            "kind": {"const": kind},
+                            "payload": ref(payload_name),
+                        },
+                    },
+                ]
+            }
+        )
     return {"$schema": DRAFT, "oneOf": branches, "$defs": defs}
 
 
@@ -861,6 +1037,12 @@ def inbox_schema_item(defs: dict[str, Any]) -> dict[str, Any]:
             "feature_level": {"const": 2, "type": "integer"},
             **common,
             "requirements": ref("SessionRequirements"),
+        }
+    )
+    level3_envelope = obj(
+        {
+            "feature_level": {"const": 3, "type": "integer"},
+            **common,
         }
     )
     branches = []
@@ -894,8 +1076,23 @@ def inbox_schema_item(defs: dict[str, Any]) -> dict[str, Any]:
                 ]
             }
         )
+    branches.append(
+        {
+            "allOf": [
+                ref("InboxEnvelopeLevel3"),
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"const": "provider_evidence"},
+                        "payload": ref("ProviderEvidencePayloadLevel3"),
+                    },
+                },
+            ]
+        }
+    )
     defs["InboxEnvelope"] = envelope
     defs["InboxEnvelopeLevel2"] = level2_envelope
+    defs["InboxEnvelopeLevel3"] = level3_envelope
     return {"oneOf": branches}
 
 
@@ -1170,6 +1367,232 @@ def lifecycle_schema() -> dict[str, Any]:
     }
 
 
+def command_spec() -> dict[str, Any]:
+    return obj(
+        {
+            "command_text": TEXT,
+            "argv": array(TEXT),
+            "cwd": TEXT,
+            "stdin_base64": nullable(S_TEXT),
+            "stdin_mode": enum("none", "provided", "pipe"),
+            "secret_ref_names": array(TEXT, unique=True),
+            "limits": obj(
+                {
+                    "wall_time_ms": POSITIVE,
+                    "output_bytes": POSITIVE,
+                }
+            ),
+        }
+    )
+
+
+def operational_policy() -> dict[str, Any]:
+    return obj(
+        {
+            "network_policy_digest": HASH,
+            "isolation_policy_digest": HASH,
+        }
+    )
+
+
+def execution_worker_w3_schema() -> dict[str, Any]:
+    environment_capabilities = obj(execution_environment_capability_fields())
+    provider_lookup = provider_lookup_defs()
+    identity_vector = obj(
+        {
+            "name": TEXT,
+            "identity": ref("ExecutionIdentity"),
+            "canonical_json_base64": S_TEXT,
+            "canonical_json_utf8_bytes": NONNEGATIVE,
+            "preimage_base64": S_TEXT,
+            "execution_id": HASH,
+            "excluded_context_variants": array(
+                obj(
+                    {
+                        "attempt": POSITIVE,
+                        "request_digest": HASH,
+                        "dispatch_id": TEXT,
+                        "clock_ms": NONNEGATIVE,
+                    }
+                )
+            ),
+        }
+    )
+    command_digest_vector = obj(
+        {
+            "name": TEXT,
+            "tenant_id": TEXT,
+            "session_id": TEXT,
+            "session_data_key_id": TEXT,
+            "session_data_key_base64": S_TEXT,
+            "command_spec": ref("CommandSpec"),
+            "environment": ref("EnvironmentCapabilityBinding"),
+            "operational_policy": ref("OperationalPolicy"),
+            "canonical_json_base64": S_TEXT,
+            "canonical_json_utf8_bytes": NONNEGATIVE,
+            "preimage_base64": S_TEXT,
+            "command_digest": HASH,
+        }
+    )
+    lookup_vector = obj(
+        {
+            "name": TEXT,
+            "transport_available": {"type": "boolean"},
+            "authenticated": {"type": "boolean"},
+            "result": ref("ProviderLookupResult"),
+            "expected_disposition": enum(
+                "no_effects_and_retry_once",
+                "reuse_running_execution",
+                "reconcile_terminal_execution",
+                "preserve_unknown",
+            ),
+            "retry_allowed": {"type": "boolean"},
+        }
+    )
+    patch_operation = obj(
+        {
+            "path": array({"anyOf": [TEXT, NONNEGATIVE]}),
+            "set": {},
+            "delete": {"type": "boolean"},
+        },
+        required=("path", "set"),
+    )
+    invalid_lookup = obj(
+        {
+            "name": TEXT,
+            "base_lookup": TEXT,
+            "patch_target": enum("lookup", "environment", "operational_policy"),
+            "patch": array(patch_operation),
+            "authenticated": {"type": "boolean"},
+            "transport_available": {"type": "boolean"},
+            "expected_code": enum(
+                "binding_mismatch",
+                "authorization_mismatch",
+                "environment_mismatch",
+                "generation_mismatch",
+                "isolation_downgrade",
+                "network_policy_widening",
+                "enforcement_downgrade",
+                "capability_digest_mismatch",
+                "policy_digest_mismatch",
+                "command_mismatch",
+                "provider_result_invalid",
+            ),
+        }
+    )
+    recovery_case = obj(
+        {
+            "name": TEXT,
+            "lookup_status": enum("not_started", "running", "exited", "unknown"),
+            "submitted_attempts": NONNEGATIVE,
+            "expected_disposition": enum("start_new_attempt", "query_or_evidence"),
+            "expected_next_attempt": NULLABLE_POSITIVE,
+            "reuse_idempotency_key": {"type": "boolean"},
+            "reuse_execution_id": {"type": "boolean"},
+        }
+    )
+    framing = obj(
+        {
+            "execution_id": obj(
+                {
+                    "domain": {"const": "vv-agent/S1/execution-identity"},
+                    "framing_version": {"const": 1, "type": "integer"},
+                    "preimage_fields": {"const": ["domain", "framing_version", "operation_key", "tenant_id", "environment_id"]},
+                    "canonicalization": {"const": "RFC8785_JCS"},
+                    "preimage": {"const": "JCS({domain,framing_version,operation_key,tenant_id,environment_id})"},
+                    "digest": {"const": "SHA256(preimage)"},
+                    "excluded_fields": {"const": ["attempt", "request_digest", "dispatch_id", "clock_ms"]},
+                }
+            ),
+            "capabilities_digest": obj(
+                {
+                    "preimage": {"const": "JCS({environment_id,generation,isolation,network,enforces_network_policy,enforces_resource_limits,persistent,environment_capabilities,network_policy_ref_digest,isolation_policy_ref_digest})"},
+                    "digest": {"const": "SHA256(preimage)"},
+                }
+            ),
+            "command_digest": obj(
+                {
+                    "domain": {"const": "vv-agent/S1/command-digest"},
+                    "framing_version": {"const": 1, "type": "integer"},
+                    "purpose": {"const": "stable-command"},
+                    "canonicalization": {"const": "RFC8785_JCS"},
+                    "preimage": {"const": "JCS({domain,framing_version,purpose,tenant_id,session_id,command_spec,environment,operational_policy})"},
+                    "digest": {"const": "HMAC-SHA256(session_data_key,preimage)"},
+                    "excluded_fields": {"const": ["attempt", "request_digest", "dispatch_id", "clock_ms", "transport_credentials"]},
+                }
+            ),
+        }
+    )
+    return {
+        "$schema": DRAFT,
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "schema_version": {"const": "vv-agent.execution-worker-w3.v1"},
+            "contract_version": {"const": "41.0.0"},
+            "status": {"const": "contract-allocation-only"},
+            "feature_level": {"const": 3, "type": "integer"},
+            "provenance": obj(
+                {
+                    "producer_capture": {"const": False, "type": "boolean"},
+                    "capture": {"const": "none", "type": "string"},
+                    "adoption_evidence": {"const": False, "type": "boolean"},
+                    "note": TEXT,
+                }
+            ),
+            "framing": framing,
+            "idempotency": obj(
+                {
+                    "key_format": {"const": "{session_id}/{operation_id}"},
+                    "deduplication_scope": {"const": "tenant_id,environment_id,idempotency_key"},
+                    "stable_across_attempts": {"const": True, "type": "boolean"},
+                }
+            ),
+            "provider_outcomes": obj(
+                {
+                    "not_started": {"type": "null"},
+                    "running": {"const": "Accepted", "type": "string"},
+                    "exited": {"const": "Definitive", "type": "string"},
+                    "unknown": {"const": "Unknown", "type": "string"},
+                }
+            ),
+            "environment": ref("EnvironmentCapabilityBinding"),
+            "operational_policy": ref("OperationalPolicy"),
+            "identity_vectors": array(identity_vector),
+            "command_digest_vectors": array(command_digest_vector),
+            "lookup_binding": ref("ProviderLookupBinding"),
+            "lookup_results": array(lookup_vector),
+            "invalid_lookup_cases": array(invalid_lookup),
+            "recovery_cases": array(recovery_case),
+        },
+        "required": [
+            "schema_version",
+            "contract_version",
+            "status",
+            "feature_level",
+            "provenance",
+            "framing",
+            "idempotency",
+            "provider_outcomes",
+            "environment",
+            "operational_policy",
+            "identity_vectors",
+            "command_digest_vectors",
+            "lookup_binding",
+            "lookup_results",
+            "invalid_lookup_cases",
+            "recovery_cases",
+        ],
+        "$defs": {
+            "ExecutionIdentity": execution_identity(),
+            "EnvironmentCapabilityBinding": environment_capabilities,
+            "CommandSpec": command_spec(),
+            "OperationalPolicy": operational_policy(),
+            **provider_lookup,
+        },
+    }
+
+
 def worker_compatibility_schema() -> dict[str, Any]:
     tool_schema = obj(
         {
@@ -1283,6 +1706,24 @@ def worker_compatibility_schema() -> dict[str, Any]:
             "level1_reader_accepted": {"type": "boolean"},
             "level2_reader_without_execution_supports_accepted": {"type": "boolean"},
             "content_hydrated": {"const": False, "type": "boolean"},
+        }
+    )
+    level_three_case = obj(
+        {
+            "name": TEXT,
+            "session_bootstrap_feature_level": {"const": 2, "type": "integer"},
+            "execution_record_feature_level": {"const": 3, "type": "integer"},
+            "routing_requirements": ref("SessionRequirements"),
+            "expected_cache": ref("RoutingCache"),
+            "level2_worker_accepted": {"const": False, "type": "boolean"},
+            "level3_worker_accepted": {"const": True, "type": "boolean"},
+            "level2_reader_accepted": {"const": False, "type": "boolean"},
+            "level3_reader_without_execution_supports_accepted": {
+                "const": True,
+                "type": "boolean",
+            },
+            "body_decoded": {"const": False, "type": "boolean"},
+            "epoch_granted": {"const": False, "type": "boolean"},
         }
     )
     capability_bound_case = obj(
@@ -1405,6 +1846,10 @@ def worker_compatibility_schema() -> dict[str, Any]:
                         "const": "complete-proof-projection-then-locked-now-before-epoch",
                         "type": "string",
                     },
+                    "w3_execution": {
+                        "const": "feature-level-3-command-identity-and-authenticated-lookup",
+                        "type": "string",
+                    },
                 }
             ),
             "tagging": obj(
@@ -1477,6 +1922,7 @@ def worker_compatibility_schema() -> dict[str, Any]:
             "cases": array(scenario),
             "admission_order_cases": array(admission_order_case),
             "format_floor_cases": array(format_floor_case),
+            "level_three_cases": array(level_three_case),
             "capability_bound_cases": array(capability_bound_case),
             "model_tag_cases": array(model_tag_case),
         },
@@ -1491,6 +1937,7 @@ def worker_compatibility_schema() -> dict[str, Any]:
             "cases",
             "admission_order_cases",
             "format_floor_cases",
+            "level_three_cases",
             "capability_bound_cases",
             "model_tag_cases",
         ],
@@ -1510,6 +1957,7 @@ def rendered() -> dict[Path, dict[str, Any]]:
         FIXTURES / "session_inbox.schema.json": inbox_schema(),
         FIXTURES / "session_storage_envelope.schema.json": storage_envelope_schema(),
         FIXTURES / "session_storage_lifecycle.schema.json": lifecycle_schema(),
+        FIXTURES / "execution_worker_w3.schema.json": execution_worker_w3_schema(),
         FIXTURES / "worker_compatibility.schema.json": worker_compatibility_schema(),
     }
 

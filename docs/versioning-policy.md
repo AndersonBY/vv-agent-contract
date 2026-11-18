@@ -106,9 +106,10 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-41.0.0 with the W4 worker-routing replacement on storage S1. Python implementation,
-real producer capture, immutable publication/lock/snapshot, required full gates and
-central adoption remain in progress.
+41.0.0 with the W4 worker-routing replacement and W3 level-3 command/lookup
+allocation on storage S1. Python implementation, real producer capture, immutable
+publication/lock/snapshot, required full gates and central adoption remain in
+progress.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -238,7 +239,7 @@ SQLite/PostgreSQL implementation remain later work. This repository contains
 synthetic allocation fixtures, not a Python S1 producer capture or adoption claim.
 See [release notes](release-40.0.0.md).
 
-## 41.0.0 W4 worker routing requirements
+## 41.0.0 W4 worker routing and W3 execution allocation
 
 This is a major behavior replacement, not an optional compatibility layer. Storage
 remains S1 with the existing set of columns and state machines: there is no DDL
@@ -247,6 +248,15 @@ its current bytes and defaults. Level 2 adds a required typed
 `session_created.bootstrap` and required `requirements` on `user`, `follow_up` and
 `model_selection` inbox items. Those fields reject at level 1, and level 2 rejects
 for kinds outside that closed allocation.
+
+Level 3 is limited to existing `turn_started`, `op_planned` and
+`provider_evidence` shapes. It adds the frozen environment capability binding,
+stable execution/command identity, and authenticated provider lookup result
+defined in the [session kernel](session-kernel.md#w3-execution-identity-and-lookup).
+Level-1 and level-2 bytes remain unchanged. A level-2 worker or reader rejects a
+level-3 body before decode; a level-3 thin reader may decode without execution
+supports but cannot claim or dispatch. The synthetic W3 allocation does not add a
+record kind, storage layout, registry, proxy, ledger or parallel outcome enum.
 
 The existing `sk_session` routing group is recomputed at creation, turn start,
 input publication and turn end in the same transaction. Active turns use the frozen
@@ -289,9 +299,11 @@ but the persisted S1 `stop.code` is closed to `host.policy_stop`, `host_stop`,
 existing allocation without a new storage discriminator, migration or v42 release.
 No Rust support is claimed for the current boundary.
 
-`fixtures/worker_compatibility.json` is contract-allocation-only. It has no producer
-capture and is excluded from adoption evidence. Python producer capture and all
-implementation gates remain pending. Rust remains frozen at 23.0.0 / 0.21.x.
+`fixtures/worker_compatibility.json` and `fixtures/execution_worker_w3.json` are
+contract-allocation-only. They have no producer capture and are excluded from
+adoption evidence. Python producer capture and all implementation gates remain
+pending. Rust remains frozen at 23.0.0 / 0.21.x. See the
+[41.0.0 release allocation](release-41.0.0.md); Contract 41 is unreleased.
 
 B5 compaction source authority is deferred from 41.0.0. It would replace the
 preimage and validation of existing `context_compacted.source_digest` and

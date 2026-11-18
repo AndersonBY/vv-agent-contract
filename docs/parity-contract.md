@@ -76,6 +76,18 @@ reservation, all primary/internal attempt accounting and unavailable active wall
 intervals follow [run budgets](run-budgets.md) and
 [model-call accounting](model-call-accounting.md).
 
+Contract 41 level 3, when implemented, binds remote command identity before the
+first start and uses the existing Provider outcome classes for authenticated
+lookup. The stable execution ID excludes attempt/request/dispatch/clock data; the
+command HMAC binds command, environment and both operational-policy digests under
+the session data key. Only an authenticated `not_started` result permits one
+logged retry. `running` reuses the original execution, `exited` reconciles a
+Definitive result and `unknown` never retries start. Binding or authorization
+mismatch rejects before new effects, while malformed results retain
+`provider_result_invalid`. Level-2 workers and readers reject level-3 bodies before
+decode. The current W3 fixture is synthetic contract allocation only; no producer
+or environment implementation is claimed.
+
 Delegation uses one child-session admission/delivery mechanism, including configured
 children, Agent.as_tool, background tasks and handoff. Child WAIT_USER cannot
 complete a parent; parent adoption requires authenticated original terminal.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import hmac
 import json
@@ -323,8 +324,470 @@ def digest_inputs(value: Any):
                     yield node[field]
 
 
+EXECUTION_ID_DOMAIN = "vv-agent/S1/execution-identity"
+COMMAND_DIGEST_DOMAIN = "vv-agent/S1/command-digest"
+ENVIRONMENT_CAPABILITY_FIELDS = (
+    "environment_id",
+    "generation",
+    "isolation",
+    "network",
+    "enforces_network_policy",
+    "enforces_resource_limits",
+    "persistent",
+    "environment_capabilities",
+    "network_policy_ref_digest",
+    "isolation_policy_ref_digest",
+)
+
+
+def jcs_bytes(root: Path, value: Any) -> bytes:
+    result = subprocess.run(
+        ["node", str(root / "scripts/verify_jcs.mjs"), "--canonicalize"],
+        input=json.dumps([value], ensure_ascii=True, allow_nan=False),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    require(result.returncode == 0, f"canonical encoding failed: {result.stderr[:500]}")
+    return base64.b64decode(json.loads(result.stdout)[0], validate=True)
+
+
+def execution_identity_digest(root: Path, value: dict[str, Any]) -> str:
+    fact = {
+        "domain": EXECUTION_ID_DOMAIN,
+        "framing_version": 1,
+        "operation_key": value["operation_key"],
+        "tenant_id": value["tenant_id"],
+        "environment_id": value["environment_id"],
+    }
+    return hashlib.sha256(jcs_bytes(root, fact)).hexdigest()
+
+
+def environment_capabilities_digest(root: Path, value: dict[str, Any]) -> str:
+    fact = {field: value[field] for field in ENVIRONMENT_CAPABILITY_FIELDS}
+    require_sorted_unique(
+        fact["environment_capabilities"], "environment.environment_capabilities"
+    )
+    return hashlib.sha256(jcs_bytes(root, fact)).hexdigest()
+
+
+def validate_execution_identity(root: Path, value: dict[str, Any]) -> None:
+    require(
+        value["operation_key"]
+        == f"{value['session_id']}/{value['operation_id']}",
+        "execution operation key mismatch",
+    )
+    require(
+        value["execution_id"] == execution_identity_digest(root, value),
+        "execution identity digest mismatch",
+    )
+
+
+def validate_provider_outcome_binding(
+    binding: dict[str, Any], outcome: dict[str, Any] | None
+) -> None:
+    if outcome is None:
+        return
+    if outcome["kind"] != "Accepted":
+        return
+    require(
+        set(outcome) == {"kind", "handle", "yield_on_steer"},
+        "Accepted outcome shape mismatch",
+    )
+    require(type(outcome["yield_on_steer"]) is bool, "Accepted yield_on_steer must be boolean")
+    handle = outcome["handle"]
+    for field in (
+        "operation_id",
+        "attempt",
+        "request_digest",
+        "execution_id",
+        "command_digest",
+        "environment_id",
+        "generation",
+    ):
+        require(handle[field] == binding[field], f"provider handle {field} mismatch")
+    require(handle["provider"] == binding["provider_id"], "provider handle provider mismatch")
+    require(bool(handle["evidence"]), "provider handle evidence missing")
+
+
+def validate_provider_lookup_result(root: Path, value: dict[str, Any]) -> None:
+    binding = value["binding"]
+    require(
+        binding["idempotency_key"]
+        == f"{binding['session_id']}/{binding['operation_id']}",
+        "lookup idempotency key mismatch",
+    )
+    validate_execution_identity(
+        root,
+        {
+            "operation_key": binding["idempotency_key"],
+            "tenant_id": binding["tenant_id"],
+            "environment_id": binding["environment_id"],
+            "session_id": binding["session_id"],
+            "operation_id": binding["operation_id"],
+            "execution_id": binding["execution_id"],
+        },
+    )
+    status = value["status"]
+    outcome = value["outcome"]
+    expected_kind = {
+        "not_started": None,
+        "running": "Accepted",
+        "exited": "Definitive",
+        "unknown": "Unknown",
+    }[status]
+    require(
+        (outcome["kind"] if outcome is not None else None) == expected_kind,
+        "lookup status/outcome mismatch",
+    )
+    require(bool(value["evidence"]), "lookup evidence missing")
+    validate_provider_outcome_binding(binding, outcome)
+    if outcome is not None and outcome["kind"] == "Definitive":
+        require(bool(outcome["evidence"]), "definitive evidence missing")
+    if outcome is not None and outcome["kind"] == "Unknown":
+        require(bool(outcome["reason"]), "unknown reason missing")
+
+
+def apply_patch_operations(value: Any, operations: list[dict[str, Any]]) -> None:
+    for operation in operations:
+        target = value
+        for part in operation["path"][:-1]:
+            target = target[part]
+        field = operation["path"][-1]
+        if operation.get("delete"):
+            del target[field]
+        else:
+            target[field] = copy.deepcopy(operation["set"])
+
+
+def lookup_rejection_code(
+    root: Path,
+    expected_binding: dict[str, Any],
+    expected_environment: dict[str, Any],
+    expected_operational_policy: dict[str, Any],
+    result: dict[str, Any],
+    actual_environment: dict[str, Any],
+    actual_operational_policy: dict[str, Any],
+    *,
+    authenticated: bool,
+    transport_available: bool,
+) -> str | None:
+    if not transport_available:
+        return "unknown_transport"
+    if not authenticated:
+        return "authorization_mismatch"
+
+    binding = result["binding"]
+    for field in (
+        "tenant_id",
+        "session_id",
+        "operation_id",
+        "attempt",
+        "request_digest",
+        "idempotency_key",
+        "execution_id",
+        "environment_id",
+        "generation",
+        "provider_id",
+    ):
+        if binding[field] != expected_binding[field]:
+            return "binding_mismatch"
+    if binding["command_digest"] != expected_binding["command_digest"]:
+        return "command_mismatch"
+
+    if actual_environment["environment_id"] != expected_environment["environment_id"]:
+        return "environment_mismatch"
+    if actual_environment["generation"] != expected_environment["generation"]:
+        return "generation_mismatch"
+    isolation_rank = {"none": 0, "container": 1, "microvm": 2}
+    if isolation_rank[actual_environment["isolation"]] < isolation_rank[
+        expected_environment["isolation"]
+    ]:
+        return "isolation_downgrade"
+    if actual_environment["isolation"] != expected_environment["isolation"]:
+        return "environment_mismatch"
+    network_rank = {"none": 0, "allowlist": 1, "open": 2}
+    if network_rank[actual_environment["network"]] > network_rank[
+        expected_environment["network"]
+    ]:
+        return "network_policy_widening"
+    if actual_environment["network"] != expected_environment["network"]:
+        return "environment_mismatch"
+    for field in ("enforces_network_policy", "enforces_resource_limits", "persistent"):
+        if actual_environment[field] != expected_environment[field]:
+            return "enforcement_downgrade"
+    for field in (
+        "environment_capabilities",
+        "network_policy_ref_digest",
+        "isolation_policy_ref_digest",
+    ):
+        if actual_environment[field] != expected_environment[field]:
+            return "policy_digest_mismatch"
+    actual_digest = actual_environment["capabilities_digest"]
+    expected_digest = expected_environment["capabilities_digest"]
+    if actual_digest != expected_digest or (
+        actual_digest is not None
+        and actual_digest
+        != environment_capabilities_digest(root, actual_environment)
+    ):
+        return "capability_digest_mismatch"
+    if actual_operational_policy != expected_operational_policy:
+        return "policy_digest_mismatch"
+    return None
+
+
+def validate_execution_worker_w3(root: Path) -> dict[str, int]:
+    fixture = load_json(root / "fixtures/execution_worker_w3.json")
+    schema = load_json(root / "fixtures/execution_worker_w3.schema.json")
+    try:
+        validate_schema(fixture, schema, schema)
+    except ValidationError:
+        raise
+    except Exception as exc:
+        raise ValidationError(f"execution worker schema: {exc}") from exc
+    require(fixture["contract_version"] == "41.0.0", "W3 contract version")
+    require(fixture["feature_level"] == 3, "W3 feature level")
+    require(fixture["status"] == "contract-allocation-only", "W3 provenance status")
+    require(
+        fixture["provenance"]["producer_capture"] is False
+        and fixture["provenance"]["adoption_evidence"] is False,
+        "W3 producer adoption claim",
+    )
+    require(
+        fixture["provider_outcomes"]
+        == {
+            "not_started": None,
+            "running": "Accepted",
+            "exited": "Definitive",
+            "unknown": "Unknown",
+        },
+        "provider outcome allocation",
+    )
+
+    environment = fixture["environment"]
+    if environment["capabilities_digest"] is not None:
+        require(
+            environment["capabilities_digest"]
+            == environment_capabilities_digest(root, environment),
+            "W3 environment capabilities digest",
+        )
+
+    for vector in fixture["identity_vectors"]:
+        identity = vector["identity"]
+        fact = {
+            "domain": fixture["framing"]["execution_id"]["domain"],
+            "framing_version": fixture["framing"]["execution_id"]["framing_version"],
+            "operation_key": identity["operation_key"],
+            "tenant_id": identity["tenant_id"],
+            "environment_id": identity["environment_id"],
+        }
+        canonical = jcs_bytes(root, fact)
+        preimage = canonical
+        require(
+            base64.b64decode(vector["canonical_json_base64"], validate=True)
+            == canonical,
+            f"W3 identity canonical bytes: {vector['name']}",
+        )
+        require(
+            vector["canonical_json_utf8_bytes"] == len(canonical),
+            f"W3 identity byte count: {vector['name']}",
+        )
+        require(
+            base64.b64decode(vector["preimage_base64"], validate=True) == preimage,
+            f"W3 identity preimage: {vector['name']}",
+        )
+        expected = hashlib.sha256(preimage).hexdigest()
+        require(expected == vector["execution_id"], f"W3 identity digest: {vector['name']}")
+        require(expected == identity["execution_id"], f"W3 identity value: {vector['name']}")
+        excluded = set(fixture["framing"]["execution_id"]["excluded_fields"])
+        for variant in vector["excluded_context_variants"]:
+            require(set(variant) == excluded, f"W3 excluded identity fields: {vector['name']}")
+            variant_fact = {**fact, **variant}
+            require(
+                execution_identity_digest(root, variant_fact)
+                == expected,
+                f"W3 identity changed by excluded context: {vector['name']}",
+            )
+
+    for vector in fixture["command_digest_vectors"]:
+        environment_digest = vector["environment"]["capabilities_digest"]
+        if environment_digest is not None:
+            require(
+                environment_digest
+                == environment_capabilities_digest(root, vector["environment"]),
+                f"W3 command environment digest: {vector['name']}",
+            )
+        fact = {
+            "domain": fixture["framing"]["command_digest"]["domain"],
+            "framing_version": fixture["framing"]["command_digest"]["framing_version"],
+            "purpose": fixture["framing"]["command_digest"]["purpose"],
+            "tenant_id": vector["tenant_id"],
+            "session_id": vector["session_id"],
+            "command_spec": vector["command_spec"],
+            "environment": vector["environment"],
+            "operational_policy": vector["operational_policy"],
+        }
+        canonical = jcs_bytes(root, fact)
+        preimage = canonical
+        require(
+            base64.b64decode(vector["canonical_json_base64"], validate=True)
+            == canonical,
+            f"W3 command canonical bytes: {vector['name']}",
+        )
+        require(
+            vector["canonical_json_utf8_bytes"] == len(canonical),
+            f"W3 command byte count: {vector['name']}",
+        )
+        require(
+            base64.b64decode(vector["preimage_base64"], validate=True) == preimage,
+            f"W3 command preimage: {vector['name']}",
+        )
+        digest = hmac.new(
+            base64.b64decode(vector["session_data_key_base64"], validate=True),
+            preimage,
+            hashlib.sha256,
+        ).hexdigest()
+        require(digest == vector["command_digest"], f"W3 command digest: {vector['name']}")
+
+    expected_binding = fixture["lookup_binding"]
+    ids = {
+        "operation_key": expected_binding["idempotency_key"],
+        "tenant_id": expected_binding["tenant_id"],
+        "environment_id": expected_binding["environment_id"],
+        "session_id": expected_binding["session_id"],
+        "operation_id": expected_binding["operation_id"],
+        "execution_id": expected_binding["execution_id"],
+    }
+    require(
+        expected_binding["execution_id"] == execution_identity_digest(root, ids),
+        "W3 lookup execution identity",
+    )
+    require(
+        expected_binding["idempotency_key"]
+        == f"{expected_binding['session_id']}/{expected_binding['operation_id']}",
+        "W3 lookup idempotency key",
+    )
+    require(
+        expected_binding["command_digest"]
+        == fixture["command_digest_vectors"][0]["command_digest"],
+        "W3 lookup command digest",
+    )
+
+    lookup_results = {item["name"]: item for item in fixture["lookup_results"]}
+    require(
+        set(lookup_results)
+        == {
+            "not_started_proves_absence_and_allows_one_retry",
+            "running_reuses_original_execution",
+            "exited_reconciles_original_terminal_result",
+            "unknown_transport_or_registry_preserves_unknown",
+        },
+        "W3 lookup status coverage",
+    )
+    expected_disposition = {
+        "not_started": "no_effects_and_retry_once",
+        "running": "reuse_running_execution",
+        "exited": "reconcile_terminal_execution",
+        "unknown": "preserve_unknown",
+    }
+    for item in fixture["lookup_results"]:
+        result = item["result"]
+        validate_provider_lookup_result(root, result)
+        require(result["binding"] == expected_binding, f"W3 lookup binding: {item['name']}")
+        require(
+            item["expected_disposition"]
+            == expected_disposition[result["status"]],
+            f"W3 lookup disposition: {item['name']}",
+        )
+        if result["status"] == "unknown":
+            require(
+                item["transport_available"] is False
+                and item["authenticated"] is False
+                and item["retry_allowed"] is False,
+                "unknown transport must preserve uncertain state",
+            )
+        else:
+            require(
+                item["transport_available"] is True
+                and item["authenticated"] is True,
+                f"W3 authenticated lookup evidence: {item['name']}",
+            )
+        require(
+            item["retry_allowed"] == (result["status"] == "not_started"),
+            f"W3 retry permission: {item['name']}",
+        )
+
+    for case in fixture["invalid_lookup_cases"]:
+        lookup = copy.deepcopy(lookup_results[case["base_lookup"]]["result"])
+        actual_environment = copy.deepcopy(environment)
+        actual_policy = copy.deepcopy(fixture["operational_policy"])
+        target = {
+            "lookup": lookup,
+            "environment": actual_environment,
+            "operational_policy": actual_policy,
+        }[case["patch_target"]]
+        apply_patch_operations(target, case["patch"])
+        try:
+            validate_schema(
+                lookup, schema["$defs"]["ProviderLookupResult"], schema
+            )
+            code = lookup_rejection_code(
+                root,
+                expected_binding,
+                environment,
+                fixture["operational_policy"],
+                lookup,
+                actual_environment,
+                actual_policy,
+                authenticated=case["authenticated"],
+                transport_available=case["transport_available"],
+            )
+            if code is None:
+                validate_provider_lookup_result(root, lookup)
+        except (ValidationError, ValueError, KeyError, IndexError, TypeError):
+            code = "provider_result_invalid"
+        require(code == case["expected_code"], f"W3 invalid case: {case['name']}")
+
+    recovery_cases = {case["name"]: case for case in fixture["recovery_cases"]}
+    require(
+        set(recovery_cases)
+        == {
+            "authenticated_not_started_allows_one_new_attempt",
+            "after_second_submission_not_started_is_query_only",
+            "running_never_starts_again",
+            "exited_never_starts_again",
+            "unknown_never_starts_again",
+        },
+        "W3 recovery case coverage",
+    )
+    for case in fixture["recovery_cases"]:
+        retry = case["lookup_status"] == "not_started" and case["submitted_attempts"] == 1
+        require(
+            case["expected_disposition"]
+            == ("start_new_attempt" if retry else "query_or_evidence"),
+            f"W3 recovery disposition: {case['name']}",
+        )
+        require(
+            case["expected_next_attempt"] == (2 if retry else None),
+            f"W3 recovery attempt bound: {case['name']}",
+        )
+        require(
+            case["reuse_idempotency_key"] and case["reuse_execution_id"],
+            f"W3 recovery binding reuse: {case['name']}",
+        )
+
+    return {
+        "w3_identity_vectors": len(fixture["identity_vectors"]),
+        "w3_command_digest_vectors": len(fixture["command_digest_vectors"]),
+        "w3_lookup_results": len(fixture["lookup_results"]),
+        "w3_invalid_cases": len(fixture["invalid_lookup_cases"]),
+        "w3_recovery_cases": len(fixture["recovery_cases"]),
+    }
+
+
 class Codec:
     def __init__(self, root: Path, documents: Any):
+        self.root = root
         self.record_schema = load_json(root / "fixtures/session_record.schema.json")
         self.inbox_schema = load_json(root / "fixtures/session_inbox.schema.json")
         for schema, kinds in (
@@ -369,6 +832,25 @@ class Codec:
         require("chain_digest" not in wire, "chain_digest belongs to storage envelope")
         validate_content_refs(wire)
         if inbox:
+            if wire["feature_level"] == 3:
+                require(
+                    wire["kind"] == "provider_evidence",
+                    "level 3 inbox kind mismatch",
+                )
+                lookup = wire["payload"]["lookup"]
+                require(
+                    lookup["binding"]["tenant_id"] == wire["actor"]["tenant_id"],
+                    "lookup tenant binding mismatch",
+                )
+                require(
+                    lookup["binding"]["operation_id"]
+                    == wire["payload"]["operation_id"]
+                    and lookup["binding"]["attempt"] == wire["payload"]["attempt"]
+                    and lookup["binding"]["request_digest"]
+                    == wire["payload"]["request_digest"],
+                    "lookup payload binding mismatch",
+                )
+                validate_provider_lookup_result(self.root, lookup)
             validate_content_ref(wire["actor"]["attributes"], "inbox.actor.attributes")
             proof = wire["admission_proof"]
             if proof is not None:
@@ -382,6 +864,11 @@ class Codec:
                 )
             return
         kind, p = wire["kind"], wire["payload"]
+        if wire["feature_level"] == 3:
+            require(
+                kind in {"turn_started", "op_planned"},
+                "level 3 record kind mismatch",
+            )
         require(wire["record_id"] == record_id(wire), "wrong record identity")
         operation = kind.startswith("op_")
         require(
@@ -416,6 +903,32 @@ class Codec:
                     environment["environment_capabilities"],
                     "turn_started.environment.environment_capabilities",
                 )
+                if wire["feature_level"] == 3:
+                    if environment["capabilities_digest"] is not None:
+                        require(
+                            environment["capabilities_digest"]
+                            == environment_capabilities_digest(self.root, environment),
+                            "environment capabilities digest mismatch",
+                        )
+        if kind == "op_planned" and wire["feature_level"] == 3:
+            require(p["op_kind"] == "tool", "level 3 plan must be a tool operation")
+            identity = p["execution_identity"]
+            require(
+                identity["session_id"] == wire["session_id"]
+                and identity["operation_id"] == wire["operation_id"],
+                "execution identity operation mismatch",
+            )
+            require(
+                identity["operation_key"]
+                == f"{wire['session_id']}/{wire['operation_id']}",
+                "execution operation key mismatch",
+            )
+            require(
+                p["idempotency_key"]
+                == f"{wire['session_id']}/{wire['operation_id']}",
+                "execution idempotency key mismatch",
+            )
+            validate_execution_identity(self.root, identity)
         pair = {
             "turn_started": ("definition_digest", "definition"),
             "op_planned": ("request_digest", "request"),
@@ -850,6 +1363,7 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
     trusted_negatives = validate_trusted_storage(
         root, codec, documents["trusted_storage_s1.json"]
     )
+    w3_report = validate_execution_worker_w3(root)
     for node in walk([current_documents, streams]):
         if not isinstance(node, dict) or not isinstance(node.get("kind"), str):
             continue
@@ -1034,4 +1548,5 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
         "storage_envelope_cases": sum(storage_cases),
         "storage_lifecycle_cases": sum(lifecycle_cases),
         "trusted_negative_cases": trusted_negatives,
+        **w3_report,
     }

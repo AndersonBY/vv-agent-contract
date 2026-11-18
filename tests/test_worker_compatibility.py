@@ -58,6 +58,34 @@ class WorkerCompatibilityAllocationTests(unittest.TestCase):
         self.assertFalse(self.fixture["provenance"]["producer_capture"])
         self.assertEqual(self.fixture["provenance"]["capture"], "none")
         self.assertFalse(self.fixture["provenance"]["adoption_evidence"])
+        self.assertEqual(
+            self.fixture["allocation"]["w3_execution"],
+            "feature-level-3-command-identity-and-authenticated-lookup",
+        )
+
+    def test_level_two_worker_rejects_level_three_execution_record(self) -> None:
+        cases = {
+            case["name"]: case for case in self.fixture["level_three_cases"]
+        }
+        self.assertEqual(
+            set(cases),
+            {"level_two_worker_never_claims_level_three_execution_record"},
+        )
+        case = cases["level_two_worker_never_claims_level_three_execution_record"]
+        self.assertEqual(case["session_bootstrap_feature_level"], 2)
+        self.assertEqual(case["execution_record_feature_level"], 3)
+        self.assertEqual(case["expected_cache"]["level"], 3)
+        self.assertEqual(
+            case["expected_cache"]["required_capabilities"], ["env:remote"]
+        )
+        self.assertFalse(case["level2_worker_accepted"])
+        self.assertTrue(case["level3_worker_accepted"])
+        self.assertFalse(case["level2_reader_accepted"])
+        self.assertTrue(
+            case["level3_reader_without_execution_supports_accepted"]
+        )
+        self.assertFalse(case["body_decoded"])
+        self.assertFalse(case["epoch_granted"])
 
     def test_tool_and_model_tags_are_recomputed_from_the_same_facts(self) -> None:
         catalog = self.fixture["trusted_catalog"]

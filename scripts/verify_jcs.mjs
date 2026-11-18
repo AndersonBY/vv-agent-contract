@@ -197,6 +197,86 @@ function verifyToolResults() {
     if (projection.expected_message !== expected) fail(`tool result/${projection.name}: recovery projection`);
   }
 }
+
+function verifyExecutionWorkerW3() {
+  const fixture = readFixture("execution_worker_w3.json");
+  const environmentFields = [
+    "environment_id",
+    "generation",
+    "isolation",
+    "network",
+    "enforces_network_policy",
+    "enforces_resource_limits",
+    "persistent",
+    "environment_capabilities",
+    "network_policy_ref_digest",
+    "isolation_policy_ref_digest",
+  ];
+  const environmentFact = value => Object.fromEntries(
+    environmentFields.map(field => [field, value[field]])
+  );
+  const capabilitiesDigest = value => sha256(
+    Buffer.from(canonicalize(environmentFact(value)), "utf8")
+  );
+  if (fixture.environment.capabilities_digest !== null && fixture.environment.capabilities_digest !== capabilitiesDigest(fixture.environment)) {
+    fail("W3 environment capabilities digest");
+  }
+
+  for (const vector of fixture.identity_vectors) {
+    const fact = {
+      domain: fixture.framing.execution_id.domain,
+      framing_version: fixture.framing.execution_id.framing_version,
+      operation_key: vector.identity.operation_key,
+      tenant_id: vector.identity.tenant_id,
+      environment_id: vector.identity.environment_id,
+    };
+    const canonical = Buffer.from(canonicalize(fact), "utf8");
+    const preimage = canonical;
+    if (vector.canonical_json_base64 !== canonical.toString("base64")) fail(`W3 identity/${vector.name}: canonical bytes`);
+    if (vector.canonical_json_utf8_bytes !== canonical.length) fail(`W3 identity/${vector.name}: byte count`);
+    if (vector.preimage_base64 !== preimage.toString("base64")) fail(`W3 identity/${vector.name}: preimage`);
+    if (vector.execution_id !== sha256(preimage) || vector.identity.execution_id !== sha256(preimage)) fail(`W3 identity/${vector.name}: digest`);
+    for (const variant of vector.excluded_context_variants) {
+      const variantFact = { ...fact, ...variant };
+      const variantCanonical = Buffer.from(canonicalize({
+        domain: variantFact.domain,
+        framing_version: variantFact.framing_version,
+        operation_key: variantFact.operation_key,
+        tenant_id: variantFact.tenant_id,
+        environment_id: variantFact.environment_id,
+      }), "utf8");
+      if (sha256(variantCanonical) !== vector.execution_id) fail(`W3 identity/${vector.name}: excluded context changed identity`);
+    }
+  }
+
+  for (const vector of fixture.command_digest_vectors) {
+    if (vector.environment.capabilities_digest !== null && vector.environment.capabilities_digest !== capabilitiesDigest(vector.environment)) fail(`W3 command/${vector.name}: environment digest`);
+    const fact = {
+      domain: fixture.framing.command_digest.domain,
+      framing_version: fixture.framing.command_digest.framing_version,
+      purpose: fixture.framing.command_digest.purpose,
+      tenant_id: vector.tenant_id,
+      session_id: vector.session_id,
+      command_spec: vector.command_spec,
+      environment: vector.environment,
+      operational_policy: vector.operational_policy,
+    };
+    const canonical = Buffer.from(canonicalize(fact), "utf8");
+    const preimage = canonical;
+    if (vector.canonical_json_base64 !== canonical.toString("base64")) fail(`W3 command/${vector.name}: canonical bytes`);
+    if (vector.canonical_json_utf8_bytes !== canonical.length) fail(`W3 command/${vector.name}: byte count`);
+    if (vector.preimage_base64 !== preimage.toString("base64")) fail(`W3 command/${vector.name}: preimage`);
+    const digest = crypto.createHmac("sha256", Buffer.from(vector.session_data_key_base64, "base64")).update(preimage).digest("hex");
+    if (vector.command_digest !== digest) fail(`W3 command/${vector.name}: HMAC`);
+  }
+
+  const statuses = fixture.lookup_results.map(item => item.result.status);
+  if (canonicalize(statuses) !== canonicalize(["not_started", "running", "exited", "unknown"])) fail("W3 lookup status order");
+  if (canonicalize(fixture.provider_outcomes) !== canonicalize({ not_started: null, running: "Accepted", exited: "Definitive", unknown: "Unknown" })) fail("W3 provider outcome mapping");
+  const running = fixture.lookup_results.find(item => item.result.status === "running");
+  if (typeof running.result.outcome.yield_on_steer !== "boolean") fail("W3 Accepted outcome missing yield_on_steer");
+}
+
 if (process.argv.includes("--write")) fail("Producer fixtures are immutable here; regenerate them at source");
 if (process.argv.includes("--canonicalize")) {
   let source = "";
@@ -241,5 +321,6 @@ if (process.argv.includes("--canonicalize")) {
   if ("controller/" + sha256(Buffer.concat([Buffer.from(value.schema_version), Buffer.from([0]), length, bytes])) !== app.facts.child_reply_command_id) fail("app: child reply identity");
   verifyPrompts();
   verifyToolResults();
-  process.stdout.write(`JCS verified: ${codec.vectors.length} session vectors, record diagnostic bytes, invalid byte hashes, nested digests, action identities, projections and prompts\n`);
+  verifyExecutionWorkerW3();
+  process.stdout.write(`JCS verified: ${codec.vectors.length} session vectors, W3 identity and command bytes, record diagnostic bytes, invalid byte hashes, nested digests, action identities, projections and prompts\n`);
 }

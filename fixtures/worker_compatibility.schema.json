@@ -71,6 +71,10 @@
         "cache_verification": {
           "const": "complete-proof-projection-then-locked-now-before-epoch",
           "type": "string"
+        },
+        "w3_execution": {
+          "const": "feature-level-3-command-identity-and-authenticated-lookup",
+          "type": "string"
         }
       },
       "required": [
@@ -80,7 +84,8 @@
         "tool_supports",
         "model_source",
         "cache",
-        "cache_verification"
+        "cache_verification",
+        "w3_execution"
       ]
     },
     "tagging": {
@@ -592,6 +597,70 @@
         ]
       }
     },
+    "level_three_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_bootstrap_feature_level": {
+            "const": 2,
+            "type": "integer"
+          },
+          "execution_record_feature_level": {
+            "const": 3,
+            "type": "integer"
+          },
+          "routing_requirements": {
+            "$ref": "#/$defs/SessionRequirements"
+          },
+          "expected_cache": {
+            "$ref": "#/$defs/RoutingCache"
+          },
+          "level2_worker_accepted": {
+            "const": false,
+            "type": "boolean"
+          },
+          "level3_worker_accepted": {
+            "const": true,
+            "type": "boolean"
+          },
+          "level2_reader_accepted": {
+            "const": false,
+            "type": "boolean"
+          },
+          "level3_reader_without_execution_supports_accepted": {
+            "const": true,
+            "type": "boolean"
+          },
+          "body_decoded": {
+            "const": false,
+            "type": "boolean"
+          },
+          "epoch_granted": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "session_bootstrap_feature_level",
+          "execution_record_feature_level",
+          "routing_requirements",
+          "expected_cache",
+          "level2_worker_accepted",
+          "level3_worker_accepted",
+          "level2_reader_accepted",
+          "level3_reader_without_execution_supports_accepted",
+          "body_decoded",
+          "epoch_granted"
+        ]
+      }
+    },
     "capability_bound_cases": {
       "type": "array",
       "items": {
@@ -827,6 +896,7 @@
     "cases",
     "admission_order_cases",
     "format_floor_cases",
+    "level_three_cases",
     "capability_bound_cases",
     "model_tag_cases"
   ],

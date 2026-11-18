@@ -15,7 +15,8 @@
     "tool_supports": "trusted-complete-catalog",
     "model_source": "trusted-resolved-model-binding",
     "cache": "format-floor-plus-active-turn-or-combined-idle-admission-order",
-    "cache_verification": "complete-proof-projection-then-locked-now-before-epoch"
+    "cache_verification": "complete-proof-projection-then-locked-now-before-epoch",
+    "w3_execution": "feature-level-3-command-identity-and-authenticated-lookup"
   },
   "tagging": {
     "tool_fields": [
@@ -674,6 +675,34 @@
       "level1_reader_accepted": false,
       "level2_reader_without_execution_supports_accepted": true,
       "content_hydrated": false
+    }
+  ],
+  "level_three_cases": [
+    {
+      "name": "level_two_worker_never_claims_level_three_execution_record",
+      "session_bootstrap_feature_level": 2,
+      "execution_record_feature_level": 3,
+      "routing_requirements": {
+        "level": 3,
+        "handler_version": "handler-h3",
+        "capabilities": [
+          "env:remote"
+        ]
+      },
+      "expected_cache": {
+        "level": 3,
+        "handler_version": "handler-h3",
+        "required_capabilities": [
+          "env:remote"
+        ],
+        "active_turn_id": null
+      },
+      "level2_worker_accepted": false,
+      "level3_worker_accepted": true,
+      "level2_reader_accepted": false,
+      "level3_reader_without_execution_supports_accepted": true,
+      "body_decoded": false,
+      "epoch_granted": false
     }
   ],
   "capability_bound_cases": [

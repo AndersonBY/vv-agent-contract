@@ -26,8 +26,8 @@ and array elements are not implicitly normalized, trimmed, sorted or deduplicate
 
 | Envelope | Required fields (no other fields) |
 | --- | --- |
-| Record | `schema_version:string const "S1"`, `feature_level:integer 1\|2`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload` closed by kind |
-| InboxItem | `schema_version:string const "S1"`, `feature_level:integer 1\|2`, `actor:Principal`, `admission_proof:proof\|null`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, optional `requirements:SessionRequirements`, `payload:J` selected by kind |
+| Record | `schema_version:string const "S1"`, `feature_level:integer 1\|2\|3`, `record_id:T`, `kind:record enum`, `session_id:T`, `turn_id:T\|null`, `operation_id:T\|null`, `attempt:P\|null`, `payload` closed by kind |
+| InboxItem | `schema_version:string const "S1"`, `feature_level:integer 1\|2\|3`, `actor:Principal`, `admission_proof:proof\|null`, `input_id:T`, `kind:inbox enum`, `target_turn_id:T\|null`, `generation:N\|null`, `available_ms:N`, optional `requirements:SessionRequirements`, `payload:J` selected by kind |
 
 The logical record has no top-level sequence, receiving time, record digest, chain
 digest, commit identity or writer epoch. Storage supplies ordered positions,
@@ -40,8 +40,12 @@ no `session_created.bootstrap` and no `InboxItem.requirements`, and either added
 field at level 1 rejects. Level 2 is allocated only for `session_created` with its
 required `bootstrap`, and for `user`, `follow_up` and `model_selection` with their
 required `requirements`. A level-2 shape for any other record or inbox kind, or a
-level-2 control item missing its field, rejects. Existing level-1 fixtures and
-producer bytes remain readable without inserting defaults into the logical value.
+level-2 control item missing its field, rejects. Level 3 is allocated only for
+`turn_started`, `op_planned`, and the `provider_evidence` inbox kind; a level-3
+shape for any other kind rejects. A level-1 or level-2 worker/reader rejects a
+level-3 record before decoding its body. Existing level-1 and level-2 fixtures
+and producer bytes remain readable without inserting defaults into the logical
+value.
 When a level-1 `user` or `follow_up` input activates in a level-2 session, its
 bytes remain level 1 and the session's trusted `bootstrap` supplies that input's
 pre-admission routing bound; the absent field MUST NOT be interpreted as a
@@ -67,9 +71,9 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 | Kind | Closed payload fields |
 | --- | --- |
 | `session_created` | `principal:Principal`, `workspace:C`, `parent_session_id:T\|null`, `parent_operation_id:T\|null`, `attributes:C`; level 2 also requires `bootstrap:SessionRequirements` |
-| `turn_started` | `input_ids:[T]`, `definition:C`, `definition_digest:H`, `handler_version:T`, `budget:C`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `tokenizer_binding:TokenizerBinding\|null`, `environment:EnvironmentBinding\|null` |
+| `turn_started` | `input_ids:[T]`, `definition:C`, `definition_digest:H`, `handler_version:T`, `budget:C`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `tokenizer_binding:TokenizerBinding\|null`, `environment:EnvironmentBinding\|null`; level 3 requires non-null `ExecutionEnvironmentBinding` |
 | `input_applied` | `input:InboxItem`, `input_digest:H`, `input_proof:InputProof\|null`, `disposition:applied/rejected/noop/queued`, `reason:C\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, optional `model_binding:C` |
-| `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:C`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:C\|null`, `idempotency_key:T\|null`, `budget_admission:C`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]`, `policy_decision:PolicyDecision\|null` |
+| `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:C`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:C\|null`, `idempotency_key:T\|null`, `budget_admission:C`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]`, `policy_decision:PolicyDecision\|null`; level 3 requires `op_kind=tool`, `execution_identity:ExecutionIdentity` and `command_digest:H` |
 | `op_prepared` | `request:C`, `request_digest:H`, `op_kind:tool/interaction`, `tool:C`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:C\|null`, `shared_state:C`, `policy_decision:PolicyDecision\|null` |
 | `turn_parked` | `interaction_id:T`, `question:C`, `source_operation_id:T`, `source_attempt:P` |
 | `op_started` | `dispatch_id:T`, `authorization_version:T`, `epoch:P`, `mode:sync/provider/managed`, `endpoint_id?:T` |
@@ -98,7 +102,7 @@ validates the original typed content boundary before execution.
 | `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:C`, optional `reason:C`, `metadata:C`, `policy_digest:H`, `rule_id:T`, `expires_ms:N\|null` |
 | `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:C\|null`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
 | `control` | `action:close/archive/suspend/resume/cancel/abort` |
-| `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle`, optional `yield_on_steer:true` |
+| `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle`, optional `yield_on_steer:true`; level 3 instead requires `lookup:ProviderLookupResult` and carries no parallel handle field |
 
 User content remains opaque at the generic boundary. Kernel reply producers currently use
 `{interaction_id,text}` (optionally operation_id) for ask_user and `{interaction_id,text}` for
@@ -339,6 +343,30 @@ separate namespace from worker requirements. `operational_policy` MUST be
 `{network_policy_digest:H,isolation_policy_digest:H}` in the skeleton. Hydration
 validates that object and its operational digests.
 
+At level 3, `turn_started.environment` uses the non-null closed
+`ExecutionEnvironmentBinding`:
+
+```text
+{
+  descriptor:C,
+  environment_id:T, generation:N,
+  isolation:none|container|microvm, network:open|allowlist|none,
+  enforces_network_policy:B, enforces_resource_limits:B, persistent:B,
+  environment_capabilities:[T], capabilities_digest:H|null,
+  network_policy_ref_digest:H|null, isolation_policy_ref_digest:H|null,
+  operational_policy:C
+}
+```
+
+`environment_capabilities` stays separate from worker requirements. A non-null
+`capabilities_digest` is
+`SHA256(JCS({environment_id,generation,isolation,network,enforces_network_policy,
+enforces_resource_limits,persistent,environment_capabilities,
+network_policy_ref_digest,isolation_policy_ref_digest}))`. The policy-reference
+digests are nullable references to committed `ContentRef` values; they are not
+operational-policy digests. The operational object remains inside the C reference
+as specified above.
+
 `PolicyDecision` is null or `{policy_digest:H,rule_id:T,effect:allow|deny|require_approval}`
 at operation plan, preparation and completion. `approval_answer` may carry
 `policy_digest`, `rule_id` and `expires_ms`; approval scope and prose remain C.
@@ -435,6 +463,13 @@ current S1 records and inbox values it is authorized to access even when its hos
 has no executor, model or tool capability tags. It MUST still satisfy the same
 format level as an executor; only tool, model and handler execution supports are
 waived for a thin reader.
+
+Feature level 3 is a worker format and execution gate. A level-2 worker or reader
+cannot claim, decode or project a level-3 `turn_started`, `op_planned` or
+`provider_evidence` value. A level-3 thin reader may decode it without execution
+supports, but that grants no claim, epoch or provider call. W3 environment and
+command checks remain execution-side checks; they do not turn tenant content
+authorization, RLS or Principal checks into worker-capability checks.
 
 Such a reader still validates the S1 discriminator, its reader format level against
 the record/feature level, and the existing chain, input-proof, cursor or projection
@@ -713,6 +748,73 @@ and recovers by the stable `context.idempotency_key` may declare
 `ToolMetadata.idempotency="supported"`. Retries reuse that key across attempts.
 Otherwise the outcome stays Unknown until trusted evidence reconciles it.
 There is no unconditional exactly-once guarantee.
+
+### W3 execution identity and lookup
+
+Level 3 allocates the W3 command/recovery boundary using existing record kinds.
+For a tool command, the trusted provider reserves the execution identity before
+the first start. The stable operation key is `{session_id}/{operation_id}`. The
+exact RFC 8785 preimage object and `execution_id` are:
+
+```text
+preimage = JCS({
+  domain: "vv-agent/S1/execution-identity",
+  framing_version: 1,
+  operation_key: "{session_id}/{operation_id}",
+  tenant_id,
+  environment_id
+})
+execution_id = SHA256(preimage)
+```
+
+`attempt`, `request_digest`, `dispatch_id` and all clocks are excluded. The
+literal idempotency key remains `{session_id}/{operation_id}` and does not vary
+across attempts or workers. Provider-side deduplication is scoped by
+`(tenant_id,environment_id,idempotency_key)`.
+
+`op_planned` level 3 persists `ExecutionIdentity =
+{operation_key,tenant_id,environment_id,session_id,operation_id,execution_id}`
+plus the opaque `command_digest`. For command digest framing, let
+`command_fact={domain,framing_version,purpose,tenant_id,session_id,command_spec,
+environment,operational_policy}` where `domain` is
+`"vv-agent/S1/command-digest"`, `framing_version` is `1`, `purpose` is
+`"stable-command"`, `command_spec` is the full immutable command object,
+`environment` is exactly `EnvironmentCapabilities.to_dict()` without the C
+descriptor slot, and `operational_policy` is the hydrated closed
+`{network_policy_digest,isolation_policy_digest}` object. The exact digest is:
+
+```text
+preimage = JCS(command_fact)
+command_digest = HMAC-SHA256(session_data_key, preimage)
+```
+
+The session HMAC key is never sent to the remote agent. Attempt/request/dispatch
+identities, clocks and transport credentials are excluded. The operational-policy
+digests stay private inside encrypted content and cannot be replaced by a
+capability or policy-reference digest.
+
+`provider_evidence` level 3 carries
+`lookup:{schema_version:"vv-agent.provider-lookup.v1",status,binding,outcome,evidence}`.
+The operation, attempt and request digest in the outer inbox value MUST equal the
+lookup binding. The binding additionally carries `idempotency_key,execution_id,
+command_digest,environment_id,generation,provider_id`; its stable identity digest
+MUST be recomputable from tenant, environment, session and operation. The result
+is closed to these mappings:
+
+| Status | Provider outcome | Kernel action |
+| --- | --- | --- |
+| `not_started` | null | Record evidence. At most one new ledger attempt may start, reusing the same idempotency key and execution ID. |
+| `running` | `Accepted` with a handle bound to operation, attempt, request, provider, execution, command, environment and generation | Reuse that execution. Never start again. |
+| `exited` | `Definitive` with authenticated result, usage and evidence | Reconcile the original operation once without creating a new process. |
+| `unknown` | `Unknown` with evidence | Preserve unknown state. Never infer absence and never retry start. |
+
+Transport or registry inability to prove state maps to `unknown`. A valid
+authenticated provider response with a binding or authorization mismatch is a
+deterministic rejection and changes no execution state. A malformed result uses
+`provider_result_invalid`. The W3 synthetic vectors are in
+`fixtures/execution_worker_w3.json`; they record no producer capture. The fixture
+does not add an HTTP proxy, execution registry, ledger, record kind or second
+outcome enum. Python W3 adoption remains required work.
 
 ### Submission and control
 

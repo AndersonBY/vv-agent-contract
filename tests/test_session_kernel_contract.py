@@ -50,6 +50,131 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(report["storage_envelope_cases"], 6)
         self.assertEqual(report["storage_lifecycle_cases"], 11)
         self.assertEqual(report["trusted_negative_cases"], 26)
+        self.assertEqual(report["w3_identity_vectors"], 1)
+        self.assertEqual(report["w3_command_digest_vectors"], 1)
+        self.assertEqual(report["w3_lookup_results"], 4)
+        self.assertEqual(report["w3_invalid_cases"], 13)
+        self.assertEqual(report["w3_recovery_cases"], 5)
+
+    def test_level_three_execution_shapes_are_closed_and_level_two_rejects(self) -> None:
+        turn = self.record("turn_started")
+        turn["feature_level"] = 3
+        environment = {
+            "descriptor": turn["payload"]["definition"],
+            "environment_id": "env-remote-1",
+            "generation": 7,
+            "isolation": "container",
+            "network": "none",
+            "enforces_network_policy": True,
+            "enforces_resource_limits": True,
+            "persistent": True,
+            "environment_capabilities": [
+                "command.execute",
+                "filesystem.workspace",
+                "network.deny",
+            ],
+            "capabilities_digest": "0" * 64,
+            "network_policy_ref_digest": "1" * 64,
+            "isolation_policy_ref_digest": "2" * 64,
+            "operational_policy": turn["payload"]["budget"],
+        }
+        environment["capabilities_digest"] = session.environment_capabilities_digest(
+            ROOT, environment
+        )
+        turn["payload"]["environment"] = environment
+        self.codec.validate(turn)
+
+        nullable_environment = copy.deepcopy(turn)
+        nullable_environment["payload"]["environment"]["capabilities_digest"] = None
+        self.codec.validate(nullable_environment)
+
+        level_two_turn = copy.deepcopy(turn)
+        level_two_turn["feature_level"] = 2
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(level_two_turn)
+
+        plan = copy.deepcopy(
+            next(
+                vector["wire"]
+                for vector in self.vectors["vectors"]
+                if vector["type"] == "record"
+                and vector["wire"]["kind"] == "op_planned"
+                and vector["wire"]["payload"]["op_kind"] == "tool"
+            )
+        )
+        plan["feature_level"] = 3
+        identity = {
+            "operation_key": f"{plan['session_id']}/{plan['operation_id']}",
+            "tenant_id": "tenant-a",
+            "environment_id": environment["environment_id"],
+            "session_id": plan["session_id"],
+            "operation_id": plan["operation_id"],
+            "execution_id": "0" * 64,
+        }
+        identity["execution_id"] = session.execution_identity_digest(ROOT, identity)
+        plan["payload"]["execution_identity"] = identity
+        plan["payload"]["command_digest"] = "3" * 64
+        self.codec.validate(plan)
+
+        level_two_plan = copy.deepcopy(plan)
+        level_two_plan["feature_level"] = 2
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(level_two_plan)
+
+        evidence = copy.deepcopy(
+            next(
+                vector["wire"]
+                for vector in self.vectors["vectors"]
+                if vector["type"] == "inbox"
+                and vector["wire"]["kind"] == "provider_evidence"
+            )
+        )
+        evidence["feature_level"] = 3
+        session_id = evidence["target_turn_id"] or "sess-1"
+        lookup_identity = {
+            "operation_key": f"{session_id}/{evidence['payload']['operation_id']}",
+            "tenant_id": evidence["actor"]["tenant_id"],
+            "environment_id": environment["environment_id"],
+            "session_id": session_id,
+            "operation_id": evidence["payload"]["operation_id"],
+            "execution_id": "0" * 64,
+        }
+        lookup_identity["execution_id"] = session.execution_identity_digest(
+            ROOT, lookup_identity
+        )
+        evidence["payload"] = {
+            "operation_id": evidence["payload"]["operation_id"],
+            "attempt": evidence["payload"]["attempt"],
+            "request_digest": evidence["payload"]["request_digest"],
+            "lookup": {
+                "schema_version": "vv-agent.provider-lookup.v1",
+                "status": "unknown",
+                "binding": {
+                    "tenant_id": lookup_identity["tenant_id"],
+                    "environment_id": lookup_identity["environment_id"],
+                    "session_id": lookup_identity["session_id"],
+                    "operation_id": lookup_identity["operation_id"],
+                    "execution_id": lookup_identity["execution_id"],
+                    "attempt": evidence["payload"]["attempt"],
+                    "request_digest": evidence["payload"]["request_digest"],
+                    "idempotency_key": f"{lookup_identity['session_id']}/{lookup_identity['operation_id']}",
+                    "command_digest": "3" * 64,
+                    "provider_id": "provider-remote-1",
+                    "generation": 7,
+                },
+                "outcome": {
+                    "kind": "Unknown",
+                    "reason": "registry unavailable",
+                },
+                "evidence": ["transport-or-registry:unavailable"],
+            },
+        }
+        self.codec.validate(evidence, inbox=True)
+
+        wrong_status = copy.deepcopy(evidence)
+        wrong_status["payload"]["lookup"]["status"] = "running"
+        with self.assertRaises(session.ValidationError):
+            self.codec.validate(wrong_status, inbox=True)
 
     def test_feature_level_two_control_fields_are_strict(self) -> None:
         requirements = {

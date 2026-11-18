@@ -1,6 +1,6 @@
 # Changelog
 
-## 41.0.0 — unreleased — W4 worker routing requirements
+## 41.0.0 — unreleased — W4 worker routing and W3 execution allocation
 
 This major replaces worker routing behavior while retaining storage S1 and its
 existing columns/state machines. Level 1 bytes and defaults remain unchanged.
@@ -53,6 +53,18 @@ RLS and content-label rules.
 No active/next state, copied source digest, profile framework, DDL replacement,
 second drain, compatibility reader or shim is introduced. Existing immediate model
 selection, pending-batch delay, target and replay semantics remain unchanged.
+
+Feature level 3 allocates the W3 command identity and authenticated provider
+lookup boundary without adding a record kind, execution store, registry, proxy or
+second outcome enum. `turn_started` adds the exact environment capability binding;
+`op_planned` tool operations add the stable execution identity and opaque
+session-HMAC command digest; `provider_evidence` can carry a closed lookup result.
+Only an authenticated `not_started` response permits one logged retry with the
+same idempotency key and execution ID. `running` reuses the original execution,
+`exited` reconciles a Definitive result, and `unknown` never retries start.
+Level-2 workers and readers reject level-3 bodies before decode. The W3 fixture is
+synthetic contract allocation only; Python adoption and all implementation gates
+remain pending. See [the 41.0.0 release allocation](docs/release-41.0.0.md).
 
 The after-cycle public hook decision still accepts a bounded, valid host-defined
 stop code. Its persisted S1 `stop.code` is now the closed set
