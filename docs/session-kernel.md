@@ -216,7 +216,8 @@ Child completion input ID is `child/{child_session_id}/{terminal_record_id}`.
 | `op_completed.result_digest` | `D(result)`; codec compares; usage/evidence remain covered by whole-record digest |
 | `input_applied.input_digest` | `D(input)`; codec also validates the nested kind-specific inbox payload |
 | `op_completed.request_digest`, provider/approval/input request digests | Binding/equality against the appropriate plan/preparation/handle; not a digest of completion payload |
-| Compaction / boundary source digests | Source context and boundary evidence checked by fold/acceptance, not by the generic embedded-digest helper |
+| `context_compacted.source_digest` | `D` of the ordered normalized source Message JSON array; fold acceptance compares the actual source and does not trust the stored digest |
+| Boundary source digests | Source context and boundary evidence checked by fold/acceptance, not by the generic embedded-digest helper |
 | `child_result.terminal_digest` | Whole original child terminal record; authenticate result/status/position and parent/generation |
 
 JCS MUST use UTF-16 code-unit key ordering, standard string escaping, no Unicode
@@ -624,6 +625,13 @@ model operation ledger. See [tool summary requests](tool-metadata-and-telemetry.
 | Compaction receipt | Log summary as tools-free `purpose=compaction`; reuse saved receipts, including rejected same-source/mode/tail requests. Verify source/prefix/tail, acceptance, exact replacement and evidence manifest before applying `context_compacted`. Raw records remain immutable. |
 | Prompt-too-long | Retain definitive failed attempt; first forced summary uses configured tail, subsequent emergency retries shrink it. Preserve the three-retry recovery limit and end with CompactionExhaustedError without silent history loss.  |
 | Session Memory | Disabled unless explicitly enabled. Log tools-free extraction and structured state before file projection. The file is disposable and MUST be recoverable before next-turn compile/reload. Accepted compaction notification uses its record ID and consumer deduplication, not a raw summary receipt. |
+
+Contract 41 retains the current compaction source identity. `source_digest` is
+`D([source message JSON in projection order])`; it does not hash a copied head,
+a position-only reference or `prefix_ids`/`tail_ids`. The current captured
+message references remain generic strings and the fold validates their ordered
+source positions and message content. A domain-separated, session-scoped
+reference replacement is a Contract 42 major proposal, not an optional S1 change.
 
 
 

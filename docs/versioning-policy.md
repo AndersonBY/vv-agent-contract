@@ -292,3 +292,10 @@ No Rust support is claimed for the current boundary.
 `fixtures/worker_compatibility.json` is contract-allocation-only. It has no producer
 capture and is excluded from adoption evidence. Python producer capture and all
 implementation gates remain pending. Rust remains frozen at 23.0.0 / 0.21.x.
+
+B5 compaction source authority is deferred from 41.0.0. It would replace the
+preimage and validation of existing `context_compacted.source_digest` and
+`prefix_ids`/`tail_ids`; changing an existing field's digest input or validation
+requires a new major under this policy. The proposed replacement is specified for
+Contract 42 in [the B5 source authority proposal](contract-42-b5-source-authority.md).
+It is not a feature level, optional 41 shape or current producer requirement.

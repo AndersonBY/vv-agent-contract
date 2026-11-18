@@ -67,6 +67,13 @@ or Rust support claim.
 producer capture and does not count as adoption. Python implementation and real
 capture are pending. Rust remains frozen at contract 23.0.0 / package series 0.21.x.
 
+B5 compaction source authority is not part of 41.0.0. Replacing the existing
+`source_digest` preimage or `prefix_ids`/`tail_ids` identity changes the meaning,
+identity and validation of existing fields, so the version policy requires a new
+major. The current S1 level-1 vectors and bytes remain unchanged; a proposed
+Contract 42 domain-separated, session-scoped source reference is recorded in
+[the B5 source authority proposal](docs/contract-42-b5-source-authority.md).
+
 ## 40.0.0 — unreleased — trusted storage S1 schema allocation
 
 This major replaces the current session storage discriminators with logical and SQL
