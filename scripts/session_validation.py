@@ -649,6 +649,40 @@ def validate_execution_worker_w3(root: Path) -> dict[str, int]:
         ).hexdigest()
         require(digest == vector["command_digest"], f"W3 command digest: {vector['name']}")
 
+    preparation = fixture["preparation_binding"]
+    base_command = fixture["command_digest_vectors"][0]
+    prepared_fact = {
+        "domain": fixture["framing"]["command_digest"]["domain"],
+        "framing_version": fixture["framing"]["command_digest"]["framing_version"],
+        "purpose": fixture["framing"]["command_digest"]["purpose"],
+        "tenant_id": base_command["tenant_id"],
+        "session_id": base_command["session_id"],
+        "command_spec": preparation["hook_patched_command_spec"],
+        "environment": base_command["environment"],
+        "operational_policy": base_command["operational_policy"],
+    }
+    prepared_canonical = jcs_bytes(root, prepared_fact)
+    prepared_digest = hmac.new(
+        base64.b64decode(base_command["session_data_key_base64"], validate=True),
+        prepared_canonical,
+        hashlib.sha256,
+    ).hexdigest()
+    require(
+        prepared_digest == preparation["prepared_command_digest"],
+        "W3 prepared command digest",
+    )
+    require(
+        preparation["proposal_command_digest"] == base_command["command_digest"]
+        and preparation["prepared_command_digest"] != preparation["proposal_command_digest"],
+        "W3 hook-patched command must replace the proposal digest",
+    )
+    require(
+        preparation["retry_source"]
+        == "first_op_prepared_request_digest_command_digest"
+        and preparation["retry_runs_before_tool_hooks"] is False,
+        "W3 retry command binding",
+    )
+
     expected_binding = fixture["lookup_binding"]
     ids = {
         "operation_key": expected_binding["idempotency_key"],
@@ -716,6 +750,79 @@ def validate_execution_worker_w3(root: Path) -> dict[str, int]:
             item["retry_allowed"] == (result["status"] == "not_started"),
             f"W3 retry permission: {item['name']}",
         )
+
+    storage = fixture["lookup_storage_boundary"]
+    retained = storage["retained_evidence"]
+    require(
+        storage["logical_source"] == "lookup_results[].result",
+        "W3 logical lookup source",
+    )
+    validate_schema(
+        retained,
+        load_json(root / "fixtures/session_inbox.schema.json"),
+        load_json(root / "fixtures/session_inbox.schema.json"),
+    )
+    validate_content_refs(retained)
+    provider_lookup = retained["payload"]["provider_lookup"]
+    validate_content_ref(provider_lookup, "provider_evidence.provider_lookup")
+    logical_result = storage["content"]["logical_result"]
+    validate_provider_lookup_result(root, logical_result)
+    require(
+        logical_result == lookup_results["running_reuses_original_execution"]["result"],
+        "W3 retained lookup content",
+    )
+    require(
+        hashlib.sha256(jcs_bytes(root, logical_result)).hexdigest()
+        == storage["content"]["canonical_json_sha256"],
+        "W3 retained lookup content digest",
+    )
+    outer = retained["payload"]
+    binding = logical_result["binding"]
+    require(
+        all(
+            outer[key] == binding[key]
+            for key in ("operation_id", "attempt", "request_digest")
+        ),
+        "W3 retained lookup outer binding",
+    )
+    require(
+        storage["content_owner"]
+        == {
+            "kind": "inbox",
+            "input_id": retained["input_id"],
+            "tenant_id": retained["actor"]["tenant_id"],
+            "session_id": binding["session_id"],
+        }
+        and storage["content_slot"] == "provider_lookup",
+        "W3 retained lookup owner or slot",
+    )
+    require(
+        storage["read_order"]
+        == [
+            "content_owner",
+            "content_slot",
+            "decrypt_and_verify_typed_content",
+            "provider_lookup_result",
+            "outer_binding_and_plan",
+        ],
+        "W3 retained lookup read order",
+    )
+    require(
+        storage["retry_guard"]["not_started_evidence_persisted_before_retry"] is True
+        and storage["retry_guard"]["external_callback_required"] is False,
+        "W3 lookup recovery durability",
+    )
+    require(
+        {case["name"] for case in storage["retry_guard"]["invalid_cases"]}
+        == {
+            "plaintext_lookup_never_enters_storage",
+            "foreign_owner_rejected_before_use",
+            "wrong_slot_rejected_before_use",
+            "logical_binding_mismatch_rejected_before_effect",
+            "unpersisted_not_started_never_retries",
+        },
+        "W3 retained lookup rejection coverage",
+    )
 
     for case in fixture["invalid_lookup_cases"]:
         lookup = copy.deepcopy(lookup_results[case["base_lookup"]]["result"])
@@ -837,20 +944,10 @@ class Codec:
                     wire["kind"] == "provider_evidence",
                     "level 3 inbox kind mismatch",
                 )
-                lookup = wire["payload"]["lookup"]
-                require(
-                    lookup["binding"]["tenant_id"] == wire["actor"]["tenant_id"],
-                    "lookup tenant binding mismatch",
+                validate_content_ref(
+                    wire["payload"]["provider_lookup"],
+                    "provider_evidence.provider_lookup",
                 )
-                require(
-                    lookup["binding"]["operation_id"]
-                    == wire["payload"]["operation_id"]
-                    and lookup["binding"]["attempt"] == wire["payload"]["attempt"]
-                    and lookup["binding"]["request_digest"]
-                    == wire["payload"]["request_digest"],
-                    "lookup payload binding mismatch",
-                )
-                validate_provider_lookup_result(self.root, lookup)
             validate_content_ref(wire["actor"]["attributes"], "inbox.actor.attributes")
             proof = wire["admission_proof"]
             if proof is not None:
@@ -866,7 +963,7 @@ class Codec:
         kind, p = wire["kind"], wire["payload"]
         if wire["feature_level"] == 3:
             require(
-                kind in {"turn_started", "op_planned"},
+                kind in {"turn_started", "op_planned", "op_prepared"},
                 "level 3 record kind mismatch",
             )
         require(wire["record_id"] == record_id(wire), "wrong record identity")
@@ -929,6 +1026,12 @@ class Codec:
                 "execution idempotency key mismatch",
             )
             validate_execution_identity(self.root, identity)
+        if kind == "op_prepared" and wire["feature_level"] == 3:
+            require(p["op_kind"] == "tool", "level 3 preparation must be a tool operation")
+            require(
+                p["idempotency_key"] == f"{wire['session_id']}/{wire['operation_id']}",
+                "prepared execution idempotency key mismatch",
+            )
         pair = {
             "turn_started": ("definition_digest", "definition"),
             "op_planned": ("request_digest", "request"),

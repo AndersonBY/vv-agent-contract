@@ -306,6 +306,24 @@
           }
         }
       ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/RecordEnvelopeLevel3"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "op_prepared"
+            },
+            "payload": {
+              "$ref": "#/$defs/OpPreparedPayloadLevel3"
+            }
+          }
+        }
+      ]
     }
   ],
   "$defs": {
@@ -2286,15 +2304,15 @@
           "pattern": "^[0-9a-f]{64}$",
           "maxLength": 64
         },
-        "lookup": {
-          "$ref": "#/$defs/ProviderLookupResult"
+        "provider_lookup": {
+          "$ref": "#/$defs/ContentRef"
         }
       },
       "required": [
         "operation_id",
         "attempt",
         "request_digest",
-        "lookup"
+        "provider_lookup"
       ]
     },
     "BeforeMemoryData": {
@@ -3113,6 +3131,68 @@
         "consumed_unknowns",
         "policy_decision",
         "execution_identity",
+        "command_digest"
+      ]
+    },
+    "OpPreparedPayloadLevel3": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "maxLength": 64
+        },
+        "op_kind": {
+          "const": "tool",
+          "type": "string"
+        },
+        "tool": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "provider_binding": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hook_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shared_state": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "policy_decision": {
+          "$ref": "#/$defs/PolicyDecision"
+        },
+        "command_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "request",
+        "request_digest",
+        "op_kind",
+        "tool",
+        "provider_binding",
+        "idempotency_key",
+        "hook_result",
+        "shared_state",
+        "policy_decision",
         "command_digest"
       ]
     },

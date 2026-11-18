@@ -2214,15 +2214,15 @@
           "pattern": "^[0-9a-f]{64}$",
           "maxLength": 64
         },
-        "lookup": {
-          "$ref": "#/$defs/ProviderLookupResult"
+        "provider_lookup": {
+          "$ref": "#/$defs/ContentRef"
         }
       },
       "required": [
         "operation_id",
         "attempt",
         "request_digest",
-        "lookup"
+        "provider_lookup"
       ]
     },
     "BeforeMemoryData": {

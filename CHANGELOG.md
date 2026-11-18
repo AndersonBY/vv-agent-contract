@@ -57,8 +57,10 @@ selection, pending-batch delay, target and replay semantics remain unchanged.
 Feature level 3 allocates the W3 command identity and authenticated provider
 lookup boundary without adding a record kind, execution store, registry, proxy or
 second outcome enum. `turn_started` adds the exact environment capability binding;
-`op_planned` tool operations add the stable execution identity and opaque
-session-HMAC command digest; `provider_evidence` can carry a closed lookup result.
+`op_planned` tool operations add the stable execution identity and proposal
+session-HMAC command digest; `op_prepared` records the final post-hook command
+digest used for retries; `provider_evidence` stores the closed lookup result in one
+encrypted ContentRef and validates its owner, slot and logical binding before use.
 Only an authenticated `not_started` response permits one logged retry with the
 same idempotency key and execution ID. `running` reuses the original execution,
 `exited` reconciles a Definitive result, and `unknown` never retries start.

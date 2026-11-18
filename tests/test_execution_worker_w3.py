@@ -14,6 +14,16 @@ import contractctl  # noqa: E402
 import session_validation as session  # noqa: E402
 
 
+def _content_ref(label: str) -> dict[str, object]:
+    return {
+        "content_id": f"content/{label}",
+        "mac": hashlib.sha256(label.encode()).hexdigest(),
+        "size": len(label),
+        "key_id": "key/session-a",
+        "labels": {"source": [], "classification": "internal"},
+    }
+
+
 class ExecutionWorkerW3Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -120,6 +130,72 @@ class ExecutionWorkerW3Tests(unittest.TestCase):
             session.environment_capabilities_digest(ROOT, vector["environment"]),
         )
 
+    def test_hook_patched_preparation_uses_the_final_command_digest(self) -> None:
+        preparation = self.fixture["preparation_binding"]
+        base = self.fixture["command_digest_vectors"][0]
+        fact = {
+            "domain": self.fixture["framing"]["command_digest"]["domain"],
+            "framing_version": self.fixture["framing"]["command_digest"]["framing_version"],
+            "purpose": self.fixture["framing"]["command_digest"]["purpose"],
+            "tenant_id": base["tenant_id"],
+            "session_id": base["session_id"],
+            "command_spec": preparation["hook_patched_command_spec"],
+            "environment": base["environment"],
+            "operational_policy": base["operational_policy"],
+        }
+        canonical = session.jcs_bytes(ROOT, fact)
+        digest = hmac.new(
+            base64.b64decode(base["session_data_key_base64"], validate=True),
+            canonical,
+            hashlib.sha256,
+        ).hexdigest()
+        self.assertEqual(digest, preparation["prepared_command_digest"])
+        self.assertNotEqual(
+            preparation["prepared_command_digest"],
+            preparation["proposal_command_digest"],
+        )
+        self.assertEqual(preparation["execution_identity_source"], "op_planned")
+        self.assertFalse(preparation["retry_runs_before_tool_hooks"])
+
+        request = _content_ref("prepared-request")
+        tool = _content_ref("prepared-tool")
+        payload = {
+            "request": request,
+            "request_digest": "0" * 64,
+            "op_kind": "tool",
+            "tool": tool,
+            "provider_binding": "provider-remote-1",
+            "idempotency_key": "sess-1/op-bg-1",
+            "hook_result": None,
+            "shared_state": _content_ref("prepared-shared-state"),
+            "policy_decision": None,
+            "command_digest": digest,
+        }
+        wire = {
+            "schema_version": "S1",
+            "feature_level": 3,
+            "record_id": "op/op-bg-1/1/prepared",
+            "kind": "op_prepared",
+            "session_id": "sess-1",
+            "turn_id": "turn-1",
+            "operation_id": "op-bg-1",
+            "attempt": 1,
+            "payload": payload,
+        }
+        payload["request_digest"] = hashlib.sha256(
+            session.jcs_bytes(ROOT, request)
+        ).hexdigest()
+        codec = session.Codec(ROOT, [wire])
+        codec.validate(wire)
+
+        legacy = copy.deepcopy(wire)
+        legacy["feature_level"] = 1
+        legacy["payload"].pop("command_digest")
+        codec.validate(legacy)
+        legacy["payload"]["command_digest"] = digest
+        with self.assertRaises(session.ValidationError):
+            codec.validate(legacy)
+
     def test_lookup_statuses_reuse_provider_outcomes(self) -> None:
         expected = {
             "not_started": (None, "no_effects_and_retry_once", True),
@@ -160,6 +236,57 @@ class ExecutionWorkerW3Tests(unittest.TestCase):
             set(running["result"]["outcome"]),
             {"kind", "handle", "yield_on_steer"},
         )
+
+    def test_lookup_storage_is_one_validated_content_ref(self) -> None:
+        storage = self.fixture["lookup_storage_boundary"]
+        retained = storage["retained_evidence"]
+        self.assertEqual(
+            set(retained["payload"]),
+            {"operation_id", "attempt", "request_digest", "provider_lookup"},
+        )
+        codec = session.Codec(ROOT, [retained])
+        codec.validate(retained, inbox=True)
+
+        logical = storage["content"]["logical_result"]
+        self.assertEqual(
+            hashlib.sha256(session.jcs_bytes(ROOT, logical)).hexdigest(),
+            storage["content"]["canonical_json_sha256"],
+        )
+        self.assertEqual(storage["content_slot"], "provider_lookup")
+        self.assertEqual(
+            storage["content_owner"],
+            {
+                "kind": "inbox",
+                "input_id": retained["input_id"],
+                "tenant_id": retained["actor"]["tenant_id"],
+                "session_id": logical["binding"]["session_id"],
+            },
+        )
+
+        plaintext = copy.deepcopy(retained)
+        plaintext["payload"].pop("provider_lookup")
+        plaintext["payload"]["lookup"] = logical
+        with self.assertRaises(session.ValidationError):
+            codec.validate(plaintext, inbox=True)
+
+        cases = {
+            case["name"]: case["expected_code"]
+            for case in storage["retry_guard"]["invalid_cases"]
+        }
+        self.assertEqual(
+            cases,
+            {
+                "plaintext_lookup_never_enters_storage": "provider_lookup_not_content_ref",
+                "foreign_owner_rejected_before_use": "content_owner_mismatch",
+                "wrong_slot_rejected_before_use": "content_slot_mismatch",
+                "logical_binding_mismatch_rejected_before_effect": "binding_mismatch",
+                "unpersisted_not_started_never_retries": "not_started_evidence_not_persisted",
+            },
+        )
+        self.assertTrue(
+            storage["retry_guard"]["not_started_evidence_persisted_before_retry"]
+        )
+        self.assertFalse(storage["retry_guard"]["external_callback_required"])
 
     def test_nullable_capabilities_digest_matches_python_value_layer(self) -> None:
         environment = copy.deepcopy(self.fixture["environment"])

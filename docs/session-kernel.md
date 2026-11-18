@@ -41,7 +41,7 @@ field at level 1 rejects. Level 2 is allocated only for `session_created` with i
 required `bootstrap`, and for `user`, `follow_up` and `model_selection` with their
 required `requirements`. A level-2 shape for any other record or inbox kind, or a
 level-2 control item missing its field, rejects. Level 3 is allocated only for
-`turn_started`, `op_planned`, and the `provider_evidence` inbox kind; a level-3
+`turn_started`, `op_planned`, `op_prepared`, and the `provider_evidence` inbox kind; a level-3
 shape for any other kind rejects. A level-1 or level-2 worker/reader rejects a
 level-3 record before decoding its body. Existing level-1 and level-2 fixtures
 and producer bytes remain readable without inserting defaults into the logical
@@ -74,7 +74,7 @@ require a turn except `input_applied` and `usage_observed`, which permit null.
 | `turn_started` | `input_ids:[T]`, `definition:C`, `definition_digest:H`, `handler_version:T`, `budget:C`, `binding:T\|null`, `generation:N`, `policy_digest:H\|null`, `requirements:SessionRequirements`, `tokenizer_binding:TokenizerBinding\|null`, `environment:EnvironmentBinding\|null`; level 3 requires non-null `ExecutionEnvironmentBinding` |
 | `input_applied` | `input:InboxItem`, `input_digest:H`, `input_proof:InputProof\|null`, `disposition:applied/rejected/noop/queued`, `reason:C\|null`, `target_operation_id:T\|null`, `target_wait_id:T\|null`, `position:T`, optional `model_binding:C` |
 | `op_planned` | `op_kind:model/tool/interaction`, `purpose:primary/compaction/session_memory/output_repair\|null`, `request:C`, `request_digest:H`, `context_version:T`, `dependencies:[T]`, `tool:C\|null`, `idempotency_key:T\|null`, `budget_admission:C`, `not_before_ms:N\|null`, `provider_binding:T\|null`, `consumed_unknowns:[ResultId]`, `policy_decision:PolicyDecision\|null`; level 3 requires `op_kind=tool`, `execution_identity:ExecutionIdentity` and `command_digest:H` |
-| `op_prepared` | `request:C`, `request_digest:H`, `op_kind:tool/interaction`, `tool:C`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:C\|null`, `shared_state:C`, `policy_decision:PolicyDecision\|null` |
+| `op_prepared` | `request:C`, `request_digest:H`, `op_kind:tool/interaction`, `tool:C`, `provider_binding:T\|null`, `idempotency_key:T\|null`, `hook_result:C\|null`, `shared_state:C`, `policy_decision:PolicyDecision\|null`; level 3 requires a tool operation, non-null provider/idempotency fields and the final `command_digest:H` |
 | `turn_parked` | `interaction_id:T`, `question:C`, `source_operation_id:T`, `source_attempt:P` |
 | `op_started` | `dispatch_id:T`, `authorization_version:T`, `epoch:P`, `mode:sync/provider/managed`, `endpoint_id?:T` |
 | `op_parked` | `phase:before_dispatch/after_dispatch`, `handle:Handle`, `poll_at_ms:N\|null`, `deadline_ms:N\|null`, optional `interaction_result:C`, optional `delegation:Delegation`, `yield_on_steer?:true`, `yieldable_children?:[T]` |
@@ -102,7 +102,7 @@ validates the original typed content boundary before execution.
 | `approval_answer` | `operation_id:T`, `attempt:P`, `request_id:T`, `request_digest:H`, `decision:approve/deny/allow_session/timeout`, `scope:C`, optional `reason:C`, `metadata:C`, `policy_digest:H`, `rule_id:T`, `expires_ms:N\|null` |
 | `child_result` | `session_id:T`, `turn_id:T`, `operation_id:T`, `attempt:P`, `result:C\|null`, `status:completed/failed/cancelled/aborted`, `terminal_seq:P`, `terminal_digest:H` |
 | `control` | `action:close/archive/suspend/resume/cancel/abort` |
-| `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle`, optional `yield_on_steer:true`; level 3 instead requires `lookup:ProviderLookupResult` and carries no parallel handle field |
+| `provider_evidence` | `operation_id:T`, `attempt:P`, `request_digest:H`, `handle:Handle`, optional `yield_on_steer:true`; level 3 instead requires `provider_lookup:C`, whose typed content is a `ProviderLookupResult`, and carries no parallel handle field |
 
 User content remains opaque at the generic boundary. Kernel reply producers currently use
 `{interaction_id,text}` (optionally operation_id) for ask_user and `{interaction_id,text}` for
@@ -465,8 +465,8 @@ format level as an executor; only tool, model and handler execution supports are
 waived for a thin reader.
 
 Feature level 3 is a worker format and execution gate. A level-2 worker or reader
-cannot claim, decode or project a level-3 `turn_started`, `op_planned` or
-`provider_evidence` value. A level-3 thin reader may decode it without execution
+cannot claim, decode or project a level-3 `turn_started`, `op_planned`, `op_prepared`
+or `provider_evidence` value. A level-3 thin reader may decode it without execution
 supports, but that grants no claim, epoch or provider call. W3 environment and
 command checks remain execution-side checks; they do not turn tenant content
 authorization, RLS or Principal checks into worker-capability checks.
@@ -774,7 +774,7 @@ across attempts or workers. Provider-side deduplication is scoped by
 
 `op_planned` level 3 persists `ExecutionIdentity =
 {operation_key,tenant_id,environment_id,session_id,operation_id,execution_id}`
-plus the opaque `command_digest`. For command digest framing, let
+plus the opaque proposal `command_digest`. For command digest framing, let
 `command_fact={domain,framing_version,purpose,tenant_id,session_id,command_spec,
 environment,operational_policy}` where `domain` is
 `"vv-agent/S1/command-digest"`, `framing_version` is `1`, `purpose` is
@@ -793,25 +793,68 @@ identities, clocks and transport credentials are excluded. The operational-polic
 digests stay private inside encrypted content and cannot be replaced by a
 capability or policy-reference digest.
 
-`provider_evidence` level 3 carries
-`lookup:{schema_version:"vv-agent.provider-lookup.v1",status,binding,outcome,evidence}`.
-The operation, attempt and request digest in the outer inbox value MUST equal the
-lookup binding. The binding additionally carries `idempotency_key,execution_id,
-command_digest,environment_id,generation,provider_id`; its stable identity digest
-MUST be recomputable from tenant, environment, session and operation. The result
-is closed to these mappings:
+`BeforeTool` can replace the proposed tool-call request. `op_planned` fixes the
+execution identity; it does not make its proposal command digest authoritative
+when the request changes. The first level-3 `op_prepared` records the final
+hydrated request, `request_digest` and `command_digest` computed from that final
+command spec. It inherits the plan's turn, operation, attempt, execution identity,
+provider binding and stable idempotency key. Hooks cannot change those execution
+identities. Retries and restart recovery use the first prepared request, request
+digest and command digest and MUST NOT run command-mutating hooks again. This
+keeps one existing plan/prepared/start state machine; it does not add a second
+preparation record or a new state. Level-1 and level-2 preparation bytes and
+producer behavior are unchanged.
+
+`provider_evidence` level 3 stores only the outer
+`{operation_id,attempt,request_digest,provider_lookup:C}`. `provider_lookup` is
+one encrypted content ref with slot `provider_lookup`; its typed content is
+`{schema_version:"vv-agent.provider-lookup.v1",status,binding,outcome,evidence}`.
+The complete logical result, including `Accepted.handle.job_id/evidence/query_ref/
+cancel_ref`, `Definitive.result/usage/evidence`, and `Unknown.reason`, is C and
+MUST NOT appear in the stored inbox skeleton. Readback first verifies that the
+content owner is that `provider_evidence` input and the slot is exactly
+`provider_lookup`, then verifies content integrity and the logical result. The
+operation, attempt and request digest MUST equal the lookup binding and the
+committed plan; tenant, session, provider, environment and generation MUST match
+the authenticated actor, plan and original turn. Finally, the stable execution
+ID and final prepared command digest are recomputed. No field is used before all
+checks pass.
+
+`input_applied.input` copies that same reference-form inbox item and original
+admission proof; it MUST NOT embed the hydrated lookup result. Consumption and
+proof replay reuse the existing content ref, owner/slot link and inbox row.
+
+The lookup binding additionally carries `idempotency_key,execution_id,
+command_digest,environment_id,generation,provider_id`. The logical result is
+closed to these mappings:
 
 | Status | Provider outcome | Kernel action |
 | --- | --- | --- |
 | `not_started` | null | Record evidence. At most one new ledger attempt may start, reusing the same idempotency key and execution ID. |
-| `running` | `Accepted` with a handle bound to operation, attempt, request, provider, execution, command, environment and generation | Reuse that execution. Never start again. |
+| `running` | `Accepted` with a handle bound to operation, attempt, request, provider, execution, command, environment and generation | Validate the extended logical handle, then reuse that execution. Never start again. |
 | `exited` | `Definitive` with authenticated result, usage and evidence | Reconcile the original operation once without creating a new process. |
 | `unknown` | `Unknown` with evidence | Preserve unknown state. Never infer absence and never retry start. |
+
+For `Accepted`, the extended logical handle is validated only in the decoded
+lookup response. Projecting it into existing `op_parked` stores the existing
+nine-field provider handle (`kind,provider,job_id,operation_id,attempt,
+request_digest,evidence,query_ref,cancel_ref`), with `job_id,evidence,query_ref`
+and `cancel_ref` as C. The dropped `execution_id,command_digest,environment_id,
+generation` are recovered from the original plan and turn, never from a clear
+parked handle. Immediate recovery can therefore use the existing encrypted
+`op_parked.handle.evidence`, `op_completed.result/usage/evidence`, or
+`op_unknown.reason/dispatch_evidence/observation` slots; a provider callback is
+an optional input path, not a recovery prerequisite. No new event, log row or
+evidence store is added.
 
 Transport or registry inability to prove state maps to `unknown`. A valid
 authenticated provider response with a binding or authorization mismatch is a
 deterministic rejection and changes no execution state. A malformed result uses
-`provider_result_invalid`. The W3 synthetic vectors are in
+`provider_result_invalid`. An authenticated `not_started` response is not enough
+by itself to resend: its encrypted `provider_lookup` evidence MUST commit before
+the retry start is emitted. A crash, rejection, failed persistence, missing
+owner/slot binding, or second submission makes the boundary query/evidence-only.
+The W3 synthetic vectors are in
 `fixtures/execution_worker_w3.json`; they record no producer capture. The fixture
 does not add an HTTP proxy, execution registry, ledger, record kind or second
 outcome enum. Python W3 adoption remains required work.

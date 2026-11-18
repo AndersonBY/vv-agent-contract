@@ -249,9 +249,10 @@ its current bytes and defaults. Level 2 adds a required typed
 `model_selection` inbox items. Those fields reject at level 1, and level 2 rejects
 for kinds outside that closed allocation.
 
-Level 3 is limited to existing `turn_started`, `op_planned` and
+Level 3 is limited to existing `turn_started`, `op_planned`, `op_prepared` and
 `provider_evidence` shapes. It adds the frozen environment capability binding,
-stable execution/command identity, and authenticated provider lookup result
+stable execution identity, proposal/final command digests, and an encrypted
+authenticated provider lookup result
 defined in the [session kernel](session-kernel.md#w3-execution-identity-and-lookup).
 Level-1 and level-2 bytes remain unchanged. A level-2 worker or reader rejects a
 level-3 body before decode; a level-3 thin reader may decode without execution

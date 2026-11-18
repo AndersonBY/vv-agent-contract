@@ -592,7 +592,7 @@ def inbox_payload_defs() -> dict[str, Any]:
                 "operation_id": TEXT,
                 "attempt": POSITIVE,
                 "request_digest": HASH,
-                "lookup": ref("ProviderLookupResult"),
+                "provider_lookup": ref("ContentRef"),
             }
         ),
     }
@@ -674,6 +674,20 @@ def record_payload_defs() -> dict[str, Any]:
             {
                 **op_planned,
                 "execution_identity": ref("ExecutionIdentity"),
+                "command_digest": HASH,
+            }
+        ),
+        "OpPreparedPayloadLevel3": obj(
+            {
+                "request": ref("ContentRef"),
+                "request_digest": HASH,
+                "op_kind": {"const": "tool", "type": "string"},
+                "tool": ref("ContentRef"),
+                "provider_binding": TEXT,
+                "idempotency_key": TEXT,
+                "hook_result": nullable(ref("ContentRef")),
+                "shared_state": ref("ContentRef"),
+                "policy_decision": ref("PolicyDecision"),
                 "command_digest": HASH,
             }
         ),
@@ -1001,6 +1015,7 @@ def record_schema() -> dict[str, Any]:
     for kind, payload_name in (
         ("turn_started", "TurnStartedPayloadLevel3"),
         ("op_planned", "OpPlannedPayloadLevel3"),
+        ("op_prepared", "OpPreparedPayloadLevel3"),
     ):
         branches.append(
             {
@@ -1434,6 +1449,29 @@ def execution_worker_w3_schema() -> dict[str, Any]:
             "command_digest": HASH,
         }
     )
+    preparation_binding = obj(
+        {
+            "execution_identity_source": {"const": "op_planned"},
+            "proposal_command_digest": HASH,
+            "prepared_request_digest": HASH,
+            "hook_patched_command_spec": ref("CommandSpec"),
+            "prepared_command_digest": HASH,
+            "retry_source": {
+                "const": "first_op_prepared_request_digest_command_digest"
+            },
+            "retry_runs_before_tool_hooks": {"const": False, "type": "boolean"},
+            "inherit_from_plan": {
+                "const": [
+                    "turn_id",
+                    "operation_id",
+                    "attempt",
+                    "idempotency_key",
+                    "provider_binding",
+                    "execution_identity",
+                ]
+            },
+        }
+    )
     lookup_vector = obj(
         {
             "name": TEXT,
@@ -1523,6 +1561,90 @@ def execution_worker_w3_schema() -> dict[str, Any]:
             ),
         }
     )
+    lookup_content_owner = obj(
+        {
+            "kind": {"const": "inbox"},
+            "input_id": TEXT,
+            "tenant_id": TEXT,
+            "session_id": TEXT,
+        }
+    )
+    lookup_storage_boundary = obj(
+        {
+            "logical_source": {"const": "lookup_results[].result"},
+            "content_owner": lookup_content_owner,
+            "content_slot": {"const": "provider_lookup"},
+            "read_order": {
+                "const": [
+                    "content_owner",
+                    "content_slot",
+                    "decrypt_and_verify_typed_content",
+                    "provider_lookup_result",
+                    "outer_binding_and_plan",
+                ]
+            },
+            "retained_evidence": {"type": "object"},
+            "content": obj(
+                {
+                    "logical_result": ref("ProviderLookupResult"),
+                    "canonical_json_sha256": HASH,
+                }
+            ),
+            "op_parked_projection": obj(
+                {
+                    "handle_fields": {
+                        "const": [
+                            "kind",
+                            "provider",
+                            "job_id",
+                            "operation_id",
+                            "attempt",
+                            "request_digest",
+                            "evidence",
+                            "query_ref",
+                            "cancel_ref",
+                        ]
+                    },
+                    "content_fields": {
+                        "const": ["job_id", "evidence", "query_ref", "cancel_ref"]
+                    },
+                    "identity_restored_from": {
+                        "const": [
+                            "op_planned.execution_identity",
+                            "turn_started.environment",
+                        ]
+                    },
+                }
+            ),
+            "immediate_recovery_slots": obj(
+                {
+                    "running": {"const": ["op_parked.handle.evidence"]},
+                    "exited": {"const": ["op_completed.result", "op_completed.usage", "op_completed.evidence"]},
+                    "unknown": {"const": ["op_unknown.reason", "op_unknown.dispatch_evidence", "op_unknown.observation"]},
+                }
+            ),
+            "retry_guard": obj(
+                {
+                    "not_started_evidence_persisted_before_retry": {"const": True, "type": "boolean"},
+                    "external_callback_required": {"const": False, "type": "boolean"},
+                    "invalid_cases": array(
+                        obj(
+                            {
+                                "name": TEXT,
+                                "expected_code": enum(
+                                    "content_owner_mismatch",
+                                    "content_slot_mismatch",
+                                    "binding_mismatch",
+                                    "provider_lookup_not_content_ref",
+                                    "not_started_evidence_not_persisted",
+                                ),
+                            }
+                        )
+                    ),
+                }
+            ),
+        }
+    )
     return {
         "$schema": DRAFT,
         "type": "object",
@@ -1560,8 +1682,10 @@ def execution_worker_w3_schema() -> dict[str, Any]:
             "operational_policy": ref("OperationalPolicy"),
             "identity_vectors": array(identity_vector),
             "command_digest_vectors": array(command_digest_vector),
+            "preparation_binding": preparation_binding,
             "lookup_binding": ref("ProviderLookupBinding"),
             "lookup_results": array(lookup_vector),
+            "lookup_storage_boundary": lookup_storage_boundary,
             "invalid_lookup_cases": array(invalid_lookup),
             "recovery_cases": array(recovery_case),
         },
@@ -1578,8 +1702,10 @@ def execution_worker_w3_schema() -> dict[str, Any]:
             "operational_policy",
             "identity_vectors",
             "command_digest_vectors",
+            "preparation_binding",
             "lookup_binding",
             "lookup_results",
+            "lookup_storage_boundary",
             "invalid_lookup_cases",
             "recovery_cases",
         ],
@@ -1588,6 +1714,8 @@ def execution_worker_w3_schema() -> dict[str, Any]:
             "EnvironmentCapabilityBinding": environment_capabilities,
             "CommandSpec": command_spec(),
             "OperationalPolicy": operational_policy(),
+            "ContentRef": content_ref(),
+            "ContentLabels": content_labels(),
             **provider_lookup,
         },
     }

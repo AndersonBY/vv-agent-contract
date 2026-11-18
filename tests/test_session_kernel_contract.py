@@ -130,51 +130,20 @@ class SessionKernelContractTests(unittest.TestCase):
             )
         )
         evidence["feature_level"] = 3
-        session_id = evidence["target_turn_id"] or "sess-1"
-        lookup_identity = {
-            "operation_key": f"{session_id}/{evidence['payload']['operation_id']}",
-            "tenant_id": evidence["actor"]["tenant_id"],
-            "environment_id": environment["environment_id"],
-            "session_id": session_id,
-            "operation_id": evidence["payload"]["operation_id"],
-            "execution_id": "0" * 64,
-        }
-        lookup_identity["execution_id"] = session.execution_identity_digest(
-            ROOT, lookup_identity
-        )
+        lookup_ref = evidence["payload"]["handle"]["evidence"]
         evidence["payload"] = {
             "operation_id": evidence["payload"]["operation_id"],
             "attempt": evidence["payload"]["attempt"],
             "request_digest": evidence["payload"]["request_digest"],
-            "lookup": {
-                "schema_version": "vv-agent.provider-lookup.v1",
-                "status": "unknown",
-                "binding": {
-                    "tenant_id": lookup_identity["tenant_id"],
-                    "environment_id": lookup_identity["environment_id"],
-                    "session_id": lookup_identity["session_id"],
-                    "operation_id": lookup_identity["operation_id"],
-                    "execution_id": lookup_identity["execution_id"],
-                    "attempt": evidence["payload"]["attempt"],
-                    "request_digest": evidence["payload"]["request_digest"],
-                    "idempotency_key": f"{lookup_identity['session_id']}/{lookup_identity['operation_id']}",
-                    "command_digest": "3" * 64,
-                    "provider_id": "provider-remote-1",
-                    "generation": 7,
-                },
-                "outcome": {
-                    "kind": "Unknown",
-                    "reason": "registry unavailable",
-                },
-                "evidence": ["transport-or-registry:unavailable"],
-            },
+            "provider_lookup": lookup_ref,
         }
         self.codec.validate(evidence, inbox=True)
 
-        wrong_status = copy.deepcopy(evidence)
-        wrong_status["payload"]["lookup"]["status"] = "running"
+        plaintext_lookup = copy.deepcopy(evidence)
+        plaintext_lookup["payload"]["lookup"] = {"status": "running"}
+        plaintext_lookup["payload"].pop("provider_lookup")
         with self.assertRaises(session.ValidationError):
-            self.codec.validate(wrong_status, inbox=True)
+            self.codec.validate(plaintext_lookup, inbox=True)
 
     def test_feature_level_two_control_fields_are_strict(self) -> None:
         requirements = {
