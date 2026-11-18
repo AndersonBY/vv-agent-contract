@@ -1146,7 +1146,7 @@ class ContractRepositoryTests(unittest.TestCase):
             (ROOT / "fixtures/after_cycle_hook.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(fixture["schema_version"], "vv-agent.after-cycle-hook.v2")
+        self.assertEqual(fixture["schema_version"], "vv-agent.after-cycle-hook.v3")
         self.assertEqual(
             fixture["decision"]["action_values"],
             ["continue", "steer", "stop_non_success"],
@@ -1166,6 +1166,19 @@ class ContractRepositoryTests(unittest.TestCase):
         self.assertFalse(
             set(fixture["snapshot"]["task_domain_fields_forbidden"])
             & set(fixture["snapshot"]["required_fields"])
+        )
+        persistence = fixture["persistence"]
+        self.assertEqual(
+            persistence["registered_stop_codes"],
+            ["host.policy_stop", "host_stop", "hook_stop", "stopped"],
+        )
+        self.assertEqual(persistence["generic_host_code"], "host_stop")
+        self.assertFalse(persistence["raw_host_code_in_stop_code"])
+        self.assertEqual(persistence["error_slot"], "ContentRef")
+        self.assertEqual(persistence["registered_code_persistence"], "unchanged")
+        self.assertEqual(
+            persistence["host_defined_example"]["persisted_error"],
+            "host.private_policy: Private host policy details remain diagnosable.",
         )
         cases = {case["name"]: case for case in fixture["runner_cases"]}
         self.assertEqual(

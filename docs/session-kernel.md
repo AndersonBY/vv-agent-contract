@@ -153,12 +153,19 @@ identities and mismatched creation/delivery targets.
 | Stage | Closed `data` fields | Observable boundary |
 | --- | --- | --- |
 | `before_memory` | `messages:[C]`, `shared_state:C` | Retain hook replacement and source digest before compaction |
-| `after_cycle` | `action:continue/steer/stop_non_success`, `steering_messages:[C]`, `disallow_tools:[T]`, `stop:{code:T,message:C}\|null`, `shared_state:C`, `error:C\|null` | Retain composed decision before another dispatch |
+| `after_cycle` | `action:continue/steer/stop_non_success`, `steering_messages:[C]`, `disallow_tools:[T]`, `stop:{code:AfterCycleStopCode,message:C}\|null`, `shared_state:C`, `error:C\|null` | Retain composed decision before another dispatch |
 | `memory_started` | `event:C` | Retain MemoryProvider/lifecycle start observation |
 | `memory_completed` | `event:C` | Retain completion and archive statistics |
 | `session_memory_saved` | `state:MemoryState` | Structured memory precedes disposable file projection |
 | `output_checked` | `status:completed/failed/repair`, `reason:C\|null`, `value:C`, `partial_output?:C` | Retain candidate, repair decision and final validation |
 | `budget` | `usage:C`, `exhaustion:C\|null`, `tool_names:[T]` | Retain admission/accounting and exhaustion decision |
+
+`AfterCycleStopCode = host.policy_stop/host_stop/hook_stop/stopped`. The public
+hook decision accepts a bounded valid host code, but the ledger S value is closed.
+At commit, a code outside the registered set is recorded as `host_stop`. The
+original diagnostic `"original_code: message"` is stored in the encrypted `error`
+C slot, and `stop.message` remains the message C slot. This applies only to the
+current Python S1 boundary; Rust remains frozen at 23.0.0 and does not support it.
 
 `MemoryState = {entries:[MemoryEntry], last_extracted_message_index:integer≥-1,
 tokens_at_last_extraction:N, initialized:B}`.

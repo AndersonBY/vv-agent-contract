@@ -246,6 +246,12 @@ def requirements() -> dict[str, Any]:
 
 
 BOOTSTRAP_INBOX_KINDS = ("user", "follow_up", "model_selection")
+AFTER_CYCLE_STOP_CODES = (
+    "host.policy_stop",
+    "host_stop",
+    "hook_stop",
+    "stopped",
+)
 
 
 def environment_binding() -> dict[str, Any]:
@@ -687,7 +693,14 @@ def common_defs() -> dict[str, Any]:
                 "action": enum("continue", "steer", "stop_non_success"),
                 "steering_messages": array(ref("ContentRef")),
                 "disallow_tools": array(TEXT),
-                "stop": nullable(obj({"code": TEXT, "message": ref("ContentRef")})),
+                "stop": nullable(
+                    obj(
+                        {
+                            "code": enum(*AFTER_CYCLE_STOP_CODES),
+                            "message": ref("ContentRef"),
+                        }
+                    )
+                ),
                 "shared_state": ref("ContentRef"),
                 "error": nullable(ref("ContentRef")),
             }

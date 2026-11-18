@@ -282,6 +282,13 @@ gateway, thin-client and projection readers do not need executor/model/tool supp
 their existing tenant/Principal/RLS authorization and read-dependency gates remain
 unchanged. No reader registry or second permission protocol is introduced.
 
+The after-cycle hook accepts a bounded valid host-defined stop code for diagnosis,
+but the persisted S1 `stop.code` is closed to `host.policy_stop`, `host_stop`,
+`hook_stop` and `stopped`. A custom code is recorded as `host_stop`; the original
+`"code: message"` remains in the encrypted `error` C slot. This tightens an
+existing allocation without a new storage discriminator, migration or v42 release.
+No Rust support is claimed for the current boundary.
+
 `fixtures/worker_compatibility.json` is contract-allocation-only. It has no producer
 capture and is excluded from adoption evidence. Python producer capture and all
 implementation gates remain pending. Rust remains frozen at 23.0.0 / 0.21.x.

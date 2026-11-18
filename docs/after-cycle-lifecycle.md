@@ -29,6 +29,14 @@ reused without replaying callbacks. An interruption before commit permits callba
 replay: hooks are at least once, so external effects require tool admission or a
 host outbox. No hooks means no callback, decision state or lifecycle noise.
 
+The public hook decision accepts a bounded host-defined stop code, but the ledger
+S payload is a closed set: host.policy_stop, host_stop, hook_stop or stopped. A
+valid code outside that registered set is recorded as host_stop. The original
+diagnostic, `"<code>: <message>"`, is stored through the existing encrypted error
+C slot, while stop.message remains the message C slot. This keeps a host-defined
+code out of the clear logical S value without losing diagnostics. Rust remains
+frozen at its 23.0.0 baseline and does not support this current boundary.
+
 The JSON deny state under `_vv_agent_after_cycle_control` is created only for
 nonempty denials. Required host references are explicit host bindings; callbacks
 are not serialized. JSON state and denials survive reconstruction. These rules

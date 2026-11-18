@@ -54,6 +54,15 @@ No active/next state, copied source digest, profile framework, DDL replacement,
 second drain, compatibility reader or shim is introduced. Existing immediate model
 selection, pending-batch delay, target and replay semantics remain unchanged.
 
+The after-cycle public hook decision still accepts a bounded, valid host-defined
+stop code. Its persisted S1 `stop.code` is now the closed set
+`host.policy_stop`, `host_stop`, `hook_stop` and `stopped`; any other valid host
+code is recorded as the generic `host_stop`. The original
+`"code: message"` diagnostic remains in the encrypted `error` C slot, and
+`stop.message` remains the message C slot. Registered producer records keep their
+existing code. There is no store version change, migration, compatibility reader
+or Rust support claim.
+
 `fixtures/worker_compatibility.json` is marked `contract-allocation-only`, has no
 producer capture and does not count as adoption. Python implementation and real
 capture are pending. Rust remains frozen at contract 23.0.0 / package series 0.21.x.

@@ -46,7 +46,7 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertGreater(report["records"], 100)
         self.assertGreater(report["inbox_items"], 50)
         self.assertEqual(report["codec_vectors"], 85)
-        self.assertEqual(report["invalid_vectors"], 84)
+        self.assertEqual(report["invalid_vectors"], 88)
         self.assertEqual(report["storage_envelope_cases"], 6)
         self.assertEqual(report["storage_lifecycle_cases"], 11)
         self.assertEqual(report["trusted_negative_cases"], 26)
@@ -136,6 +136,42 @@ class SessionKernelContractTests(unittest.TestCase):
                 unknown["payload"]["bootstrap"] = control
             with self.assertRaises(session.ValidationError):
                 self.codec.validate(unknown, inbox=inbox_value)
+
+    def test_after_cycle_ledger_stop_codes_are_closed(self) -> None:
+        record = self.record("boundary_recorded")
+        content_ref = record["payload"]["data"]["shared_state"]
+        record["payload"]["stage"] = "after_cycle"
+        record["payload"]["data"] = {
+            "action": "stop_non_success",
+            "steering_messages": [],
+            "disallow_tools": [],
+            "stop": {
+                "code": "host.policy_stop",
+                "message": content_ref,
+            },
+            "shared_state": content_ref,
+            "error": content_ref,
+        }
+        for code in ("host.policy_stop", "host_stop", "hook_stop", "stopped"):
+            candidate = copy.deepcopy(record)
+            candidate["payload"]["data"]["stop"]["code"] = code
+            with self.subTest(code=code):
+                self.codec.validate(candidate)
+
+        classes = {
+            vector["rejection_class"]
+            for vector in contractctl.load_json(ROOT / "fixtures/session_invalid.json")[
+                "vectors"
+            ]
+        }
+        self.assertTrue(
+            {
+                "after_cycle_stop_code_unknown",
+                "after_cycle_stop_code_whitespace",
+                "after_cycle_stop_code_newline",
+                "after_cycle_stop_code_overlong",
+            }.issubset(classes)
+        )
 
 
     def test_trusted_storage_s1_producer_capture(self) -> None:
