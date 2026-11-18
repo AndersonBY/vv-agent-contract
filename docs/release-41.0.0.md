@@ -12,6 +12,16 @@ Storage remains S1. Existing level-1 and level-2 Wire shapes, defaults and
 behavior remain unchanged. Level 3 is an unpublished allocation for the W3
 execution-environment boundary and does not create a Contract 42 surface.
 
+The public direct `drive` operation also accepts an optional keyword-only
+`expected_head`, consisting of an independently retained final sequence and
+chain digest. When supplied, the initial fold MUST verify it before model or tool
+dispatch, and every append MUST also verify it before durable effects. A
+successful commit advances the in-call anchor to the verified new head. A
+mismatch rejects without changing the session. Omitting it preserves existing
+behavior. This is a direct `drive` capability only; it does not add or claim a
+wrapper API, storage or wire version, or the Contract 42 B5 source-authority
+change.
+
 Level 3 is limited to four existing shapes:
 
 - `turn_started` carries a non-null `ExecutionEnvironmentBinding` with

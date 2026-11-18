@@ -621,6 +621,17 @@ cache.
 | Delivery | External sink delivery before ACK is at least once: a crash can duplicate delivery. Stable event/item/record IDs MUST support deduplication. An ACK proves consumption, not successful external notification or business finalization. |
 | Scheduling | Wake is a hint. Scanning MUST recover due work, unconsumed/queued inputs, dependency changes and consumer lag, including unprojected terminal records. Consumer work does not require an execution lease. No-deadline user/approval waits and unresolved dependencies MUST NOT spin. |
 
+Direct `drive` accepts an optional independently retained expected head,
+identified by final sequence and chain digest. When supplied, the initial fold
+MUST verify that anchor before model or tool dispatch. Every append MUST also
+verify it before durable effects; a mismatch rejects without changing the
+session. A successful commit advances the in-call anchor to the verified new
+head so one drive can complete multiple cycles. Omitting the anchor preserves
+ordinary lease-fenced behavior. A head read from the same session database is not
+independent completeness evidence. This capability belongs to direct `drive`; it
+does not define a new wrapper API, and it is separate from Contract 42 B5 source
+authority.
+
 ## Operations, recovery and inputs
 
 | State / input | Requirement |
@@ -1238,10 +1249,10 @@ late work, is [yieldable waits](yieldable-waits.md).
 The heading preserves the historical Contract 38 anchor. Its process-local
 renewal lock, lease-value lock, commit lock and same-thread reentry exception are
 replaced by current S1/W4 rules and are not current correctness requirements.
-Under W4, one process-level LeaseKeeper thread uses its own connection to renew
-only lease rows. The worker coordinator and its single bounded drive slot each use
-their own store/connection. Session writes commit only when the transaction has
-verified the database lease owner, epoch and unexpired deadline; a renewal affects
-liveness, while that database fence prevents a stale owner from writing. Hosts
-still exclusively own the shared raw connection for atomic admission; the SDK
-does not promise concurrent native transactions on that connection.
+Under W4, each active LeaseKeeper registration schedules renewal independently.
+Its thread opens, reuses, and closes a dedicated connection for lease renewal.
+The worker coordinator and its bounded drive slot each use their own connection.
+Session writes commit only after the transaction verifies the database lease owner,
+epoch, and deadline. The keeper disregards renewal receipts that arrive after
+the previous local safety deadline. Hosts exclusively own the shared raw
+connection for atomic admission and must serialize native transactions on it.
