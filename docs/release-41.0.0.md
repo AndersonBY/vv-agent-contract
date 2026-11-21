@@ -8,9 +8,14 @@ released. Python remains the only required implementation and is still
 
 ## Public boundary
 
-Storage remains S1. Existing level-1 and level-2 Wire shapes, defaults and
-behavior remain unchanged. Level 3 is an unpublished allocation for the W3
-execution-environment boundary and does not create a Contract 42 surface.
+Storage remains S1, and the record/inbox discriminators and level-1 field shapes
+stay in the same storage major without a migration or compatibility reader. The
+candidate changes level-1 producer bytes: the refreshed capture moves ordinary
+`ContentLabels.source` to the S1 default `[]` from the earlier local capture's
+`["internal"]`, changing affected ContentRef MACs and dependent digests. The
+principal-attributes case remains the explicit `["internal"]` case. Level 2
+retains its allocated routing fields. Level 3 is an unpublished allocation for the
+W3 execution-environment boundary and does not create a Contract 42 surface.
 
 The public direct `drive` operation also accepts an optional keyword-only
 `expected_head`, consisting of an independently retained final sequence and
@@ -78,10 +83,32 @@ ContentRef, tamper/environment denial and bounded restart vectors.
 worker cannot claim a level-3 execution record while a level-3 thin reader can
 decode without execution supports.
 
-Python producer consumption, environment/provider adapters, durable W3 execution
-storage, remote process supervision, SQLite/PostgreSQL integration, cross-repository
-adoption and all implementation gates remain pending. These fixtures are not
-producer evidence and do not establish a release URL.
+`fixtures/trusted_storage_s1.json` is separate real-producer evidence for the
+level-1 storage shapes. It was captured twice from clean Python revision
+`a5061281b95e92c528ea96c4b46dd57c28280b9b`. The fixture records that revision,
+source-tree SHA-256
+`393a1518ae2934e525403d0eebcae5b7e302bbe955ac6d389f1761cf11fc7d51`,
+and 10 accepted plus 26 rejected cases. Both diagnostics and trusted captures were
+byte-identical. The trusted fixture SHA-256 is
+`47775bf5230a16c387388caaa912c788d446ff88c3fdaab3b776e9c402807f84`;
+the generated `fixtures/SHA256SUMS` SHA-256 is
+`ed0a1ffb0514c535437d856ee9c5d4d79abc8b5f7ad82e12de9e79278b50fabf`.
+Ordinary content uses the S1 default `ContentLabels.source=[]`; principal
+attributes are the explicit `["internal"]` case. The level-1 `provider_evidence`
+capture retains the `handle.job_id`, `handle.evidence`, `handle.query_ref` and
+`handle.cancel_ref` slots. It does not capture the level-3 `provider_lookup` slot.
+
+The public API inventory records the direct `drive` parameter
+`expected_head` with its keyword-only signature. That inventory is an API
+authority, not a byte-level producer fixture and does not establish adoption.
+Environment/provider adapters, W3 producer capture, durable W3 execution
+storage, remote process supervision, complete SQLite/PostgreSQL gates,
+immutable publication, Python lock/snapshot synchronization and the central
+cross-repository workflow remain pending. The allocation fixtures are not
+producer evidence and neither they nor this local S1 capture establish a
+release URL or verified revision. Live repository state has no immutable
+v40.0.0 or v41.0.0 tag/release and therefore no published artifact hash; local
+deterministic build output is not a release artifact.
 
 ## Verification
 

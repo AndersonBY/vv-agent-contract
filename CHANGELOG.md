@@ -3,7 +3,12 @@
 ## 41.0.0 — unreleased — W4 worker routing and W3 execution allocation
 
 This major replaces worker routing behavior while retaining storage S1 and its
-existing columns/state machines. Level 1 bytes and defaults remain unchanged.
+existing columns/state machines. The S1 discriminators and level-1 field shapes
+remain in the same storage major, but this candidate refreshes the producer
+capture: ordinary `ContentLabels.source` now uses the S1 default `[]` instead of
+the earlier local capture's `["internal"]`, which changes affected ContentRef MACs
+and dependent digests. The captured principal-attributes case retains its explicit
+`["internal"]` label.
 Level 2 adds a required typed `session_created.bootstrap` and required
 `InboxItem.requirements` for `user`, `follow_up` and `model_selection`; the new
 fields reject at level 1 and level 2 rejects for any other kind. The bootstrap and
@@ -65,8 +70,10 @@ Only an authenticated `not_started` response permits one logged retry with the
 same idempotency key and execution ID. `running` reuses the original execution,
 `exited` reconciles a Definitive result, and `unknown` never retries start.
 Level-2 workers and readers reject level-3 bodies before decode. The W3 fixture is
-synthetic contract allocation only; Python adoption and all implementation gates
-remain pending. See [the 41.0.0 release allocation](docs/release-41.0.0.md).
+synthetic contract allocation only. Python source and tests consume it, but that
+does not turn it into producer evidence. W3 producer capture, immutable release,
+lock/snapshot synchronization, full gates and central adoption remain pending.
+See [the 41.0.0 release allocation](docs/release-41.0.0.md).
 
 The after-cycle public hook decision still accepts a bounded, valid host-defined
 stop code. Its persisted S1 `stop.code` is now the closed set
@@ -78,15 +85,28 @@ existing code. There is no store version change, migration, compatibility reader
 or Rust support claim.
 
 `fixtures/worker_compatibility.json` is marked `contract-allocation-only`, has no
-producer capture and does not count as adoption. Python implementation and real
-capture are pending. Rust remains frozen at contract 23.0.0 / package series 0.21.x.
+producer capture and does not count as adoption. Python has real-SQL routing and
+worker compatibility tests, but no canonical producer capture. Rust remains frozen
+at contract 23.0.0 / package series 0.21.x.
+
+`fixtures/trusted_storage_s1.json` was refreshed from two byte-identical clean
+producer runs at Python revision
+`a5061281b95e92c528ea96c4b46dd57c28280b9b`, source-tree SHA-256
+`393a1518ae2934e525403d0eebcae5b7e302bbe955ac6d389f1761cf11fc7d51`.
+The capture carries 10 accepted and 26 rejected S1 cases and has fixture SHA-256
+`47775bf5230a16c387388caaa912c788d446ff88c3fdaab3b776e9c402807f84`.
+It records ordinary content with the default empty source labels and the explicit
+internal principal attributes. The level-1 provider handle remains separate from
+the uncaptured level-3 `provider_lookup` slot. Neither v40.0.0 nor v41.0.0 has an
+immutable release, release URL or published artifact; this local evidence leaves
+`support-matrix.json` `in-progress` and does not close adoption.
 
 B5 compaction source authority is not part of 41.0.0. Replacing the existing
 `source_digest` preimage or `prefix_ids`/`tail_ids` identity changes the meaning,
 identity and validation of existing fields, so the version policy requires a new
-major. The current S1 level-1 vectors and bytes remain unchanged; a proposed
-Contract 42 domain-separated, session-scoped source reference is recorded in
-[the B5 source authority proposal](docs/contract-42-b5-source-authority.md).
+major. The refreshed S1 capture described above is a separate producer correction;
+the proposed Contract 42 domain-separated, session-scoped source reference is
+recorded in [the B5 source authority proposal](docs/contract-42-b5-source-authority.md).
 
 ## 40.0.0 — unreleased — trusted storage S1 schema allocation
 

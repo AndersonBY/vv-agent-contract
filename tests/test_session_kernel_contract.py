@@ -279,10 +279,22 @@ class SessionKernelContractTests(unittest.TestCase):
         )
         self.assertEqual(fixture["schema_version"], "vv-agent.trusted-storage-s1.v1")
         self.assertEqual(fixture["status"], "producer-captured")
-        self.assertTrue(fixture["provenance"]["producer_capture"])
+        provenance = fixture["provenance"]
+        self.assertTrue(provenance["producer_capture"])
         self.assertEqual(
-            fixture["revision"], fixture["provenance"]["source_revision"]
+            provenance["producer_repository"],
+            "https://github.com/AndersonBY/vv-agent",
         )
+        self.assertFalse(provenance["source_worktree_dirty"])
+        self.assertEqual(
+            provenance["source_revision"],
+            "a5061281b95e92c528ea96c4b46dd57c28280b9b",
+        )
+        self.assertEqual(
+            provenance["source_tree_sha256"],
+            "393a1518ae2934e525403d0eebcae5b7e302bbe955ac6d389f1761cf11fc7d51",
+        )
+        self.assertEqual(fixture["revision"], provenance["source_revision"])
         self.assertRegex(fixture["revision"], r"^[0-9a-f]{40}$")
         self.assertEqual(fixture["record_schema_version"], "S1")
         self.assertEqual(fixture["inbox_schema_version"], "S1")
@@ -343,6 +355,36 @@ class SessionKernelContractTests(unittest.TestCase):
             },
         )
         accepted = {case["name"]: case for case in fixture["accepted_cases"]}
+        session_created = accepted["session_created_principal_and_content_ref"]["wire"]
+        provider_evidence = accepted["provider_evidence_content_ref"]["wire"]
+        self.assertEqual(
+            session_created["payload"]["workspace"]["labels"]["source"], []
+        )
+        self.assertEqual(
+            session_created["payload"]["attributes"]["labels"]["source"], []
+        )
+        self.assertEqual(
+            session_created["payload"]["principal"]["attributes"]["labels"]["source"],
+            ["internal"],
+        )
+        self.assertEqual(
+            provider_evidence["actor"]["attributes"]["labels"]["source"], []
+        )
+        self.assertEqual(
+            set(provider_evidence["payload"]["handle"]),
+            {
+                "attempt",
+                "cancel_ref",
+                "evidence",
+                "job_id",
+                "kind",
+                "operation_id",
+                "provider",
+                "query_ref",
+                "request_digest",
+            },
+        )
+        self.assertNotIn("provider_lookup", provider_evidence["payload"])
         codec = session.Codec(ROOT, [self.vectors, fixture])
         self.assertEqual(
             set(accepted),
