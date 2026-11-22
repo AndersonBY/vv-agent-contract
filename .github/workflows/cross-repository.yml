@@ -18,11 +18,16 @@ on:
         required: true
         default: false
         type: boolean
+      preview:
+        description: Test exact candidate commits with an unpublished contract bundle
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "23 3 * * 1"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   conformance:
@@ -45,12 +50,26 @@ jobs:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
     steps:
+      - name: Require exact candidate revisions for the preview
+        if: inputs.preview == true
+        shell: bash
+        env:
+          CONTRACT_REF: ${{ inputs.contract_ref }}
+          PYTHON_REF: ${{ inputs.python_ref }}
+          RECORD_VERIFIED: ${{ inputs.record_verified }}
+        run: |
+          set -euo pipefail
+          [[ "$CONTRACT_REF" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PYTHON_REF" =~ ^[0-9a-f]{40}$ ]]
+          test "$RECORD_VERIFIED" = false
+
       - name: Checkout contract
         uses: actions/checkout@v6
         with:
           path: contract
           ref: ${{ inputs.contract_ref || 'main' }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Checkout Python implementation
         uses: actions/checkout@v6
@@ -58,6 +77,7 @@ jobs:
           repository: AndersonBY/vv-agent
           path: vv-agent
           ref: ${{ inputs.python_ref || 'main' }}
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -90,12 +110,39 @@ jobs:
           python3 contract/scripts/contractctl.py --root contract validate
           node contract/scripts/verify_jcs.mjs
           python3 -m unittest discover -s contract/tests
-          python3 contract/scripts/contractctl.py --root contract build --output-dir contract/dist
+          python3 contract/scripts/contractctl.py --root contract build --output-dir contract/dist \
+            --revision "$(git -C contract rev-parse HEAD)"
 
-      - name: Verify Python locked snapshot
+      - name: Verify Python locked snapshot for a published contract
+        if: inputs.preview != true
         run: |
           python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --source contract
           python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --artifact "$(python3 -c 'import json; print(json.load(open("vv-agent/contract.lock.json"))["artifact_url"])')"
+
+      - name: Verify exact preview archive and sync the generated snapshot
+        if: inputs.preview == true
+        shell: bash
+        env:
+          CONTRACT_REF: ${{ inputs.contract_ref }}
+          PYTHON_REF: ${{ inputs.python_ref }}
+        run: |
+          set -euo pipefail
+          test "$(git -C contract rev-parse HEAD)" = "$CONTRACT_REF"
+          test "$(git -C vv-agent rev-parse HEAD)" = "$PYTHON_REF"
+          python3 contract/scripts/contractctl.py --root contract build --output-dir contract/repeat --revision "$CONTRACT_REF"
+          diff -r contract/dist contract/repeat
+          archives=(contract/dist/vv-agent-contract-*.zip)
+          test "${#archives[@]}" = 1
+          metadata=${archives[0]%.zip}.release.json
+          artifact_url=$(jq -er '.artifact_url' "$metadata")
+          snapshot=(python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent)
+          "${snapshot[@]}" sync --source contract --artifact "${archives[0]}" \
+            --artifact-url "$artifact_url" --revision "$CONTRACT_REF"
+          "${snapshot[@]}" check --source contract --artifact "${archives[0]}"
+          unexpected=$(git -C vv-agent diff --name-only HEAD -- . ':!contract.lock.json' ':!tests/fixtures/parity')
+          test -z "$unexpected"
+          test -z "$(git -C vv-agent ls-files --others --exclude-standard -- . ':!tests/fixtures/parity')"
+          sha256sum "${archives[0]}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Python full gate
         working-directory: vv-agent
@@ -103,9 +150,13 @@ jobs:
           VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
           TMPDIR: /tmp
         run: |
-          uv sync --dev --extra s3
+          uv sync --locked --dev --extra s3
+          uv venv --python 3.12 "$RUNNER_TEMP/vv-agent-0.33.3"
+          uv pip install --python "$RUNNER_TEMP/vv-agent-0.33.3/bin/python" 'vv-agent[postgres]==0.33.3'
+          export VV_AGENT_0333_PYTHON="$RUNNER_TEMP/vv-agent-0.33.3/bin/python"
           uv run pytest -k "not simulation_smoke"
           uv run ruff check .
+          uv run ruff format --check .
           uv run ty check
 
       - name: Run Python seeded simulation smoke
@@ -113,6 +164,7 @@ jobs:
         run: TMPDIR=/dev/shm timeout 60s uv run pytest tests/sim -k smoke -q -s
 
       - name: Record evidence
+        if: always()
         shell: bash
         run: |
           {
@@ -122,34 +174,3 @@ jobs:
             echo "- Python: \`$(git -C vv-agent rev-parse HEAD)\`"
             echo "- Fixture manifest: \`$(sha256sum contract/fixtures/SHA256SUMS | cut -d' ' -f1)\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Update verified support matrix
-        if: inputs.record_verified == true
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "${{ inputs.contract_ref }}" = "main"
-          test "${{ inputs.python_ref }}" = "main"
-          python_revision="$(git -C vv-agent rev-parse HEAD)"
-          run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          python3 contract/scripts/record_adoption.py \
-            --root contract \
-            --python-revision "$python_revision" \
-            --run-url "$run_url"
-          python3 contract/scripts/contractctl.py --root contract validate
-          python3 -m unittest discover -s contract/tests
-
-      - name: Commit verified support matrix
-        if: inputs.record_verified == true
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git -C contract diff --quiet -- support-matrix.json; then
-            echo "Support matrix already records these revisions"
-            exit 0
-          fi
-          git -C contract config user.name "github-actions[bot]"
-          git -C contract config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C contract add support-matrix.json
-          git -C contract commit -m "chore: record verified contract adoption"
-          git -C contract push origin HEAD:main
