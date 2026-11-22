@@ -11,6 +11,9 @@ reference against its owning session, including nested content. The provider
 wait fixture binds the accepted handle to the S1 request digest. The original
 Contract 39 projection is retained as historical evidence.
 
+Refresh the model completion capture with the requested model on ordinary
+definitive responses and the failure-event sequences after S1 usage records.
+
 The patch keeps the record, inbox and App Server schemas. It adds logical fold
 rejection evidence for modified summary and micro-compaction payloads and
 retains the level-3 execution worker's allocation status. Python adoption is
