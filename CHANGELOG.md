@@ -14,6 +14,10 @@ Contract 39 projection is retained as historical evidence.
 Refresh the model completion capture with the requested model on ordinary
 definitive responses and the failure-event sequences after S1 usage records.
 
+Refresh the A2 fork lineage digest from the S1 source record. The fork
+receipt, replay and context read now identify the sealed cut record at the
+same sequence.
+
 The patch keeps the record, inbox and App Server schemas. It adds logical fold
 rejection evidence for modified summary and micro-compaction payloads and
 retains the level-3 execution worker's allocation status. Python adoption is
