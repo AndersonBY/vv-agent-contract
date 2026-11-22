@@ -105,7 +105,7 @@ jobs:
           TMPDIR: /tmp
         run: |
           uv sync --dev --extra s3
-          uv run pytest -k "not simulation_smoke"
+          uv run pytest -o faulthandler_timeout=120 -k "not simulation_smoke"
           uv run ruff check .
           uv run ty check
 
