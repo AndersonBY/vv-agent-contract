@@ -55,6 +55,13 @@ Recording adoption requires contract and Python main refs. record_adoption.py
 records the exact Python revision/run URL and preserves the entire frozen Rust
 entry. Only then may the support matrix become verified.
 
+Contract 39 has a version-specific historical adoption record in
+`adoption/v39.0.0`. Its matrix identifies the Python P1 branch, which pins the
+immutable v39 release. Historical verification requires a successful run of the
+full cross-repository workflow against the immutable tag's commit and the exact
+Python revision. The record uses the same schema and `record_adoption.py`.
+Current adoption continues to use the default-branch workflow.
+
 ## Frozen implementations
 
 Support-matrix schema 2 explicitly lists required implementations and per-entry
