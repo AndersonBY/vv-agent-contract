@@ -6,8 +6,10 @@ Refresh the S1 record, inbox, projection and recovery examples from the Python
 producer. The current projection is `session_projection_s1.json`. Its content
 references resolve through `session_content_capture_s1.json`, which contains
 deterministic test values and keys. Independent canonical encoding and the
-tenant/session-bound HMAC verify those values. The original Contract 39
-projection is retained as historical evidence.
+tenant/session-bound HMAC verify those values. The validator also checks each
+reference against its owning session, including nested content. The provider
+wait fixture binds the accepted handle to the S1 request digest. The original
+Contract 39 projection is retained as historical evidence.
 
 The patch keeps the record, inbox and App Server schemas. It adds logical fold
 rejection evidence for modified summary and micro-compaction payloads and

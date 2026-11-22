@@ -64,6 +64,9 @@ HISTORICAL_SESSION_FIXTURES = {
 }
 S1_CONTENT_CAPTURE = "session_content_capture_s1.json"
 S1_PROJECTION_CAPTURE = "session_projection_s1.json"
+# The current producer corpus uses the default SQLite tenant. Curated records
+# need not retain a creation row, so the tenant comes from that fixture context.
+S1_CAPTURE_TENANT = "default"
 KEYWORDS = {
     "$schema",
     "$defs",
@@ -1370,6 +1373,79 @@ def validate_trusted_storage(
     return len(fixture["rejected_cases"])
 
 
+def _catalog_references(value: Any):
+    for node in walk(value):
+        if (
+            isinstance(node, dict)
+            and set(node) == {"content_id", "mac", "size", "key_id", "labels"}
+            and isinstance(node["content_id"], str)
+        ):
+            yield node
+
+
+def _validate_s1_content_owners(
+    documents: dict[str, Any], streams: dict[str, Any], contents: dict[str, Any]
+) -> set[int]:
+    checked_refs: set[int] = set()
+
+    def check(value: Any, tenant_id: str, session_id: str) -> None:
+        require(isinstance(session_id, str) and bool(session_id), "missing S1 fixture session owner")
+        for reference in _catalog_references(value):
+            _captured_content_entry(contents, reference, (tenant_id, session_id))
+            checked_refs.add(id(reference))
+
+    def check_rows(rows: Any) -> None:
+        for row in rows:
+            session_id = row["session_id"]
+            for node in walk(row):
+                if not isinstance(node, dict) or node.get("schema_version") != "S1":
+                    continue
+                if "record_id" in node:
+                    require(node["session_id"] == session_id, "S1 fixture record owner mismatch")
+                    if node["kind"] == "session_created":
+                        require(
+                            node["payload"]["principal"]["tenant_id"] == S1_CAPTURE_TENANT,
+                            "S1 fixture principal tenant mismatch",
+                        )
+                elif "input_id" in node:
+                    require(node["actor"]["tenant_id"] == S1_CAPTURE_TENANT, "S1 fixture actor tenant mismatch")
+            check(row, S1_CAPTURE_TENANT, session_id)
+
+    vectors = documents["session_codec_vectors.json"]["vectors"]
+    for kind, stream in (("record", "session_records.jsonl"), ("inbox", "session_inbox.jsonl")):
+        # An inbox wire omits its session ID. The producer's vector wrapper
+        # retains it, and the JSONL stream must contain the same wires in order.
+        rows = [v for v in vectors if v["type"] == kind]
+        wires = streams[stream]
+        require(wires == [row["wire"] for row in rows], f"S1 fixture stream mismatch: {stream}")
+        for wire, row in zip(wires, rows, strict=True):
+            check(wire, S1_CAPTURE_TENANT, row["session_id"])
+    check_rows(vectors)
+    check_rows(documents["session_invalid.json"]["source_records"])
+    check_rows(documents["session_compaction.json"]["vectors"])
+    for case in documents["session_semantics.json"]["cases"]:
+        if next(_catalog_references(case), None) is not None:
+            check_rows((case,))
+    for session_id, rows in documents[S1_PROJECTION_CAPTURE]["source_records"].items():
+        check_rows({"session_id": session_id, "wire": row["wire"]} for row in rows)
+    for entry in contents.values():
+        check(entry["value"], entry["tenant_id"], entry["session_id"])
+    return checked_refs
+
+
+def _captured_content_entry(
+    contents: dict[str, Any], reference: dict[str, Any], scope: tuple[str, str]
+) -> dict[str, Any]:
+    content_id = reference["content_id"]
+    entry = contents.get(content_id)
+    require(entry is not None and "tenant_id" in entry, f"missing scoped S1 content: {content_id}")
+    require(
+        (entry["tenant_id"], entry["session_id"], entry["key_id"]) == (*scope, reference["key_id"]),
+        f"S1 content owner mismatch: {content_id}",
+    )
+    return entry
+
+
 def validate_content_catalog(
     root: Path,
     documents: dict[str, Any],
@@ -1430,6 +1506,7 @@ def validate_content_catalog(
     require(
         scopes.keys() == capture_keys.keys(), "S1 content capture key inventory"
     )
+    checked_refs = _validate_s1_content_owners(documents, streams, capture["contents"])
     contents.update(capture["contents"])
     keys.update(capture_keys)
     refs_by_id: dict[str, list[dict[str, Any]]] = {}
@@ -1445,13 +1522,11 @@ def validate_content_catalog(
         }
     }
     captured_values = [entry["value"] for entry in capture["contents"].values()]
-    for node in walk([current_documents, streams, captured_values]):
-        if (
-            isinstance(node, dict)
-            and set(node) == {"content_id", "mac", "size", "key_id", "labels"}
-            and isinstance(node["content_id"], str)
-        ):
-            refs_by_id.setdefault(node["content_id"], []).append(node)
+    for reference in _catalog_references([current_documents, streams, captured_values]):
+        content_id = reference["content_id"]
+        if content_id in frames:
+            require(id(reference) in checked_refs, f"missing S1 fixture reference owner: {content_id}")
+        refs_by_id.setdefault(content_id, []).append(reference)
     require(
         refs_by_id.keys() <= contents.keys(),
         f"unresolved content references: {sorted(refs_by_id.keys() - contents.keys())[:5]}",
@@ -1498,19 +1573,24 @@ def _catalog_keys(catalog: dict[str, Any]) -> dict[str, bytes]:
     return keys
 
 
-def hydrate_content_refs(value: Any, catalog: dict[str, Any]) -> Any:
+def hydrate_content_refs(
+    value: Any, catalog: dict[str, Any], *, scope: tuple[str, str] | None = None
+) -> Any:
     contents = catalog["contents"]
     if (
         isinstance(value, dict)
         and set(value) == {"content_id", "mac", "size", "key_id", "labels"}
-        and value.get("content_id") in contents
-        and contents[value["content_id"]]["key_id"] == value.get("key_id")
     ):
-        return hydrate_content_refs(contents[value["content_id"]]["value"], catalog)
+        if scope is not None:
+            entry = _captured_content_entry(contents, value, scope)
+            return hydrate_content_refs(entry["value"], catalog, scope=scope)
+        entry = contents.get(value["content_id"])
+        if entry is not None and entry["key_id"] == value["key_id"]:
+            return hydrate_content_refs(entry["value"], catalog)
     if isinstance(value, dict):
-        return {key: hydrate_content_refs(item, catalog) for key, item in value.items()}
+        return {key: hydrate_content_refs(item, catalog, scope=scope) for key, item in value.items()}
     if isinstance(value, list):
-        return [hydrate_content_refs(item, catalog) for item in value]
+        return [hydrate_content_refs(item, catalog, scope=scope) for item in value]
     return value
 
 
@@ -1556,7 +1636,7 @@ def validate_logical_compaction_vectors(
             and source["payload"]["mode"] == sid,
             f"unretained logical compaction source: {label}",
         )
-        payload = hydrate_content_refs(source["payload"], catalog)
+        payload = hydrate_content_refs(source["payload"], catalog, scope=(S1_CAPTURE_TENANT, sid))
         require(
             field in payload and payload[field] != mutation["value"],
             f"no-op logical compaction mutation: {label}",

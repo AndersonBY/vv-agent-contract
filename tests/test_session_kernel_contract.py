@@ -27,8 +27,8 @@ class SessionKernelContractTests(unittest.TestCase):
         cls.content_catalog = contractctl.load_json(
             ROOT / "fixtures/session_content_catalog.json"
         )
-        capture = ROOT / "fixtures" / session.S1_CONTENT_CAPTURE
-        cls.content_catalog["contents"].update(contractctl.load_json(capture)["contents"])
+        cls.capture = contractctl.load_json(ROOT / "fixtures" / session.S1_CONTENT_CAPTURE)
+        cls.content_catalog["contents"].update(cls.capture["contents"])
         cls.codec = session.Codec(ROOT, cls.vectors)
 
     def hydrate(self, value):
@@ -59,6 +59,63 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(report["w3_lookup_results"], 4)
         self.assertEqual(report["w3_invalid_cases"], 13)
         self.assertEqual(report["w3_recovery_cases"], 5)
+
+    def test_s1_capture_checks_fixture_owners(self) -> None:
+        fixtures = ROOT / "fixtures"
+        documents = {
+            name: contractctl.load_json(fixtures / name)
+            for name in (
+                "session_codec_vectors.json",
+                "session_invalid.json",
+                "session_compaction.json",
+                "session_semantics.json",
+                session.S1_PROJECTION_CAPTURE,
+            )
+        }
+        streams = {
+            name: [json.loads(line) for line in (fixtures / name).read_text().splitlines()]
+            for name in ("session_records.jsonl", "session_inbox.jsonl")
+        }
+        documents[session.S1_CONTENT_CAPTURE] = copy.deepcopy(self.capture)
+        catalog = contractctl.load_json(fixtures / "session_content_catalog.json")
+        docs = copy.deepcopy(documents)
+        vector = next(v for v in docs["session_codec_vectors.json"]["vectors"] if v["type"] == "inbox")
+        vector["session_id"] += "-other"
+        with self.assertRaisesRegex(session.ValidationError, "S1 content owner mismatch"):
+            session.validate_content_catalog(ROOT, docs, streams, catalog)
+
+        first = documents[session.S1_PROJECTION_CAPTURE]["source_records"]["approval"][0]["wire"]
+        documents["unscoped.json"] = {"value": copy.deepcopy(first["payload"]["definition"])}
+        with self.assertRaisesRegex(session.ValidationError, "missing S1 fixture reference owner"):
+            session.validate_content_catalog(ROOT, documents, streams, catalog)
+
+        docs = copy.deepcopy(documents)
+        capture = docs[session.S1_CONTENT_CAPTURE]["contents"]
+        first = docs[session.S1_PROJECTION_CAPTURE]["source_records"]["approval"][0]["wire"]
+        reference = session.content_ref_entries(first)[0]
+        for entry in capture.values():
+            if entry["key_id"] == reference["key_id"]:
+                entry["tenant_id"] = "other"
+        with self.assertRaisesRegex(session.ValidationError, "S1 content owner mismatch"):
+            session.validate_content_catalog(ROOT, docs, streams, catalog)
+
+    def test_s1_capture_hydration_keeps_nested_owner(self) -> None:
+        catalog = copy.deepcopy(self.content_catalog)
+        contents = catalog["contents"]
+        root = self.record("turn_started")
+        parent_ref = root["payload"]["definition"]
+        parent = contents[parent_ref["content_id"]]
+        scope = (session.S1_CAPTURE_TENANT, root["session_id"])
+        self.assertIsInstance(session.hydrate_content_refs(parent_ref, catalog, scope=scope), dict)
+        other = next(v["wire"] for v in self.vectors["vectors"] if v["type"] == "record" and v["wire"]["kind"] == "turn_started" and v["session_id"] != scope[1])
+        parent["value"] = {"child": other["payload"]["definition"]}
+        with self.assertRaisesRegex(session.ValidationError, "S1 content owner mismatch"):
+            session.hydrate_content_refs(parent_ref, catalog, scope=scope)
+        synthetic = contractctl.load_json(ROOT / "fixtures/execution_worker_w3.json")
+        reference = next(ref for ref in session.content_ref_entries(synthetic) if ref["content_id"] in contents)
+        parent["value"] = {"child": {key: value for key, value in reference.items() if key != "path"}}
+        with self.assertRaisesRegex(session.ValidationError, "missing scoped S1 content"):
+            session.hydrate_content_refs(parent_ref, catalog, scope=scope)
 
     def test_level_three_execution_shapes_are_closed_and_level_two_rejects(self) -> None:
         turn = self.record("turn_started")

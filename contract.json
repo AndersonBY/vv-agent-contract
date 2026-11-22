@@ -6,7 +6,7 @@
   "fixtures": {
     "path": "fixtures",
     "manifest": "fixtures/SHA256SUMS",
-    "manifest_sha256": "2e5cea573b53a57e0b917e28255870bfebdaafe4d33a852b559a88abf916f909"
+    "manifest_sha256": "3d443384756390679a7f8be2ad89458576f692603c0ad4d6f37d938898bab8d2"
   },
   "domains": [
     "system-prompt",
