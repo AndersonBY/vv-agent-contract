@@ -141,20 +141,28 @@ jobs:
           "${snapshot[@]}" check --source contract --artifact "${archives[0]}"
           unexpected=$(git -C vv-agent diff --name-only HEAD -- . ':!contract.lock.json' ':!tests/fixtures/parity')
           test -z "$unexpected"
-          test -z "$(git -C vv-agent ls-files --others --exclude-standard -- . ':!tests/fixtures/parity')"
+          untracked=$(git -C vv-agent ls-files --others --exclude-standard -- . ':!tests/fixtures/parity')
+          test -z "$untracked"
           sha256sum "${archives[0]}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Run Python full gate
+      - name: Install Python and historical reader dependencies
         working-directory: vv-agent
-        env:
-          VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
-          TMPDIR: /tmp
         run: |
           uv sync --locked --dev --extra s3
           uv venv --python 3.12 "$RUNNER_TEMP/vv-agent-0.33.3"
           uv pip install --python "$RUNNER_TEMP/vv-agent-0.33.3/bin/python" 'vv-agent[postgres]==0.33.3'
-          export VV_AGENT_0333_PYTHON="$RUNNER_TEMP/vv-agent-0.33.3/bin/python"
-          uv run pytest -k "not simulation_smoke"
+          printf 'VV_AGENT_0333_PYTHON=%s\n' "$RUNNER_TEMP/vv-agent-0.33.3/bin/python" >> "$GITHUB_ENV"
+
+      - name: Run Python full tests
+        working-directory: vv-agent
+        env:
+          VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
+          TMPDIR: /tmp
+        run: uv run pytest -vv -o faulthandler_timeout=120 -k "not simulation_smoke"
+
+      - name: Run Python static checks
+        working-directory: vv-agent
+        run: |
           uv run ruff check .
           uv run ruff format --check .
           uv run ty check
