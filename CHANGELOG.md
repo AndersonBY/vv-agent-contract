@@ -1,5 +1,10 @@
 # Changelog
 
+## 41.0.2 — S1 evidence correction
+
+Republish the reviewed producer evidence and manifest updates that landed after
+the 41.0.1 tag. The observable schemas and behavior remain unchanged.
+
 ## 41.0.1 — S1 producer evidence
 
 Refresh the S1 record, inbox, projection and recovery examples from the Python

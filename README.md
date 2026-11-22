@@ -1,7 +1,7 @@
 # vv-agent-contract
 
 Language-neutral observable behavior, canonical fixtures and strict wire schemas
-for vv-agent. Contract 41.0.1 refreshes the S1 producer fixtures and adds
+for vv-agent. Contract 41.0.2 refreshes the S1 producer fixtures and adds
 authenticated fixture content for replay. Python adoption is pending. The W3
 level-3 execution worker values retain their allocation status. Rust stays
 frozen at verified 23.0.0 / 0.21.x. See [the changelog](CHANGELOG.md).
