@@ -62,6 +62,8 @@ HISTORICAL_SESSION_FIXTURES = {
     "unseen_input_protection.json",
     "yieldable_waits.json",
 }
+S1_CONTENT_CAPTURE = "session_content_capture_s1.json"
+S1_PROJECTION_CAPTURE = "session_projection_s1.json"
 KEYWORDS = {
     "$schema",
     "$defs",
@@ -341,15 +343,21 @@ ENVIRONMENT_CAPABILITY_FIELDS = (
 
 
 def jcs_bytes(root: Path, value: Any) -> bytes:
+    return jcs_batch(root, [value])[0]
+
+
+def jcs_batch(root: Path, values: list[Any]) -> list[bytes]:
     result = subprocess.run(
         ["node", str(root / "scripts/verify_jcs.mjs"), "--canonicalize"],
-        input=json.dumps([value], ensure_ascii=True, allow_nan=False),
+        input=json.dumps(values, ensure_ascii=True, allow_nan=False),
         text=True,
         capture_output=True,
         check=False,
     )
     require(result.returncode == 0, f"canonical encoding failed: {result.stderr[:500]}")
-    return base64.b64decode(json.loads(result.stdout)[0], validate=True)
+    encoded = json.loads(result.stdout)
+    require(len(encoded) == len(values), "canonical encoding count")
+    return [base64.b64decode(item, validate=True) for item in encoded]
 
 
 def execution_identity_digest(root: Path, value: dict[str, Any]) -> str:
@@ -1368,27 +1376,76 @@ def validate_content_catalog(
     streams: dict[str, Any],
     catalog: dict[str, Any],
 ) -> None:
-    require(catalog["status"] == "synthetic-contract-fixture", "content catalog provenance")
-    keys = {entry["key_id"]: entry for entry in catalog["keys"]}
-    items = sorted(catalog["contents"].items())
-    canonical = subprocess.run(
-        ["node", str(root / "scripts/verify_jcs.mjs"), "--canonicalize"],
-        input=json.dumps([entry["value"] for _, entry in items], ensure_ascii=True, allow_nan=False),
-        text=True,
-        capture_output=True,
-        check=False,
+    require(
+        catalog["status"] == "synthetic-contract-fixture", "content catalog provenance"
     )
-    require(canonical.returncode == 0, f"content canonicalization: {canonical.stderr[:500]}")
-    encoded_values = json.loads(canonical.stdout)
-    require(len(encoded_values) == len(items), "content canonicalization count")
+    capture = documents[S1_CONTENT_CAPTURE]
+    contents = dict(catalog["contents"])
+    keys = _catalog_keys(catalog)
+    frames = {}
+    require(
+        set(capture) == {"schema_version", "status", "keys", "contents"}
+        and capture["schema_version"] == "vv-agent.session-content-capture.v1"
+        and capture["status"] == "deterministic-test-fixture",
+        "S1 content capture provenance",
+    )
+    capture_keys = _catalog_keys(capture)
+    require(
+        not keys.keys() & capture_keys.keys(),
+        "S1 content capture repeats a synthetic key",
+    )
+    require(
+        not contents.keys() & capture["contents"].keys(),
+        "S1 content capture repeats a synthetic reference",
+    )
+    require(bool(capture["contents"]), "empty S1 content capture")
+    scopes: dict[str, tuple[str, str]] = {}
+    for content_id, entry in capture["contents"].items():
+        require(
+            set(entry)
+            == {"tenant_id", "session_id", "key_id", "value"},
+            "S1 content capture shape",
+        )
+        tenant_id, session_id, key_id = (
+            entry["tenant_id"],
+            entry["session_id"],
+            entry["key_id"],
+        )
+        require(
+            all(isinstance(v, str) and v for v in (tenant_id, session_id, key_id)),
+            "S1 content capture scope",
+        )
+        require(
+            scopes.setdefault(key_id, (tenant_id, session_id))
+            == (tenant_id, session_id),
+            "S1 content capture key spans scopes",
+        )
+        frames[content_id] = {
+            "domain": "vv-agent/S1/content-mac",
+            "framing_version": 1,
+            "purpose": "content-ref",
+            "tenant_id": tenant_id,
+            "session_id": session_id,
+        }
+    require(
+        scopes.keys() == capture_keys.keys(), "S1 content capture key inventory"
+    )
+    contents.update(capture["contents"])
+    keys.update(capture_keys)
     refs_by_id: dict[str, list[dict[str, Any]]] = {}
     current_documents = {
         name: document
         for name, document in documents.items()
         if document.get("historical_contract_version") != "39.0.0"
-        and name not in {"session_content_catalog.json", "trusted_storage_s1.json"}
+        and name
+        not in {
+            "session_content_catalog.json",
+            "trusted_storage_s1.json",
+            S1_CONTENT_CAPTURE,
+        }
     }
-    for node in walk([current_documents, streams]):
+    captured_values = [entry["value"] for entry in capture["contents"].values()]
+    for node in walk([current_documents, streams, captured_values]):
         if (
             isinstance(node, dict)
             and set(node) == {"content_id", "mac", "size", "key_id", "labels"}
@@ -1396,21 +1453,49 @@ def validate_content_catalog(
         ):
             refs_by_id.setdefault(node["content_id"], []).append(node)
     require(
-        set(refs_by_id) <= set(catalog["contents"]),
-        f"unresolved content references: {sorted(set(refs_by_id) - set(catalog['contents']))[:5]}",
+        refs_by_id.keys() <= contents.keys(),
+        f"unresolved content references: {sorted(refs_by_id.keys() - contents.keys())[:5]}",
     )
-    for (content_id, entry), encoded in zip(items, encoded_values):
+    require(frames.keys() <= refs_by_id.keys(), "unreferenced S1 content capture")
+    items = sorted(contents.items())
+    plaintexts = jcs_batch(root, [entry["value"] for _, entry in items])
+    framed_bytes = (
+        dict(zip(frames, jcs_batch(root, list(frames.values())), strict=True))
+        if frames
+        else {}
+    )
+    for (content_id, entry), plaintext in zip(items, plaintexts, strict=True):
         require(entry["key_id"] in keys, f"missing content key: {content_id}")
-        plaintext = base64.b64decode(encoded, validate=True)
+        mac_input = (
+            framed_bytes[content_id] + b"\0" + plaintext
+            if content_id in framed_bytes
+            else plaintext
+        )
         expected = hmac.new(
-            base64.b64decode(keys[entry["key_id"]]["key_base64"], validate=True),
-            plaintext,
+            keys[entry["key_id"]],
+            mac_input,
             hashlib.sha256,
         ).hexdigest()
         for reference in refs_by_id.get(content_id, []):
-            require(reference["key_id"] == entry["key_id"], f"content key: {content_id}")
+            require(
+                reference["key_id"] == entry["key_id"], f"content key: {content_id}"
+            )
             require(reference["mac"] == expected, f"content MAC: {content_id}")
             require(reference["size"] == len(plaintext), f"content size: {content_id}")
+
+
+def _catalog_keys(catalog: dict[str, Any]) -> dict[str, bytes]:
+    keys = {}
+    for entry in catalog["keys"]:
+        key_id = entry["key_id"]
+        require(
+            set(entry) == {"key_id", "key_base64"} and key_id not in keys,
+            "content catalog key shape",
+        )
+        raw = base64.b64decode(entry["key_base64"], validate=True)
+        require(len(raw) == 32, "content catalog key length")
+        keys[key_id] = raw
+    return keys
 
 
 def hydrate_content_refs(value: Any, catalog: dict[str, Any]) -> Any:
@@ -1427,6 +1512,77 @@ def hydrate_content_refs(value: Any, catalog: dict[str, Any]) -> Any:
     if isinstance(value, list):
         return [hydrate_content_refs(item, catalog) for item in value]
     return value
+
+
+def validate_logical_compaction_vectors(
+    fixture: dict[str, Any], catalog: dict[str, Any]
+) -> None:
+    sources = {
+        (wire["session_id"], wire["record_id"]): wire
+        for wire in fixture["source_records"]
+    }
+    mutations = {
+        "source_digest": "0" * 64,
+        "prefix_ids": ["forged"],
+        "tail_ids": ["forged"],
+        "replacement": [],
+        "evidence_manifest": {"artifacts": [], "cursors": [], "forged": True},
+    }
+    seen = set()
+    for vector in fixture["logical_vectors"]:
+        sid, mutation = vector["session_id"], vector["mutation"]
+        field = mutation["field"]
+        label = vector["rejection_class"]
+        require(
+            sid in {"summary", "micro"}
+            and field in mutations
+            and label == f"{sid}_compaction_{field}"
+            and vector["layer"] == "logical_fold"
+            and label not in seen
+            and mutation["value"] == mutations[field],
+            f"invalid logical compaction mutation: {label}",
+        )
+        seen.add(label)
+        prefix = [sources.get((sid, record_id)) for record_id in vector["prefix_ids"]]
+        source = sources.get((sid, vector["source_record_id"]))
+        require(
+            bool(prefix)
+            and all(prefix)
+            and prefix[0]["kind"] == "session_created"
+            and len(vector["prefix_ids"]) == len(set(vector["prefix_ids"]))
+            and vector["source_record_id"] not in vector["prefix_ids"]
+            and source is not None
+            and source["kind"] == "context_compacted"
+            and source["payload"]["mode"] == sid,
+            f"unretained logical compaction source: {label}",
+        )
+        payload = hydrate_content_refs(source["payload"], catalog)
+        require(
+            field in payload and payload[field] != mutation["value"],
+            f"no-op logical compaction mutation: {label}",
+        )
+        reasons = {
+            "source_digest": "compaction source mismatch",
+            "prefix_ids": "compaction identities mismatch",
+            "tail_ids": "compaction identities mismatch",
+            "replacement": "replacement differs from accepted receipt"
+            if sid == "summary"
+            else "invalid micro replacement",
+            "evidence_manifest": "compaction evidence mismatch",
+        }
+        require(
+            vector["reason"] == reasons[field],
+            f"logical compaction rejection reason: {label}",
+        )
+    require(
+        seen
+        == {
+            f"{sid}_compaction_{field}"
+            for sid in ("summary", "micro")
+            for field in mutations
+        },
+        "logical compaction coverage",
+    )
 
 
 def validate_session_fixtures(root: Path) -> dict[str, int]:
@@ -1461,6 +1617,13 @@ def validate_session_fixtures(root: Path) -> dict[str, int]:
         if name not in historical_documents
     }
     validate_content_catalog(root, documents, streams, catalog)
+    capture = documents[S1_CONTENT_CAPTURE]
+    catalog = {
+        "contents": catalog["contents"] | capture["contents"],
+        "keys": catalog["keys"] + capture["keys"],
+    }
+    validate_logical_compaction_vectors(documents["session_invalid.json"], catalog)
+    require(bool(documents[S1_PROJECTION_CAPTURE]["sessions"]), "empty S1 projection capture")
     storage_cases = validate_storage_fixtures(root, codec, documents)
     lifecycle_cases = validate_lifecycle_fixtures(root, codec, documents, catalog)
     trusted_negatives = validate_trusted_storage(

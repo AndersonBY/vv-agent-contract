@@ -303,6 +303,7 @@ if (process.argv.includes("--canonicalize")) {
   }
   for (const [index, vector] of readFixture("session_invalid.json").vectors.entries()) decode(vector, `invalid/${index}`);
   for (const name of ["session_semantics.json", "session_recovery.json", "session_projection.json", "session_compaction.json", "host_summary_requests.json", "app_server_protocol.json", "model_rejection.json"]) verifyFacts(readFixture(name), name);
+  verifyFacts(readFixture("session_projection_s1.json"), "session_projection_s1.json");
   for (const vector of readFixture("app_server_observable.json").actionAdmission.commandIdCases) {
     const value = {schema_version:"vv-agent.controller-command-id.v1", thread_id:vector.threadId, turn_id:vector.turnId, action_id:vector.actionId};
     verifyFact(vector, `action/${vector.name}`, value);

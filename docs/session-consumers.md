@@ -105,7 +105,7 @@ be rejected. Detached span data never grants execution authority.
 | Live streaming | Assistant/reasoning/tool deltas are volatile, optional and ordered within delivery. Sink loss MUST NOT affect definitive receipt content or recovery. |
 | Tracing | Separate traces cursor MUST commit ACK before nontransactional processors. At most once; ACK-to-dispatch crash or processor failure may lose telemetry. Reject ambient transactions that could roll back an already delivered span. Stable spans and detached data do not grant state authority. |
 
-Fixtures: `session_projection.json`, `session_semantics.json`,
+Fixtures: `session_projection_s1.json`, `session_semantics.json`,
 `configured_sub_agent.json`, `configured_sub_agent_events.jsonl`,
 `public_configured_sub_agent.json`, `manager_tool_envelope.json`,
 `handoff_contract.json`, `runner_trace.jsonl` and `runner_trace_spans.json`.

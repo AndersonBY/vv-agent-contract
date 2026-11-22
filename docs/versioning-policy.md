@@ -105,11 +105,10 @@ captured-prefix reads. It is a major behavior release without a record, inbox,
 SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
-`support-matrix.json` owns the current adoption status. The current contract is
-41.0.0 with the W4 worker-routing replacement and W3 level-3 command/lookup
-allocation on storage S1. Python implementation, real producer capture, immutable
-publication/lock/snapshot, required full gates and central adoption remain in
-progress.
+`support-matrix.json` owns the current adoption status. Contract 41.0.1 refreshes
+the S1 producer evidence for the 41.0.0 worker-routing and execution allocations.
+Python adoption requires an exact release pin and the central producer and full
+implementation gates.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen

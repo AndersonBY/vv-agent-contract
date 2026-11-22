@@ -27,17 +27,19 @@ class SessionKernelContractTests(unittest.TestCase):
         cls.content_catalog = contractctl.load_json(
             ROOT / "fixtures/session_content_catalog.json"
         )
+        capture = ROOT / "fixtures" / session.S1_CONTENT_CAPTURE
+        cls.content_catalog["contents"].update(contractctl.load_json(capture)["contents"])
         cls.codec = session.Codec(ROOT, cls.vectors)
 
     def hydrate(self, value):
         return session.hydrate_content_refs(value, self.content_catalog)
 
-    def record(self, kind: str) -> dict:
+    def record(self, kind: str, *, level: int = 1) -> dict:
         return copy.deepcopy(
             next(
                 v["wire"]
                 for v in self.vectors["vectors"]
-                if v["type"] == "record" and v["wire"]["kind"] == kind
+                if v["type"] == "record" and v["wire"]["kind"] == kind and v["wire"]["feature_level"] == level
             )
         )
 
@@ -45,8 +47,10 @@ class SessionKernelContractTests(unittest.TestCase):
         report = session.validate_session_fixtures(ROOT)
         self.assertGreater(report["records"], 100)
         self.assertGreater(report["inbox_items"], 50)
-        self.assertEqual(report["codec_vectors"], 85)
-        self.assertEqual(report["invalid_vectors"], 88)
+        self.assertEqual(report["codec_vectors"], len(self.vectors["vectors"]))
+        invalid = contractctl.load_json(ROOT / "fixtures/session_invalid.json")
+        self.assertEqual(report["invalid_vectors"], len(invalid["vectors"]))
+        self.assertEqual(len(invalid["logical_vectors"]), 10)
         self.assertEqual(report["storage_envelope_cases"], 6)
         self.assertEqual(report["storage_lifecycle_cases"], 11)
         self.assertEqual(report["trusted_negative_cases"], 26)
@@ -173,7 +177,9 @@ class SessionKernelContractTests(unittest.TestCase):
             next(
                 vector["wire"]
                 for vector in self.vectors["vectors"]
-                if vector["type"] == "inbox" and vector["wire"]["kind"] == "user"
+                if vector["type"] == "inbox"
+                and vector["wire"]["kind"] == "user"
+                and vector["wire"]["feature_level"] == 1
             )
         )
         self.codec.validate(inbox, inbox=True)
@@ -710,7 +716,15 @@ class SessionKernelContractTests(unittest.TestCase):
         self.assertEqual(cuts["lost_wall_stop"]["status"], "failed")
 
     def test_projected_events_derive_stable_record_identity(self) -> None:
-        projection = contractctl.load_json(ROOT / "fixtures/session_projection.json")
+        for name in ("session_projection.json", session.S1_PROJECTION_CAPTURE):
+            with self.subTest(fixture=name):
+                self._assert_projected_events_derive_stable_record_identity(
+                    contractctl.load_json(ROOT / "fixtures" / name)
+                )
+
+    def _assert_projected_events_derive_stable_record_identity(
+        self, projection
+    ) -> None:
         for vector in projection["sessions"]:
             sid = vector["session_id"]
             source = projection["source_records"][sid]

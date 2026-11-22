@@ -1,5 +1,19 @@
 # Changelog
 
+## 41.0.1 — S1 producer evidence
+
+Refresh the S1 record, inbox, projection and recovery examples from the Python
+producer. The current projection is `session_projection_s1.json`. Its content
+references resolve through `session_content_capture_s1.json`, which contains
+deterministic test values and keys. Independent canonical encoding and the
+tenant/session-bound HMAC verify those values. The original Contract 39
+projection is retained as historical evidence.
+
+The patch keeps the record, inbox and App Server schemas. It adds logical fold
+rejection evidence for modified summary and micro-compaction payloads and
+retains the level-3 execution worker's allocation status. Python adoption is
+pending independent replay and the required implementation gates.
+
 ## 41.0.0 — unreleased — W4 worker routing and W3 execution allocation
 
 This major replaces worker routing behavior while retaining storage S1 and its

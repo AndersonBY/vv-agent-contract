@@ -1,11 +1,9 @@
 # vv-agent-contract
 
-语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。当前 41.0.0
-尚未发布并处于 in-progress：W4 分配 level 2 worker routing，W3 在既有 S1 storage
-shape 上分配 level 3 command identity 和 authenticated provider lookup。Python
-producer/storage adoption 仍待完成。Rust 仍冻结于已验证的 23.0.0 / 0.21.x。不提供
-legacy S1 reader、alias 或双格式路径。参见
-[41.0.0 发布分配](docs/release-41.0.0.md)。
+语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。41.0.1 更新了
+S1 producer 夹具，并添加可供回放验证的测试内容。Python adoption 待完成。
+W3 level 3 执行 worker 仍处于契约分配阶段。Rust 仍冻结于已验证的
+23.0.0 / 0.21.x。参见[变更记录](CHANGELOG.md)。
 
 实现通过 contract.lock.json 锁定精确版本、revision、artifact 与 manifest 摘要；
 vendored snapshot 只能由同步脚本生成。共享行为先在本仓库定义，再由真实 producer
