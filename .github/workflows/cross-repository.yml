@@ -120,23 +120,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t test_nodes < <(
-            uv run pytest --collect-only -q 2>/dev/null |
-              python3 -c 'import sys; print("\n".join(line.strip() for line in sys.stdin if line.startswith("tests/") and "::" in line))'
+          mapfile -t test_files < <(
+            python3 - <<'PY'
+          from pathlib import Path
+
+          files = sorted(
+              (path for path in Path("tests").rglob("test_*.py") if path.is_file()),
+              key=lambda path: (-path.stat().st_size, path.as_posix()),
           )
-          test "${#test_nodes[@]}" -gt 0
+          for path in files:
+              print(path.as_posix())
+          PY
+          )
+          test "${#test_files[@]}" -gt 0
 
           declare -a pids=()
           for ((shard = 0; shard < PYTEST_SHARDS; shard += 1)); do
-            shard_nodes=()
-            for ((index = shard; index < ${#test_nodes[@]}; index += PYTEST_SHARDS)); do
-              shard_nodes+=("${test_nodes[index]}")
+            shard_files=()
+            for ((index = shard; index < ${#test_files[@]}; index += PYTEST_SHARDS)); do
+              shard_files+=("${test_files[index]}")
             done
-            test "${#shard_nodes[@]}" -gt 0
+            test "${#shard_files[@]}" -gt 0
             (
               set -o pipefail
-              printf '[pytest-shard-%s] nodes=%s\n' "$shard" "${#shard_nodes[@]}"
-              uv run pytest -x -vv -o faulthandler_timeout=120 "${shard_nodes[@]}" 2>&1 \
+              printf '[pytest-shard-%s] files=%s\n' "$shard" "${#shard_files[@]}"
+              uv run pytest -x -vv -o faulthandler_timeout=120 "${shard_files[@]}" 2>&1 \
                 | sed -u "s/^/[pytest-shard-$shard] /" \
                 | tee "$RUNNER_TEMP/pytest-shard-$shard.log"
             ) &
