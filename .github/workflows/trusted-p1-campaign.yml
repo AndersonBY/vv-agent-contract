@@ -203,7 +203,7 @@ jobs:
           count=$((total / shards))
           report="$RUNNER_TEMP/p1-postgres-${SHARD}.json"
           timeout 270m uv run python scripts/session_simulation.py \
-            --backend postgres --seed "$seed" --seeds "$count" --workers 4 --report "$report"
+            --backend postgres --seed "$seed" --seeds "$count" --workers 1 --report "$report"
           python3 - "$report" "$seed" "$count" <<'PY'
           import json
           import sys
