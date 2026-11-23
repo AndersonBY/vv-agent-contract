@@ -11,16 +11,6 @@ on:
         options:
           - sqlite
           - postgres
-      contract_ref:
-        description: Immutable Contract ref
-        required: true
-        default: v39.0.0
-        type: string
-      python_ref:
-        description: Exact vv-agent revision or branch
-        required: true
-        default: 54a437d1298ddcf400d7ec83f72bf508385ff9aa
-        type: string
   schedule:
     - cron: "17 2 * * *"
 
@@ -43,12 +33,13 @@ jobs:
     env:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
+      VV_AGENT_CONTRACT_SOURCE: ${{ github.workspace }}/contract
     steps:
       - name: Checkout contract
         uses: actions/checkout@v6
         with:
           path: contract
-          ref: ${{ github.event_name == 'schedule' && 'v39.0.0' || inputs.contract_ref }}
+          ref: v39.0.0
           fetch-depth: 0
 
       - name: Checkout Python implementation
@@ -56,7 +47,7 @@ jobs:
         with:
           repository: AndersonBY/vv-agent
           path: vv-agent
-          ref: ${{ github.event_name == 'schedule' && '54a437d1298ddcf400d7ec83f72bf508385ff9aa' || inputs.python_ref }}
+          ref: 54a437d1298ddcf400d7ec83f72bf508385ff9aa
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -73,10 +64,14 @@ jobs:
         working-directory: vv-agent
         run: uv sync --locked --dev --extra s3
 
+      - name: Verify exact Contract 39 source
+        working-directory: vv-agent
+        run: python3 scripts/contract_snapshot.py check --source "$VV_AGENT_CONTRACT_SOURCE"
+
       - name: Run SQLite shard
         working-directory: vv-agent
         env:
-          TMPDIR: /dev/shm
+          TMPDIR: /tmp
           SHARD: ${{ matrix.shard }}
         shell: bash
         run: |
@@ -96,6 +91,7 @@ jobs:
           expected_seed = int(sys.argv[2])
           expected_count = int(sys.argv[3])
           checks = {
+              "code_digest": "25db2aaeaa62d1b25ded9ce9371a96306b21869f3b7240f9eb9f8e582be12cc5",
               "code_revision": "54a437d1298ddcf400d7ec83f72bf508385ff9aa",
               "contract_revision": "ec154627d2153812d4b81e6863e5bdda0df64c5f",
               "contract_version": "39.0.0",
@@ -107,10 +103,21 @@ jobs:
           for key, expected in checks.items():
               if report.get(key) != expected:
                   raise SystemExit(f"{key}: expected {expected!r}, got {report.get(key)!r}")
-          if report.get("dirty") is not False:
-              raise SystemExit(f"dirty source identity: {report.get('dirty')!r}")
+          if report.get("contract_selection") != "local" or report.get("contract_dirty") is not False:
+              raise SystemExit(f"unexpected contract source identity: {report.get('contract_selection')!r} / {report.get('contract_dirty')!r}")
+          if report.get("dirty") is not False or report.get("in_memory_mutations") != []:
+              raise SystemExit(f"unexpected source or mutation identity: {report.get('dirty')!r} / {report.get('in_memory_mutations')!r}")
+          inventory = ["accepted", "accepted_lost", "approval_reply", "cancel", "cancel_descendants", "children", "context_compacted", "definition_mismatch", "factory_not_ready", "future_input", "late_result", "lease_takeover", "metered_tool", "model_result_precommit", "model_unknown", "postcommit", "precommit", "reply_loss", "tools", "unknown_idempotent", "unknown_unsafe"]
+          if report.get("scenario_inventory") != inventory or report.get("scenario_inventory_sha256") != "fd91a468e23c2557eeee0f5acaefab5cc0c1bdcf81c4ddd7c5f0d7badf128da4":
+              raise SystemExit("scenario inventory identity mismatch")
+          scenarios = report.get("scenarios", {})
+          if set(scenarios) != set(inventory) or sum(scenarios.values()) != expected_count or any(scenarios[name] < 1 for name in inventory):
+              raise SystemExit(f"incomplete scenario coverage: {scenarios!r}")
           if report.get("covered") != ["I1", "I10", "I2", "I3", "I4", "I5", "I6", "I7", "I8"]:
               raise SystemExit(f"unexpected invariant coverage: {report.get('covered')!r}")
+          storage = report.get("environment", {}).get("sqlite_temporary_storage", {})
+          if storage.get("verified") is not True or any(observation.get("filesystem") == "tmpfs" for observation in storage.get("observations", [])):
+              raise SystemExit(f"SQLite storage was not ordinary filesystem: {storage!r}")
           PY
 
       - name: Upload SQLite shard evidence
@@ -147,12 +154,13 @@ jobs:
     env:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
+      VV_AGENT_CONTRACT_SOURCE: ${{ github.workspace }}/contract
     steps:
       - name: Checkout contract
         uses: actions/checkout@v6
         with:
           path: contract
-          ref: ${{ github.event_name == 'schedule' && 'v39.0.0' || inputs.contract_ref }}
+          ref: v39.0.0
           fetch-depth: 0
 
       - name: Checkout Python implementation
@@ -160,7 +168,7 @@ jobs:
         with:
           repository: AndersonBY/vv-agent
           path: vv-agent
-          ref: ${{ github.event_name == 'schedule' && '54a437d1298ddcf400d7ec83f72bf508385ff9aa' || inputs.python_ref }}
+          ref: 54a437d1298ddcf400d7ec83f72bf508385ff9aa
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -176,6 +184,10 @@ jobs:
       - name: Install dependencies
         working-directory: vv-agent
         run: uv sync --locked --dev --extra s3
+
+      - name: Verify exact Contract 39 source
+        working-directory: vv-agent
+        run: python3 scripts/contract_snapshot.py check --source "$VV_AGENT_CONTRACT_SOURCE"
 
       - name: Run PostgreSQL shard
         working-directory: vv-agent
@@ -200,6 +212,7 @@ jobs:
           expected_seed = int(sys.argv[2])
           expected_count = int(sys.argv[3])
           checks = {
+              "code_digest": "25db2aaeaa62d1b25ded9ce9371a96306b21869f3b7240f9eb9f8e582be12cc5",
               "code_revision": "54a437d1298ddcf400d7ec83f72bf508385ff9aa",
               "contract_revision": "ec154627d2153812d4b81e6863e5bdda0df64c5f",
               "contract_version": "39.0.0",
@@ -211,8 +224,16 @@ jobs:
           for key, expected in checks.items():
               if report.get(key) != expected:
                   raise SystemExit(f"{key}: expected {expected!r}, got {report.get(key)!r}")
-          if report.get("dirty") is not False:
-              raise SystemExit(f"dirty source identity: {report.get('dirty')!r}")
+          if report.get("contract_selection") != "local" or report.get("contract_dirty") is not False:
+              raise SystemExit(f"unexpected contract source identity: {report.get('contract_selection')!r} / {report.get('contract_dirty')!r}")
+          if report.get("dirty") is not False or report.get("in_memory_mutations") != []:
+              raise SystemExit(f"unexpected source or mutation identity: {report.get('dirty')!r} / {report.get('in_memory_mutations')!r}")
+          inventory = ["accepted", "accepted_lost", "approval_reply", "cancel", "cancel_descendants", "children", "context_compacted", "definition_mismatch", "factory_not_ready", "future_input", "late_result", "lease_takeover", "metered_tool", "model_result_precommit", "model_unknown", "postcommit", "precommit", "reply_loss", "tools", "unknown_idempotent", "unknown_unsafe"]
+          if report.get("scenario_inventory") != inventory or report.get("scenario_inventory_sha256") != "fd91a468e23c2557eeee0f5acaefab5cc0c1bdcf81c4ddd7c5f0d7badf128da4":
+              raise SystemExit("scenario inventory identity mismatch")
+          scenarios = report.get("scenarios", {})
+          if set(scenarios) != set(inventory) or sum(scenarios.values()) != expected_count or any(scenarios[name] < 1 for name in inventory):
+              raise SystemExit(f"incomplete scenario coverage: {scenarios!r}")
           if report.get("covered") != ["I1", "I10", "I2", "I3", "I4", "I5", "I6", "I7", "I8"]:
               raise SystemExit(f"unexpected invariant coverage: {report.get('covered')!r}")
           cleanup = report.get("environment", {}).get("postgres_cleanup")
@@ -255,34 +276,40 @@ jobs:
           from pathlib import Path
 
           expected = {"sqlite": 1_000_000, "postgres": 10_000}
+          required = set(expected) if "${{ github.event_name }}" == "schedule" else {"${{ inputs.backend }}"}
           found = {backend: [] for backend in expected}
-          for path in sorted(Path("reports").glob("*.json")):
+          for path in sorted(Path("reports").glob("p1-*.json")):
               report = json.loads(path.read_text())
               backend = report.get("backend")
               if backend in found:
-                  found[backend].append((report["seed"], report["seeds"], report))
-          manifest = {"code_revision": None, "contract_revision": None, "contract_version": None, "backends": {}}
-          for backend, total in expected.items():
-              parts = sorted(found[backend])
+                  found[backend].append((report["seed"], report["seeds"], report, path))
+          manifest = {"code_digest": None, "code_revision": None, "contract_revision": None, "contract_version": None, "contract_manifest_sha256": None, "scenario_inventory_sha256": None, "backends": {}}
+          for backend in required:
+              total = expected[backend]
+              parts = sorted(found[backend], key=lambda item: item[0])
               if not parts:
-                  continue
+                  raise SystemExit(f"missing backend evidence: {backend}")
               cursor = 0
-              for seed, count, report in parts:
+              seen = set()
+              for seed, count, report, path in parts:
+                  if seed in seen:
+                      raise SystemExit(f"{backend}: duplicate seed {seed}")
+                  seen.add(seed)
                   if seed != cursor:
                       raise SystemExit(f"{backend}: expected seed {cursor}, got {seed}")
                   cursor += count
-                  identity = tuple(report[key] for key in ("code_revision", "contract_revision", "contract_version"))
+                  identity = tuple(report[key] for key in ("code_digest", "code_revision", "contract_revision", "contract_version", "contract_manifest_sha256", "scenario_inventory_sha256"))
                   if manifest["code_revision"] is None:
-                      manifest["code_revision"], manifest["contract_revision"], manifest["contract_version"] = identity
-                  elif identity != (manifest["code_revision"], manifest["contract_revision"], manifest["contract_version"]):
+                      manifest["code_digest"], manifest["code_revision"], manifest["contract_revision"], manifest["contract_version"], manifest["contract_manifest_sha256"], manifest["scenario_inventory_sha256"] = identity
+                  elif identity != tuple(manifest[key] for key in ("code_digest", "code_revision", "contract_revision", "contract_version", "contract_manifest_sha256", "scenario_inventory_sha256")):
                       raise SystemExit(f"{backend}: identity mismatch in {seed}")
               if cursor != total:
                   raise SystemExit(f"{backend}: covered {cursor}, expected {total}")
               manifest["backends"][backend] = {
                   "seeds": cursor,
                   "parts": [
-                      {"seed": seed, "seeds": count, "sha256": hashlib.sha256(json.dumps(report, sort_keys=True).encode()).hexdigest()}
-                      for seed, count, report in parts
+                      {"seed": seed, "seeds": count, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                      for seed, count, report, path in parts
                   ],
               }
           Path("campaign-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
