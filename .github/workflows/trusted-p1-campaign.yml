@@ -1,0 +1,297 @@
+name: Trusted P1 large real-store campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: Storage backend to campaign
+        required: true
+        default: sqlite
+        type: choice
+        options:
+          - sqlite
+          - postgres
+      contract_ref:
+        description: Immutable Contract ref
+        required: true
+        default: v39.0.0
+        type: string
+      python_ref:
+        description: Exact vv-agent revision or branch
+        required: true
+        default: 54a437d1298ddcf400d7ec83f72bf508385ff9aa
+        type: string
+  schedule:
+    - cron: "17 2 * * *"
+
+concurrency:
+  group: trusted-p1-campaign-${{ github.event_name == 'schedule' && 'nightly' || inputs.backend }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite:
+    if: github.event_name == 'schedule' || inputs.backend == 'sqlite'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      UV_NO_SOURCES: "1"
+      VV_AGENT_RUN_LIVE_TESTS: "0"
+    steps:
+      - name: Checkout contract
+        uses: actions/checkout@v6
+        with:
+          path: contract
+          ref: ${{ github.event_name == 'schedule' && 'v39.0.0' || inputs.contract_ref }}
+          fetch-depth: 0
+
+      - name: Checkout Python implementation
+        uses: actions/checkout@v6
+        with:
+          repository: AndersonBY/vv-agent
+          path: vv-agent
+          ref: ${{ github.event_name == 'schedule' && '54a437d1298ddcf400d7ec83f72bf508385ff9aa' || inputs.python_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: vv-agent/uv.lock
+
+      - name: Install dependencies
+        working-directory: vv-agent
+        run: uv sync --locked --dev --extra s3
+
+      - name: Run SQLite shard
+        working-directory: vv-agent
+        env:
+          TMPDIR: /dev/shm
+          SHARD: ${{ matrix.shard }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          total=1000000
+          shards=8
+          seed=$((SHARD * total / shards))
+          count=$((total / shards))
+          report="$RUNNER_TEMP/p1-sqlite-${SHARD}.json"
+          timeout 270m uv run python scripts/session_simulation.py \
+            --backend sqlite --seed "$seed" --seeds "$count" --workers 4 --report "$report"
+          python3 - "$report" "$seed" "$count" <<'PY'
+          import json
+          import sys
+
+          report = json.load(open(sys.argv[1]))
+          expected_seed = int(sys.argv[2])
+          expected_count = int(sys.argv[3])
+          checks = {
+              "code_revision": "54a437d1298ddcf400d7ec83f72bf508385ff9aa",
+              "contract_revision": "ec154627d2153812d4b81e6863e5bdda0df64c5f",
+              "contract_version": "39.0.0",
+              "contract_manifest_sha256": "9daf29d5573069566b3ef28f6570950140f7a8a1bb7d0e70f1afa5092b2f703a",
+              "backend": "sqlite",
+              "seed": expected_seed,
+              "seeds": expected_count,
+          }
+          for key, expected in checks.items():
+              if report.get(key) != expected:
+                  raise SystemExit(f"{key}: expected {expected!r}, got {report.get(key)!r}")
+          if report.get("dirty") is not False:
+              raise SystemExit(f"dirty source identity: {report.get('dirty')!r}")
+          if report.get("covered") != ["I1", "I10", "I2", "I3", "I4", "I5", "I6", "I7", "I8"]:
+              raise SystemExit(f"unexpected invariant coverage: {report.get('covered')!r}")
+          PY
+
+      - name: Upload SQLite shard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trusted-p1-sqlite-${{ matrix.shard }}
+          path: ${{ runner.temp }}/p1-sqlite-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  postgres:
+    if: github.event_name == 'schedule' || inputs.backend == 'postgres'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vv_agent
+          POSTGRES_PASSWORD: vv_agent_test
+          POSTGRES_DB: vv_agent_test
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U vv_agent -d vv_agent_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      UV_NO_SOURCES: "1"
+      VV_AGENT_RUN_LIVE_TESTS: "0"
+      VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
+    steps:
+      - name: Checkout contract
+        uses: actions/checkout@v6
+        with:
+          path: contract
+          ref: ${{ github.event_name == 'schedule' && 'v39.0.0' || inputs.contract_ref }}
+          fetch-depth: 0
+
+      - name: Checkout Python implementation
+        uses: actions/checkout@v6
+        with:
+          repository: AndersonBY/vv-agent
+          path: vv-agent
+          ref: ${{ github.event_name == 'schedule' && '54a437d1298ddcf400d7ec83f72bf508385ff9aa' || inputs.python_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: vv-agent/uv.lock
+
+      - name: Install dependencies
+        working-directory: vv-agent
+        run: uv sync --locked --dev --extra s3
+
+      - name: Run PostgreSQL shard
+        working-directory: vv-agent
+        env:
+          SHARD: ${{ matrix.shard }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          total=10000
+          shards=8
+          seed=$((SHARD * total / shards))
+          count=$((total / shards))
+          report="$RUNNER_TEMP/p1-postgres-${SHARD}.json"
+          timeout 270m uv run python scripts/session_simulation.py \
+            --backend postgres --seed "$seed" --seeds "$count" --workers 4 --report "$report"
+          python3 - "$report" "$seed" "$count" <<'PY'
+          import json
+          import sys
+
+          report = json.load(open(sys.argv[1]))
+          expected_seed = int(sys.argv[2])
+          expected_count = int(sys.argv[3])
+          checks = {
+              "code_revision": "54a437d1298ddcf400d7ec83f72bf508385ff9aa",
+              "contract_revision": "ec154627d2153812d4b81e6863e5bdda0df64c5f",
+              "contract_version": "39.0.0",
+              "contract_manifest_sha256": "9daf29d5573069566b3ef28f6570950140f7a8a1bb7d0e70f1afa5092b2f703a",
+              "backend": "postgres",
+              "seed": expected_seed,
+              "seeds": expected_count,
+          }
+          for key, expected in checks.items():
+              if report.get(key) != expected:
+                  raise SystemExit(f"{key}: expected {expected!r}, got {report.get(key)!r}")
+          if report.get("dirty") is not False:
+              raise SystemExit(f"dirty source identity: {report.get('dirty')!r}")
+          if report.get("covered") != ["I1", "I10", "I2", "I3", "I4", "I5", "I6", "I7", "I8"]:
+              raise SystemExit(f"unexpected invariant coverage: {report.get('covered')!r}")
+          cleanup = report.get("environment", {}).get("postgres_cleanup")
+          if not cleanup or cleanup.get("verified") is not True:
+              raise SystemExit(f"PostgreSQL cleanup was not verified: {cleanup!r}")
+          PY
+
+      - name: Upload PostgreSQL shard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trusted-p1-postgres-${{ matrix.shard }}
+          path: ${{ runner.temp }}/p1-postgres-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  aggregate:
+    if: >-
+      always() &&
+      ((github.event_name == 'schedule' && needs.sqlite.result == 'success' && needs.postgres.result == 'success') ||
+      (inputs.backend == 'sqlite' && needs.sqlite.result == 'success') ||
+      (inputs.backend == 'postgres' && needs.postgres.result == 'success'))
+    needs: [sqlite, postgres]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download campaign evidence
+        uses: actions/download-artifact@v5
+        with:
+          pattern: trusted-p1-*
+          path: reports
+          merge-multiple: true
+
+      - name: Verify contiguous campaign manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          expected = {"sqlite": 1_000_000, "postgres": 10_000}
+          found = {backend: [] for backend in expected}
+          for path in sorted(Path("reports").glob("*.json")):
+              report = json.loads(path.read_text())
+              backend = report.get("backend")
+              if backend in found:
+                  found[backend].append((report["seed"], report["seeds"], report))
+          manifest = {"code_revision": None, "contract_revision": None, "contract_version": None, "backends": {}}
+          for backend, total in expected.items():
+              parts = sorted(found[backend])
+              if not parts:
+                  continue
+              cursor = 0
+              for seed, count, report in parts:
+                  if seed != cursor:
+                      raise SystemExit(f"{backend}: expected seed {cursor}, got {seed}")
+                  cursor += count
+                  identity = tuple(report[key] for key in ("code_revision", "contract_revision", "contract_version"))
+                  if manifest["code_revision"] is None:
+                      manifest["code_revision"], manifest["contract_revision"], manifest["contract_version"] = identity
+                  elif identity != (manifest["code_revision"], manifest["contract_revision"], manifest["contract_version"]):
+                      raise SystemExit(f"{backend}: identity mismatch in {seed}")
+              if cursor != total:
+                  raise SystemExit(f"{backend}: covered {cursor}, expected {total}")
+              manifest["backends"][backend] = {
+                  "seeds": cursor,
+                  "parts": [
+                      {"seed": seed, "seeds": count, "sha256": hashlib.sha256(json.dumps(report, sort_keys=True).encode()).hexdigest()}
+                      for seed, count, report in parts
+                  ],
+              }
+          Path("campaign-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Upload campaign manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: trusted-p1-campaign-manifest
+          path: campaign-manifest.json
+          retention-days: 90
