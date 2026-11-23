@@ -1,10 +1,11 @@
 # Contract 39.0.0
 
-Status: unpublished with local real-producer evidence; pending adoption. Python
-is the only required implementation. No verified 39.0.0 implementation revision
-or central adoption is claimed. Python P1 may remain in package
-series 0.36.x. Rust remains frozen at contract 23.0.0 / package series 0.21.x,
-verified revision `00f4240786f1adea1dc0c4730da8ddd06a5ab8ac`.
+Status: published and centrally adopted. Python is the only required
+implementation. The verified P1 revision is
+`54a437d1298ddcf400d7ec83f72bf508385ff9aa`, and the immutable Contract 39
+revision is `ec154627d2153812d4b81e6863e5bdda0df64c5f`. Python P1 remains in
+package series 0.36.x. Rust remains frozen at contract 23.0.0 / package series
+0.21.x, verified revision `00f4240786f1adea1dc0c4730da8ddd06a5ab8ac`.
 
 ## Public change and data boundary
 
@@ -52,11 +53,12 @@ compares a fresh real producer capture byte for byte through the existing
 with `contractctl.py manifest`.
 
 Required local canonical gates are contract validation, independent Node JCS,
-repository unittests and two byte-identical bundle builds. Python must pass
-focused real-producer and full pytest/ruff/ty gates, applicable SQLite memory/file
-and real PostgreSQL gates, and required central cross-repository checks. Keep
-adoption pending until the required immutable pins and successful default-branch
-revisions/run are recorded through the normal adoption workflow.
+repository unittests and two byte-identical bundle builds. Python passed the
+focused real-producer and full pytest/ruff/ty gates, applicable SQLite
+memory/file and real PostgreSQL gates, and the central cross-repository run
+`https://github.com/AndersonBY/vv-agent-contract/actions/runs/45259271789`.
+The verified adoption record is in `support-matrix.json` on the canonical
+repository `main` branch.
 
 Immutable publication is a separate approval step. Implementation locks and
 vendored snapshots remain untouched; synchronize them only through the approved
