@@ -169,7 +169,7 @@ jobs:
         working-directory: vv-agent
         run: |
           uv run ruff check .
-          uv run ty check
+          uv run ty check --extra-search-path tests
 
       - name: Record evidence
         if: always()
