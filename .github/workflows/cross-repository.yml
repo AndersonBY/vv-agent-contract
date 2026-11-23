@@ -45,6 +45,7 @@ jobs:
     env:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
+      PYTEST_SHARDS: "8"
     steps:
       - name: Checkout contract
         uses: actions/checkout@v6
@@ -98,17 +99,69 @@ jobs:
           python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --source contract
           python3 vv-agent/scripts/contract_snapshot.py --repo-root vv-agent check --artifact "$(python3 -c 'import json; print(json.load(open("vv-agent/contract.lock.json"))["artifact_url"])')"
 
-      - name: Run Python full gate
+      - name: Install Python gate dependencies
         working-directory: vv-agent
         env:
           VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
+          TMPDIR: /tmp
         run: |
-          uv sync --dev --extra s3
-          uv run pytest
+          uv sync --locked --dev --extra s3
+
+      - name: Run Python tests in parallel shards
+        working-directory: vv-agent
+        env:
+          VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
+          TMPDIR: /tmp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t test_files < <(
+            python3 - <<'PY'
+          from pathlib import Path
+
+          files = sorted(
+              (path for path in Path("tests").rglob("test_*.py") if path.is_file()),
+              key=lambda path: (-path.stat().st_size, path.as_posix()),
+          )
+          for path in files:
+              print(path.as_posix())
+          PY
+          )
+          test "${#test_files[@]}" -gt 0
+
+          declare -a pids=()
+          for ((shard = 0; shard < PYTEST_SHARDS; shard += 1)); do
+            shard_files=()
+            for ((index = shard; index < ${#test_files[@]}; index += PYTEST_SHARDS)); do
+              shard_files+=("${test_files[index]}")
+            done
+            test "${#shard_files[@]}" -gt 0
+            (
+              set -o pipefail
+              printf '[pytest-shard-%s] files=%s\n' "$shard" "${#shard_files[@]}"
+              uv run pytest -x -vv -o faulthandler_timeout=120 "${shard_files[@]}" 2>&1 \
+                | sed -u "s/^/[pytest-shard-$shard] /" \
+                | tee "$RUNNER_TEMP/pytest-shard-$shard.log"
+            ) &
+            pids+=("$!")
+          done
+
+          status=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Run Python static checks
+        working-directory: vv-agent
+        run: |
           uv run ruff check .
           uv run ty check
 
       - name: Record evidence
+        if: always()
         shell: bash
         run: |
           {
