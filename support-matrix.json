@@ -11,7 +11,7 @@
       "branch": "feat/trusted-harness-p1",
       "contract_version": "39.0.0",
       "status": "verified",
-      "verified_revision": "9c589f5a0442d6d76f959a48ecfe06784c29621b"
+      "verified_revision": "54a437d1298ddcf400d7ec83f72bf508385ff9aa"
     },
     "rust": {
       "repository": "https://github.com/AndersonBY/vv-agent-rs",
@@ -23,6 +23,6 @@
     }
   },
   "adoption_note": "v39.0.0 passed the required implementation snapshots and cross-repository producer gates.",
-  "last_verified_at": "2026-11-22T10:11:24Z",
-  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/45009536432"
+  "last_verified_at": "2026-11-23T20:41:06Z",
+  "cross_repository_run": "https://github.com/AndersonBY/vv-agent-contract/actions/runs/45259271789"
 }
