@@ -49,7 +49,7 @@ jobs:
     env:
       UV_NO_SOURCES: "1"
       VV_AGENT_RUN_LIVE_TESTS: "0"
-      PYTEST_SHARDS: "8"
+      PYTEST_SHARDS: "4"
       PYTHONPATH: ${{ github.workspace }}/vv-agent
     steps:
       - name: Checkout contract
@@ -144,7 +144,7 @@ jobs:
             (
               set -o pipefail
               printf '[pytest-shard-%s] files=%s\n' "$shard" "${#shard_files[@]}"
-              uv run pytest -x -vv -o faulthandler_timeout=120 "${shard_files[@]}" 2>&1 \
+              uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 "${shard_files[@]}" 2>&1 \
                 | sed -u "s/^/[pytest-shard-$shard] /" \
                 | tee "$RUNNER_TEMP/pytest-shard-$shard.log"
             ) &
@@ -158,6 +158,12 @@ jobs:
             fi
           done
           exit "$status"
+
+      - name: Run seeded simulation smoke
+        working-directory: vv-agent
+        env:
+          TMPDIR: /dev/shm
+        run: timeout 60s uv run pytest tests/sim -k smoke -q -s
 
       - name: Run Python static checks
         working-directory: vv-agent
