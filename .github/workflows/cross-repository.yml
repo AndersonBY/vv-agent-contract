@@ -40,7 +40,7 @@ jobs:
           POSTGRES_PASSWORD: vv_agent_test
           POSTGRES_DB: vv_agent_test
         ports:
-          - 5432
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U vv_agent -d vv_agent_test"
           --health-interval 10s
@@ -56,7 +56,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: contract
-          ref: ${{ inputs.contract_ref || 'main' }}
+          ref: ${{ inputs.contract_ref || (github.event_name == 'schedule' && 'v39.0.0' || 'main') }}
           fetch-depth: 0
 
       - name: Checkout Python implementation
@@ -64,7 +64,7 @@ jobs:
         with:
           repository: AndersonBY/vv-agent
           path: vv-agent
-          ref: ${{ inputs.python_ref || 'main' }}
+          ref: ${{ inputs.python_ref || (github.event_name == 'schedule' && '54a437d1298ddcf400d7ec83f72bf508385ff9aa' || 'main') }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -114,6 +114,21 @@ jobs:
           TMPDIR: /tmp
         run: |
           uv sync --locked --dev --extra s3
+
+      - name: Install historical compatibility reader
+        working-directory: vv-agent
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/vv-agent-0.33.3"
+          uv pip install --python "$RUNNER_TEMP/vv-agent-0.33.3/bin/python" 'vv-agent[postgres]==0.33.3'
+          echo "VV_AGENT_0333_PYTHON=$RUNNER_TEMP/vv-agent-0.33.3/bin/python" >> "$GITHUB_ENV"
+
+      - name: Verify repository contract boundaries
+        working-directory: vv-agent
+        run: python3 scripts/check_repository_contracts.py
+
+      - name: Verify formatting
+        working-directory: vv-agent
+        run: uv run ruff format --check .
 
       - name: Run Python tests in parallel shards
         working-directory: vv-agent
@@ -195,6 +210,12 @@ jobs:
         run: |
           uv run ruff check .
           uv run ty check --extra-search-path tests
+
+      - name: Verify isolated install matrix
+        working-directory: vv-agent
+        env:
+          VV_AGENT_TEST_POSTGRES_DSN: postgresql://vv_agent:vv_agent_test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/vv_agent_test
+        run: uv run --no-project python scripts/install_matrix.py
 
       - name: Record evidence
         if: always()
