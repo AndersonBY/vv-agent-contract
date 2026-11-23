@@ -207,6 +207,15 @@ if (process.argv.includes("--canonicalize")) {
 } else {
   const codec = readFixture("session_codec_vectors.json");
   for (const [index, vector] of codec.vectors.entries()) verifyFact(vector, `codec/${index}`, vector.wire);
+  const diagnostics = readFixture("session_record_diagnostics.json").canonical;
+  for (const kind of ["record", "inbox"]) {
+    const bytes = Buffer.from(diagnostics[`${kind}_utf8`], "utf8");
+    const value = JSON.parse(bytes.toString("utf8"));
+    if (!bytes.equals(Buffer.from(canonicalize(value), "utf8")) || sha256(bytes) !== diagnostics[`${kind}_sha256`]) {
+      fail(`record diagnostics/${kind}: canonical bytes or digest mismatch`);
+    }
+    if (kind === "record" && value.record_id !== recordId(value)) fail("record diagnostics: record identity");
+  }
   for (const [index, vector] of readFixture("session_invalid.json").vectors.entries()) decode(vector, `invalid/${index}`);
   for (const name of ["session_semantics.json", "session_recovery.json", "session_projection.json", "session_compaction.json", "host_summary_requests.json", "app_server_protocol.json", "model_rejection.json"]) verifyFacts(readFixture(name), name);
   for (const vector of readFixture("app_server_observable.json").actionAdmission.commandIdCases) {
@@ -227,5 +236,5 @@ if (process.argv.includes("--canonicalize")) {
   if ("controller/" + sha256(Buffer.concat([Buffer.from(value.schema_version), Buffer.from([0]), length, bytes])) !== app.facts.child_reply_command_id) fail("app: child reply identity");
   verifyPrompts();
   verifyToolResults();
-  process.stdout.write(`JCS verified: ${codec.vectors.length} session vectors, invalid byte hashes, nested digests, action identities, projections and prompts\n`);
+  process.stdout.write(`JCS verified: ${codec.vectors.length} session vectors, record diagnostic bytes, invalid byte hashes, nested digests, action identities, projections and prompts\n`);
 }

@@ -81,7 +81,9 @@ SQL, public API inventory or wire version change.
 
 Python alone is required. Contract 31.0.0 was verified for Python 0.30.0;
 `support-matrix.json` owns the current adoption status. The current contract is
-38.0.0; Python lock/snapshot synchronization and central adoption are pending.
+39.0.0 with local real-producer diagnostic evidence; immutable
+publication/lock/snapshot, required Python full gates and central adoption are
+pending.
 Contract 32.1.1 was published and adopted on 2026-11-03 (PRs #46 and #47).
 Rust is frozen at verified 23.0.0 / 0.21.x.
 New Python verification cannot claim newer Rust support. The complete frozen
@@ -169,3 +171,23 @@ existing stored references remain authoritative and are never rewritten.
 Runner accept declarations but do not yield. Shared raw connections require
 exclusive host use; concurrent native transactions are unsupported and detection
 is not promised. L2–L5 remain unfixed. No admission/hook signature changes ship.
+
+## 39.0.0 concise session-schema diagnostics
+
+Replacing externally visible schema-error text with `invalid session schema`
+changes existing public behavior, including text that can reach App Server
+clients. This is a major release, not an evidence-only patch. Concrete
+jsonschema exception causes and pretty-print formatting are unpromised
+implementation details; preserving them does not justify a compatibility layer.
+
+Acceptance/rejection, explicit semantic/parser/duplicate messages, canonical
+bytes and IDs, fixed provider/model-selection codes and all execution semantics
+are preserved. Record 1, inbox 3, SQL layouts, RunEvent v6, App Server v5, public
+API inventory and frozen definitions do not change. There is no data/store
+boundary, migration or host drain. Python P1 may remain in package series
+0.36.x; contract and implementation package major numbers are independent.
+Rust remains frozen at 23.0.0 / 0.21.x with its existing verified baseline.
+
+39.0.0 includes a real Python diagnostic capture and its regenerated fixture
+manifest. Required implementation full gates, immutable publication and central
+adoption remain outstanding; this is not a verified 39.0.0 release. See [release notes](release-39.0.0.md).
