@@ -60,6 +60,20 @@ memory/file and real PostgreSQL gates, and the central cross-repository run
 The verified adoption record is in `support-matrix.json` on the canonical
 repository `main` branch.
 
+## P1 scale evidence
+
+The exact Python revision `54a437d1298ddcf400d7ec83f72bf508385ff9aa` passed the
+full central conformance gate in
+`https://github.com/AndersonBY/vv-agent-contract/actions/runs/45292964817`.
+The ordinary-filesystem SQLite campaign covered seeds `[0, 1,000,000)` in
+`https://github.com/AndersonBY/vv-agent-contract/actions/runs/45273789969`.
+The TCP/password PostgreSQL campaign covered seeds `[0, 10,000)` in
+`https://github.com/AndersonBY/vv-agent-contract/actions/runs/45290943901`.
+Both aggregate manifests verified contiguous non-overlapping ranges, all 21
+scenarios, invariant coverage `I1`–`I8` and `I10`, exact code and contract
+identity, and clean source state. PostgreSQL used one worker per shard to avoid
+cross-database DDL lock contention while retaining eight parallel shards.
+
 Immutable publication is a separate approval step. Implementation locks and
 vendored snapshots remain untouched; synchronize them only through the approved
 publication/adoption workflow. The entire frozen Rust entry and its pinned
