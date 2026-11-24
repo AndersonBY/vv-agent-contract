@@ -56,7 +56,7 @@ Required local canonical gates are contract validation, independent Node JCS,
 repository unittests and two byte-identical bundle builds. Python passed the
 focused real-producer and full pytest/ruff/ty gates, applicable SQLite
 memory/file and real PostgreSQL gates, and the central cross-repository run
-`https://github.com/AndersonBY/vv-agent-contract/actions/runs/45259271789`.
+`https://github.com/AndersonBY/vv-agent-contract/actions/runs/45292964817`.
 The verified adoption record is in `support-matrix.json` on the canonical
 repository `main` branch.
 
