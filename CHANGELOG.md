@@ -1,5 +1,9 @@
 # Changelog
 
+## 41.0.4 — 2026-11-24 — complete deterministic S1 evidence refresh
+
+Patch evidence correction completing the deterministic producer clock baseline across the generated budget, runner, event-store, configured-sub-agent, session-kernel and App Server fixtures. Schemas, wire fields, validation rules and runtime behavior are unchanged. See [release notes](docs/release-41.0.4.md).
+
 ## 41.0.3 — 2026-11-24 — deterministic S1 evidence baseline
 
 Patch evidence correction. Regenerated the session-kernel, event, projection and App Server producer fixtures from the reviewed Python producer with one deterministic clock baseline. Schemas, wire fields, validation rules and runtime behavior are unchanged. Python adoption remains pending until the immutable lock and official cross-repository conformance pass. See [release notes](docs/release-41.0.3.md).

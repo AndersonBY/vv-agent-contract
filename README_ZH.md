@@ -1,6 +1,6 @@
 # vv-agent-contract
 
-语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。41.0.3 修正了确定性的 S1 producer 证据时间基线。Python adoption 待完成。
+语言无关的公共行为、canonical fixtures 和严格 wire schema 契约。41.0.4 修正了确定性的 S1 producer 证据时间基线。Python adoption 待完成。
 W3 level 3 执行 worker 仍处于契约分配阶段。Rust 仍冻结于已验证的
 23.0.0 / 0.21.x。参见[变更记录](CHANGELOG.md)。
 

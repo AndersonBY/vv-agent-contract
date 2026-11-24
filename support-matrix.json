@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "contract_version": "41.0.3",
+  "contract_version": "41.0.4",
   "status": "pending-adoption",
   "required_implementations": [
     "python"
@@ -9,7 +9,7 @@
     "python": {
       "repository": "https://github.com/AndersonBY/vv-agent",
       "branch": "main",
-      "contract_version": "41.0.3",
+      "contract_version": "41.0.4",
       "status": "pending-adoption",
       "verified_revision": null
     },
@@ -22,7 +22,7 @@
       "verified_revision": "00f4240786f1adea1dc0c4730da8ddd06a5ab8ac"
     }
   },
-  "adoption_note": "Contract 41.0.3 refreshes deterministic S1 producer evidence after the 41.0.2 timestamp baseline correction. Python adoption requires the immutable release lock, real producer equality and full cross-repository conformance. Level-3 execution worker allocation evidence and frozen Rust support retain their original scope.",
+  "adoption_note": "Contract 41.0.4 completes the deterministic S1 producer evidence baseline refresh across the generated replacement fixtures. Python adoption requires the immutable lock, real producer equality and full cross-repository conformance. Level-3 execution worker evidence and frozen Rust support retain their original scope.",
   "last_verified_at": null,
   "cross_repository_run": null
 }
