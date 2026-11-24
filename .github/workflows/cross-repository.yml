@@ -141,60 +141,107 @@ jobs:
           collect_output="$RUNNER_TEMP/pytest-collect.txt"
           uv run pytest --collect-only -q -k "not simulation_smoke" > "$collect_output"
           for ((shard = 0; shard < PYTEST_SHARDS; shard += 1)); do
-            : > "$RUNNER_TEMP/pytest-shard-$shard.files"
+            : > "$RUNNER_TEMP/pytest-shard-$shard.nodes"
           done
           while IFS=$'\t' read -r shard path; do
-            printf '%s\n' "$path" >> "$RUNNER_TEMP/pytest-shard-$shard.files"
+            printf '%s\n' "$path" >> "$RUNNER_TEMP/pytest-shard-$shard.nodes"
           done < <(
             python3 - "$collect_output" "$PYTEST_SHARDS" <<'PY'
-          from collections import Counter
           from pathlib import Path
           import sys
 
           collect_output = Path(sys.argv[1]).read_text()
           shard_count = int(sys.argv[2])
-          test_counts = Counter(
-              line.split("::", 1)[0]
+          node_ids = [
+              line.strip()
               for line in collect_output.splitlines()
               if line.startswith("tests/") and "::" in line
-          )
-          if not test_counts:
+          ]
+          if not node_ids:
               raise SystemExit("pytest collection produced no test nodes")
+
+          # Keep module-fixture files together. The two largest App Server
+          # interaction suites have no shared module state, so split their
+          # node IDs across shards to avoid one long tail shard.
+          split_files = {
+              "tests/session/test_app_server_interactions.py",
+              "tests/session/test_delegation_parity.py",
+          }
+          grouped = {}
+          for node_id in node_ids:
+              path = node_id.split("::", 1)[0]
+              key = node_id if path in split_files else path
+              grouped.setdefault(key, []).append(node_id)
 
           loads = [0] * shard_count
           assignments = [[] for _ in range(shard_count)]
-          for path, count in sorted(test_counts.items(), key=lambda item: (-item[1], item[0])):
+          for key, nodes in sorted(grouped.items(), key=lambda item: (-len(item[1]), item[0])):
               shard = min(range(shard_count), key=loads.__getitem__)
-              assignments[shard].append(path)
-              loads[shard] += count
+              assignments[shard].extend(nodes)
+              loads[shard] += len(nodes)
 
-          for shard, paths in enumerate(assignments):
-              if not paths:
-                  raise SystemExit(f"pytest shard {shard} received no files")
-              print(f"shard {shard}: {loads[shard]} collected tests across {len(paths)} files", file=sys.stderr)
-              for path in paths:
-                  print(f"{shard}\t{path}")
+          for shard, nodes in enumerate(assignments):
+              if not nodes:
+                  raise SystemExit(f"pytest shard {shard} received no test nodes")
+              files = {node_id.split("::", 1)[0] for node_id in nodes}
+              print(f"shard {shard}: {loads[shard]} collected tests across {len(files)} files", file=sys.stderr)
+              for node_id in nodes:
+                  print(f"{shard}\t{node_id}")
           PY
           )
 
+          shard_runner="$RUNNER_TEMP/run-pytest-shard.sh"
+          cat > "$shard_runner" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          shard="$1"
+          mapfile -t shard_nodes < "$RUNNER_TEMP/pytest-shard-$shard.nodes"
+          test "${#shard_nodes[@]}" -gt 0
+          printf '[pytest-shard-%s] nodes=%s\n' "$shard" "${#shard_nodes[@]}"
+          uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 "${shard_nodes[@]}" 2>&1 \
+            | sed -u "s/^/[pytest-shard-$shard] /" \
+            | tee "$RUNNER_TEMP/pytest-shard-$shard.log"
+          SH
+          chmod +x "$shard_runner"
+
           declare -a pids=()
           for ((shard = 0; shard < PYTEST_SHARDS; shard += 1)); do
-            (
-              set -o pipefail
-              mapfile -t shard_files < "$RUNNER_TEMP/pytest-shard-$shard.files"
-              test "${#shard_files[@]}" -gt 0
-              printf '[pytest-shard-%s] files=%s\n' "$shard" "${#shard_files[@]}"
-              uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 "${shard_files[@]}" 2>&1 \
-                | sed -u "s/^/[pytest-shard-$shard] /" \
-                | tee "$RUNNER_TEMP/pytest-shard-$shard.log"
-            ) &
+            setsid "$shard_runner" "$shard" &
             pids+=("$!")
           done
 
+          cleanup() {
+            for pid in "${pids[@]}"; do
+              kill -- "-$pid" 2>/dev/null || true
+            done
+          }
+          trap cleanup EXIT INT TERM
+
           status=0
-          for pid in "${pids[@]}"; do
-            if ! wait "$pid"; then
+          pending=("${pids[@]}")
+          while ((${#pending[@]})); do
+            finished=""
+            if wait -n -p finished "${pending[@]}"; then
+              shard_status=0
+            else
+              shard_status=$?
+            fi
+            remaining=()
+            for pid in "${pending[@]}"; do
+              if [[ "$pid" != "$finished" ]]; then
+                remaining+=("$pid")
+              fi
+            done
+            pending=("${remaining[@]}")
+            if ((shard_status != 0)); then
               status=1
+              for pid in "${pending[@]}"; do
+                kill -- "-$pid" 2>/dev/null || true
+              done
+              for pid in "${pending[@]}"; do
+                wait "$pid" || true
+              done
+              break
             fi
           done
           exit "$status"
