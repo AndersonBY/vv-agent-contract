@@ -160,6 +160,17 @@ jobs:
           if not node_ids:
               raise SystemExit("pytest collection produced no test nodes")
 
+          # This lease/heartbeat suite uses real PostgreSQL TTLs. Running it
+          # beside the other database-heavy shards makes its wall-clock
+          # assertions sensitive to runner contention, so execute it after
+          # the parallel gate has drained.
+          serial_files = {"tests/session/test_admission_heartbeat.py"}
+          parallel_node_ids = [
+              node_id for node_id in node_ids if node_id.split("::", 1)[0] not in serial_files
+          ]
+          if not parallel_node_ids:
+              raise SystemExit("parallel pytest collection produced no test nodes")
+
           # Keep module-fixture files together. The two largest App Server
           # interaction suites have no shared module state, so split their
           # node IDs across shards to avoid one long tail shard.
@@ -168,7 +179,7 @@ jobs:
               "tests/session/test_delegation_parity.py",
           }
           grouped = {}
-          for node_id in node_ids:
+          for node_id in parallel_node_ids:
               path = node_id.split("::", 1)[0]
               key = node_id if path in split_files else path
               grouped.setdefault(key, []).append(node_id)
@@ -244,6 +255,13 @@ jobs:
               break
             fi
           done
+          if ((status == 0)); then
+            printf '[pytest-serial] file=tests/session/test_admission_heartbeat.py\n'
+            uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 \
+              tests/session/test_admission_heartbeat.py 2>&1 \
+              | sed -u 's/^/[pytest-serial] /' \
+              | tee "$RUNNER_TEMP/pytest-serial.log"
+          fi
           exit "$status"
 
       - name: Run seeded simulation smoke
