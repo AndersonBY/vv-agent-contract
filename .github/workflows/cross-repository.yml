@@ -164,7 +164,10 @@ jobs:
           # beside the other database-heavy shards makes its wall-clock
           # assertions sensitive to runner contention, so execute it after
           # the parallel gate has drained.
-          serial_files = {"tests/session/test_admission_heartbeat.py"}
+          serial_files = {
+              "tests/session/test_admission_heartbeat.py",
+              "tests/session/test_session_kernel_fixtures.py",
+          }
           parallel_node_ids = [
               node_id for node_id in node_ids if node_id.split("::", 1)[0] not in serial_files
           ]
@@ -261,6 +264,15 @@ jobs:
               tests/session/test_admission_heartbeat.py 2>&1 \
               | sed -u 's/^/[pytest-serial] /' \
               | tee "$RUNNER_TEMP/pytest-serial.log"
+            status=${PIPESTATUS[0]}
+          fi
+          if ((status == 0)); then
+            printf '[pytest-serial] file=tests/session/test_session_kernel_fixtures.py\n'
+            uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 \
+              tests/session/test_session_kernel_fixtures.py 2>&1 \
+              | sed -u 's/^/[pytest-serial] /' \
+              | tee "$RUNNER_TEMP/pytest-serial-session-fixtures.log"
+            status=${PIPESTATUS[0]}
           fi
           exit "$status"
 
