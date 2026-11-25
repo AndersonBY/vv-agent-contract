@@ -1,5 +1,12 @@
 # Changelog
 
+## 41.0.5 — 2026-11-25 — complete App Server A2 evidence refresh
+
+Patch evidence correction. Refresh the canonical App Server A2 fork fixture to
+the reviewed producer clock baseline used by the other Contract 41 evidence.
+Schemas, wire fields, validation rules and runtime behavior are unchanged. See
+[release notes](docs/release-41.0.5.md).
+
 ## 41.0.4 — 2026-11-24 — complete deterministic S1 evidence refresh
 
 Patch evidence correction completing the deterministic producer clock baseline across the generated budget, runner, event-store, configured-sub-agent, session-kernel and App Server fixtures. Schemas, wire fields, validation rules and runtime behavior are unchanged. See [release notes](docs/release-41.0.4.md).

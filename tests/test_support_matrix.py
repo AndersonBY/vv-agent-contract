@@ -30,7 +30,7 @@ class SupportMatrixTests(unittest.TestCase):
         # The recording run validates this file after record_adoption marks it verified.
         matrix = contractctl.load_json(ROOT / "support-matrix.json")
         version = contractctl.load_json(ROOT / "contract.json")["version"]
-        self.assertEqual(version, "41.0.4")
+        self.assertEqual(version, "41.0.5")
         self.assertEqual(matrix["contract_version"], version)
         self.assertEqual(matrix["required_implementations"], ["python"])
         python = matrix["implementations"]["python"]

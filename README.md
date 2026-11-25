@@ -1,7 +1,7 @@
 # vv-agent-contract
 
 Language-neutral observable behavior, canonical fixtures and strict wire schemas
-for vv-agent. Contract 41.0.4 refreshes the deterministic S1 producer evidence baseline. Python adoption is pending. The W3
+for vv-agent. Contract 41.0.5 refreshes the deterministic S1 producer evidence baseline, including the App Server A2 fork fixture clock. Python adoption is pending. The W3
 level-3 execution worker values retain their allocation status. Rust stays
 frozen at verified 23.0.0 / 0.21.x. See [the changelog](CHANGELOG.md).
 
