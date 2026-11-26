@@ -171,8 +171,18 @@ jobs:
               "tests/session/test_session_kernel_fixtures.py",
               "tests/session/test_w4_cursor_worker.py",
           }
+          serial_node_ids = {
+              "tests/session/test_app_server_tool_results.py::test_64mib_resource_pages_read_at_most_twice_the_retained_bytes[postgres]",
+          }
           parallel_node_ids = [
-              node_id for node_id in node_ids if node_id.split("::", 1)[0] not in serial_files
+              node_id
+              for node_id in node_ids
+              if node_id.split("::", 1)[0] not in serial_files and node_id not in serial_node_ids
+          ]
+          serial_node_ids = [
+              node_id
+              for node_id in node_ids
+              if node_id in serial_node_ids
           ]
           if not parallel_node_ids:
               raise SystemExit("parallel pytest collection produced no test nodes")
@@ -299,6 +309,14 @@ jobs:
               tests/session/test_w4_cursor_worker.py 2>&1 \
               | sed -u 's/^/[pytest-serial] /' \
               | tee "$RUNNER_TEMP/pytest-serial-w4-cursor-worker.log"
+            status=${PIPESTATUS[0]}
+          fi
+          if ((status == 0)); then
+            printf '[pytest-serial] node=tests/session/test_app_server_tool_results.py::test_64mib_resource_pages_read_at_most_twice_the_retained_bytes[postgres]\n'
+            uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 \
+              'tests/session/test_app_server_tool_results.py::test_64mib_resource_pages_read_at_most_twice_the_retained_bytes[postgres]' 2>&1 \
+              | sed -u 's/^/[pytest-serial-app-server-tool-results] /' \
+              | tee "$RUNNER_TEMP/pytest-serial-app-server-tool-results.log"
             status=${PIPESTATUS[0]}
           fi
           exit "$status"
