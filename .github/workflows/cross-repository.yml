@@ -167,6 +167,7 @@ jobs:
           serial_files = {
               "tests/session/test_admission_heartbeat.py",
               "tests/session/test_capacity.py",
+              "tests/session/test_model_selection.py",
               "tests/session/test_session_kernel_fixtures.py",
           }
           parallel_node_ids = [
@@ -265,6 +266,14 @@ jobs:
               tests/session/test_admission_heartbeat.py 2>&1 \
               | sed -u 's/^/[pytest-serial] /' \
               | tee "$RUNNER_TEMP/pytest-serial.log"
+            status=${PIPESTATUS[0]}
+          fi
+          if ((status == 0)); then
+            printf '[pytest-serial] file=tests/session/test_model_selection.py\n'
+            uv run pytest -x -vv -k "not simulation_smoke" -o faulthandler_timeout=120 \
+              tests/session/test_model_selection.py 2>&1 \
+              | sed -u 's/^/[pytest-serial] /' \
+              | tee "$RUNNER_TEMP/pytest-serial-model-selection.log"
             status=${PIPESTATUS[0]}
           fi
           if ((status == 0)); then
